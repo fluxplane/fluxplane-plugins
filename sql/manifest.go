@@ -1,0 +1,79 @@
+package sql
+
+import (
+	core "github.com/fluxplane/fluxplane-plugin/manifest"
+	"github.com/fluxplane/fluxplane-plugin/pluginbinding"
+	"github.com/fluxplane/fluxplane-plugin/protocol"
+)
+
+const (
+	PluginName        = "sql"
+	PluginVersion     = "0.18.2"
+	PluginDescription = "Read-only SQL query operations for MySQL, PostgreSQL, SQLite, and compatible endpoints."
+
+	AuthMethodSQL        = "sql"
+	AuthPurposeUsername  = "username"
+	AuthPurposePassword  = "password"
+	EnvSQLUsername       = "SQL_USERNAME"
+	EnvSQLPassword       = "SQL_PASSWORD"
+	EnvMySQLUsername     = "MYSQL_USERNAME"
+	EnvMySQLPassword     = "MYSQL_PASSWORD"
+	OperationQuery       = "sql.query"
+	DatasourceQueryRows  = "sql.query_rows"
+	EntitySQLQueryResult = "sql.query_result"
+)
+
+func Manifest() core.PluginManifest {
+	return pluginbinding.Manifest(manifestSpec())
+}
+
+func manifestSpec() pluginbinding.ManifestSpec {
+	return pluginbinding.ManifestSpec{
+		Name:        PluginName,
+		Version:     PluginVersion,
+		Description: PluginDescription,
+		Aliases:     []string{"mysql", PluginName},
+		Metadata:    map[string]string{pluginbinding.ManifestProtocolKey: protocol.Version},
+		Auth: []core.AuthMethod{{
+			Name:        AuthMethodSQL,
+			Kind:        "credentials",
+			Description: "SQL credentials resolved by dex secret broker.",
+			Env:         []string{EnvSQLUsername, EnvSQLPassword, EnvMySQLUsername, EnvMySQLPassword},
+			Fields: []core.AuthField{
+				pluginbinding.AuthField(AuthPurposeUsername, "SQL username", false, true, EnvSQLUsername, EnvMySQLUsername),
+				pluginbinding.AuthField(AuthPurposePassword, "SQL password, URL, or DSN", false, true, EnvSQLPassword, EnvMySQLPassword),
+			},
+		}},
+		Operations: []core.OperationSpec{querySpec()},
+		Datasources: []core.DatasourceSpec{
+			queryRowsDatasourceSpec(),
+		},
+	}
+}
+
+func querySpec() core.OperationSpec {
+	return pluginbinding.TypedOperationSpec[QueryInput, QueryOutput](
+		OperationQuery,
+		"Run a bounded read-only SQL query against a SQL endpoint.",
+		pluginbinding.ReadOnly(),
+		pluginbinding.SecretPurposes(AuthPurposeUsername, AuthPurposePassword),
+		pluginbinding.Effects(core.OperationEffectRead, core.OperationEffectNetwork),
+		pluginbinding.Access(core.OperationAccessAuth, core.OperationAccessSecret, core.OperationAccessProvider),
+		pluginbinding.Risk(core.OperationRiskLow),
+		pluginbinding.Idempotency(core.OperationIdempotent),
+	)
+}
+
+func queryRowsDatasourceSpec() core.DatasourceSpec {
+	return pluginbinding.TypedDatasourceSpec[QueryInput, QueryRowsResult](
+		DatasourceQueryRows,
+		EntitySQLQueryResult,
+		"SQL query result rows.",
+		[]string{pluginbinding.CapabilitySearch},
+		pluginbinding.DatasourceSecretPurposes(AuthPurposeUsername, AuthPurposePassword),
+		pluginbinding.DatasourceAccess(core.OperationAccessProvider),
+		pluginbinding.EntitySchemaFor[QueryRowRecord](),
+		pluginbinding.EntitySchema(core.DatasourceEntitySchema{IDField: "id", TitleField: "title"}),
+		pluginbinding.Completion("SQL result row fields.", "driver", "database", "endpoint_url"),
+	)
+}

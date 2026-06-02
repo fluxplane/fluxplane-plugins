@@ -1,0 +1,131 @@
+{
+  "version": "1",
+  "plugins": [
+    {
+      "name": "gitlab",
+      "description": "GitLab operations, datasources, indexes, and reverse lookups.",
+      "binary": "dex-plugin-gitlab",
+      "go_install": "github.com/fluxplane/fluxplane-plugins/gitlab/cmd/dex-plugin-gitlab@latest",
+      "local_path": "gitlab"
+    },
+    {
+      "name": "jira",
+      "description": "Jira Cloud issue operations, comments, attachments, transitions, datasources, indexes, and reverse lookups.",
+      "binary": "dex-plugin-jira",
+      "go_install": "github.com/fluxplane/fluxplane-plugins/atlassian/cmd/dex-plugin-jira@latest",
+      "local_path": "atlassian"
+    },
+    {
+      "name": "confluence",
+      "description": "Confluence Cloud page/user operations, attachments, datasources, indexes, and reverse lookups.",
+      "binary": "dex-plugin-confluence",
+      "go_install": "github.com/fluxplane/fluxplane-plugins/atlassian/cmd/dex-plugin-confluence@latest",
+      "local_path": "atlassian"
+    },
+    {
+      "name": "slack",
+      "description": "Slack token info, messaging, file upload, search, thread, channel member, and reverse lookup operations.",
+      "binary": "dex-plugin-slack",
+      "go_install": "github.com/fluxplane/fluxplane-plugins/slack/cmd/dex-plugin-slack@latest",
+      "local_path": "slack"
+    },
+    {
+      "name": "system",
+      "description": "Local system information across OS, runtime, user, paths, CPU, time, environment, and network categories.",
+      "binary": "dex-plugin-system",
+      "go_install": "github.com/fluxplane/fluxplane-plugins/system/cmd/dex-plugin-system@latest",
+      "local_path": "system"
+    },
+    {
+      "name": "websearch",
+      "description": "Generic web search aggregator over provider plugins.",
+      "binary": "dex-plugin-websearch",
+      "go_install": "github.com/fluxplane/fluxplane-plugins/websearch/cmd/dex-plugin-websearch@latest",
+      "local_path": "websearch"
+    },
+    {
+      "name": "tavily",
+      "description": "Tavily web search provider.",
+      "binary": "dex-plugin-tavily",
+      "go_install": "github.com/fluxplane/fluxplane-plugins/tavily/cmd/dex-plugin-tavily@latest",
+      "local_path": "tavily"
+    },
+    {
+      "name": "duckduckgo",
+      "description": "DuckDuckGo web search provider.",
+      "binary": "dex-plugin-duckduckgo",
+      "go_install": "github.com/fluxplane/fluxplane-plugins/duckduckgo/cmd/dex-plugin-duckduckgo@latest",
+      "local_path": "duckduckgo"
+    },
+    {
+      "name": "vision",
+      "description": "Generic image understanding aggregator over vision provider plugins.",
+      "binary": "dex-plugin-vision",
+      "go_install": "github.com/fluxplane/fluxplane-plugins/vision/cmd/dex-plugin-vision@latest",
+      "local_path": "vision"
+    },
+    {
+      "name": "openai",
+      "description": "OpenAI API plugin. Exposes image generation, image understanding, and model listing.",
+      "binary": "dex-plugin-openai",
+      "go_install": "github.com/fluxplane/fluxplane-plugins/openai/cmd/dex-plugin-openai@latest",
+      "local_path": "openai"
+    },
+    {
+      "name": "docker",
+      "description": "Local Docker Engine inspection for containers, images, networks, volumes, and daemon info.",
+      "binary": "dex-plugin-docker",
+      "go_install": "github.com/fluxplane/fluxplane-plugins/docker/cmd/dex-plugin-docker@latest",
+      "local_path": "docker"
+    },
+    {
+      "name": "grafana",
+      "description": "Grafana datasource catalog and proxy operations for Loki, Prometheus, Alertmanager, and Tempo.",
+      "binary": "dex-plugin-grafana",
+      "go_install": "github.com/fluxplane/fluxplane-plugins/grafana/cmd/dex-plugin-grafana@latest",
+      "local_path": "grafana"
+    },
+    {
+      "name": "prometheus",
+      "description": "Prometheus health checks, PromQL queries, labels, targets, and alerts for configured or discovered endpoints.",
+      "binary": "dex-plugin-prometheus",
+      "go_install": "github.com/fluxplane/fluxplane-plugins/prometheus/cmd/dex-plugin-prometheus@latest",
+      "local_path": "prometheus"
+    },
+    {
+      "name": "loki",
+      "description": "Loki health checks, LogQL queries, recent logs, and labels for configured or discovered endpoints.",
+      "binary": "dex-plugin-loki",
+      "go_install": "github.com/fluxplane/fluxplane-plugins/loki/cmd/dex-plugin-loki@latest",
+      "local_path": "loki"
+    },
+    {
+      "name": "kubernetes",
+      "description": "Kubernetes cluster discovery using kubeconfig and kubectl.",
+      "binary": "dex-plugin-kubernetes",
+      "go_install": "github.com/fluxplane/fluxplane-plugins/kubernetes/cmd/dex-plugin-kubernetes@latest",
+      "local_path": "kubernetes"
+    },
+    {
+      "name": "asterisk",
+      "description": "Asterisk endpoint discovery and AMI operations.",
+      "binary": "dex-plugin-asterisk",
+      "go_install": "github.com/fluxplane/fluxplane-plugins/asterisk/cmd/dex-plugin-asterisk@latest",
+      "local_path": "asterisk"
+    },
+    {
+      "name": "ollama",
+      "description": "Ollama local LLM operations: inspect installed models, generate completions, chat, and embed.",
+      "binary": "dex-plugin-ollama",
+      "go_install": "github.com/fluxplane/fluxplane-plugins/ollama/cmd/dex-plugin-ollama@latest",
+      "local_path": "ollama"
+    },
+    {
+      "name": "sql",
+      "description": "Read-only SQL query operations for MySQL, PostgreSQL, SQLite, and compatible endpoints.",
+      "binary": "dex-plugin-sql",
+      "go_install": "github.com/fluxplane/fluxplane-plugins/sql/cmd/dex-plugin-sql@latest",
+      "local_path": "sql"
+    }
+  ]
+}

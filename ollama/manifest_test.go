@@ -1,0 +1,11 @@
+package ollama
+
+import (
+	"testing"
+
+	"github.com/fluxplane/fluxplane-plugin/pluginbinding/plugintest"
+)
+
+func TestManifestQuality(t *testing.T) {
+	plugintest.AssertManifestQuality(t, Manifest())
+}

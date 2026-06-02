@@ -1,0 +1,30 @@
+go 1.26.1
+
+use (
+	../fluxplane-context
+	../fluxplane-operation
+	../fluxplane-plugin
+	./atlassian
+	./asterisk
+	./docker
+	./duckduckgo
+	./gitlab
+	./grafana
+	./kubernetes
+	./loki
+	./ollama
+	./openai
+	./prometheus
+	./slack
+	./sql
+	./system
+	./tavily
+	./vision
+	./websearch
+)
+
+replace github.com/fluxplane/fluxplane-context v0.0.0 => ../fluxplane-context
+
+replace github.com/fluxplane/fluxplane-operation v0.1.0 => ../fluxplane-operation
+
+replace github.com/fluxplane/fluxplane-plugin v0.0.0 => ../fluxplane-plugin
