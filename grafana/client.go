@@ -62,7 +62,7 @@ func (c Client) request(ctx context.Context, method, path string, values url.Val
 		},
 		TimeoutMS: 30000,
 		MaxBytes:  32 * 1024 * 1024,
-		UserAgent: "fluxplane-dex/0.1",
+		UserAgent: "fluxplane-plugin/0.1",
 	})
 	if err != nil {
 		return nil, err

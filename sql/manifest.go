@@ -37,7 +37,7 @@ func manifestSpec() pluginbinding.ManifestSpec {
 		Auth: []core.AuthMethod{{
 			Name:        AuthMethodSQL,
 			Kind:        "credentials",
-			Description: "SQL credentials resolved by dex secret broker.",
+			Description: "SQL credentials resolved by the plugin host secret broker.",
 			Env:         []string{EnvSQLUsername, EnvSQLPassword, EnvMySQLUsername, EnvMySQLPassword},
 			Fields: []core.AuthField{
 				pluginbinding.AuthField(AuthPurposeUsername, "SQL username", false, true, EnvSQLUsername, EnvMySQLUsername),

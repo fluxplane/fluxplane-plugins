@@ -31,17 +31,17 @@ Both datasources declare network access and the optional `tenant_id` secret purp
 Run a bounded LogQL query:
 
 ```sh
-dex op run loki.query '{"endpoint_ref":"staging-loki","query":"{job=~\".+\"}","since":"15m","limit":20}'
+fluxplane-plugin operation invoke loki loki.query --input '{"endpoint_ref":"staging-loki","query":"{job=~\".+\"}","since":"15m","limit":20}'
 ```
 
 Search live log entries as a datasource:
 
 ```sh
-dex datasource search loki.log_entries '{"endpoint_ref":"staging-loki","query":"{app=\"api\"}","since":"15m","limit":20}'
+fluxplane-plugin datasource search loki loki.log_entries --input '{"endpoint_ref":"staging-loki","query":"{app=\"api\"}","since":"15m","limit":20}'
 ```
 
 List label values:
 
 ```sh
-dex op run loki.labels '{"endpoint_ref":"staging-loki","label":"app"}'
+fluxplane-plugin operation invoke loki loki.labels --input '{"endpoint_ref":"staging-loki","label":"app"}'
 ```

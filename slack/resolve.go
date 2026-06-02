@@ -164,7 +164,7 @@ func resolveIndexedID(ctx pluginbinding.Context, entity, term, label string) (st
 		return "", pluginbinding.Errorf("host_lookup", "%s", err)
 	}
 	if len(result.Matches) == 0 || strings.TrimSpace(result.Matches[0].ID) == "" {
-		return "", pluginbinding.Fail("bad_input", "unknown Slack reference "+label+"; run dex slack index build")
+		return "", pluginbinding.Fail("bad_input", "unknown Slack reference "+label+"; build the Slack index before resolving references")
 	}
 	return strings.TrimSpace(result.Matches[0].ID), nil
 }

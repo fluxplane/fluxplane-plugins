@@ -479,7 +479,7 @@ func pageCreateRequest(input PageCreateInput) (PageCreateRequest, error) {
 	}
 	body := strings.TrimSpace(input.BodyStorage)
 	if body == "" {
-		body = "<p>Created by dex.</p>"
+		body = "<p>Created by Fluxplane.</p>"
 	}
 	return PageCreateRequest{SpaceKey: spaceKey, Title: title, BodyStorage: body, ParentID: strings.TrimSpace(input.ParentID)}, nil
 }

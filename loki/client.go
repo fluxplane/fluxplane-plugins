@@ -44,7 +44,7 @@ func (c Client) get(ctx context.Context, path string, values url.Values, out any
 		},
 		TimeoutMS: 30000,
 		MaxBytes:  32 * 1024 * 1024,
-		UserAgent: "fluxplane-dex/0.1",
+		UserAgent: "fluxplane-plugin/0.1",
 	})
 	if err != nil {
 		return err
@@ -66,7 +66,7 @@ func (c Client) ready(ctx context.Context) error {
 		},
 		TimeoutMS: 5000,
 		MaxBytes:  64 * 1024,
-		UserAgent: "fluxplane-dex/0.1",
+		UserAgent: "fluxplane-plugin/0.1",
 	})
 	if err != nil {
 		return err

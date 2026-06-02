@@ -78,7 +78,7 @@ func manifestSpec() pluginbinding.ManifestSpec {
 		Metadata:    map[string]string{pluginbinding.ManifestProtocolKey: protocol.Version},
 		Auth: []core.AuthMethod{pluginbinding.BearerAuth(
 			AuthMethodTokenSet,
-			"Slack tokens resolved by dex secret broker.",
+			"Slack tokens resolved by the plugin host secret broker.",
 			pluginbinding.AuthField(AuthPurposeBot, "Slack bot token", true, true, EnvSlackBotToken),
 			pluginbinding.AuthField(AuthPurposeUser, "Slack user token", true, true, EnvSlackUserToken),
 			pluginbinding.AuthField(AuthPurposeApp, "Slack app token", false, true, EnvSlackAppToken),

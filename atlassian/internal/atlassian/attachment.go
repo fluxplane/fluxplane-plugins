@@ -12,7 +12,7 @@ import (
 // from a local file or inline bytes. Atlassian Cloud's published per-attachment
 // limit (Confluence default 100 MB, Jira default 10 MB but configurable up to
 // 100 MB) sits well under this; the cap is a defense against accidentally
-// streaming a multi-gigabyte file through dex.
+// streaming a multi-gigabyte file through the plugin host.
 const MaxAttachmentUploadBytes = 256 * 1024 * 1024
 
 // AttachmentUploadRequest is the normalized payload an Atlassian plugin sends

@@ -40,7 +40,7 @@ func providerSpec() websearch.ProviderSpec {
 		DatasourceDescription: "Tavily web search results.",
 		Auth: []core.AuthMethod{pluginbinding.BearerAuth(
 			AuthMethodAPIKey,
-			"Tavily API key resolved by dex secret broker.",
+			"Tavily API key resolved by the plugin host secret broker.",
 			pluginbinding.AuthField(AuthPurposeAPIKey, "Tavily API key", true, true, EnvTavilyAPIKey),
 		)},
 		SecretPurposes: []string{AuthPurposeAPIKey},

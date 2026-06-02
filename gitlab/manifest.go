@@ -67,7 +67,7 @@ func Manifest() core.PluginManifest {
 func manifestSpec() pluginbinding.ManifestSpec {
 	auth := pluginbinding.BearerAuth(
 		AuthMethodPersonalAccessToken,
-		"GitLab personal access token resolved by dex secret broker.",
+		"GitLab personal access token resolved by the plugin host secret broker.",
 		pluginbinding.AuthField(AuthPurposeAccessToken, "GitLab personal access token", true, true, EnvGitLabPersonalToken, EnvGitLabAccessToken, EnvGitLabToken),
 	)
 	auth.Env = []string{EnvGitLabPersonalToken, EnvGitLabAccessToken, EnvGitLabToken}

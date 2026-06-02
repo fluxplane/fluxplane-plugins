@@ -1076,7 +1076,7 @@ func silencePayload(input AlertSilenceCreateInput) (map[string]any, error) {
 		"matchers":  matchers,
 		"startsAt":  start.Format(time.RFC3339Nano),
 		"endsAt":    end.Format(time.RFC3339Nano),
-		"createdBy": firstNonEmpty(input.CreatedBy, "dex"),
+		"createdBy": firstNonEmpty(input.CreatedBy, "fluxplane"),
 		"comment":   strings.TrimSpace(input.Comment),
 	}, nil
 }

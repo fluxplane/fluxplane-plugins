@@ -35,7 +35,7 @@ func (c Client) get(ctx context.Context, path string, values url.Values) (json.R
 		Method:      "GET",
 		TimeoutMS:   30000,
 		MaxBytes:    32 * 1024 * 1024,
-		UserAgent:   "fluxplane-dex/0.1",
+		UserAgent:   "fluxplane-plugin/0.1",
 	})
 	if err != nil {
 		return nil, err
@@ -61,7 +61,7 @@ func (c Client) ready(ctx context.Context) error {
 		Method:      "GET",
 		TimeoutMS:   5000,
 		MaxBytes:    64 * 1024,
-		UserAgent:   "fluxplane-dex/0.1",
+		UserAgent:   "fluxplane-plugin/0.1",
 	})
 	if err != nil {
 		return err

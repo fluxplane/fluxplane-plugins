@@ -360,7 +360,7 @@ func (c liveClient) do(ctx context.Context, method, path string, query url.Value
 		},
 		TimeoutMS: 30000,
 		MaxBytes:  64 * 1024 * 1024,
-		UserAgent: "fluxplane-dex/0.1",
+		UserAgent: "fluxplane-plugin/0.1",
 	})
 	if err != nil {
 		return err
@@ -397,7 +397,7 @@ func (c liveClient) getBytes(ctx context.Context, path string, query url.Values)
 		},
 		TimeoutMS: 30000,
 		MaxBytes:  256 * 1024 * 1024,
-		UserAgent: "fluxplane-dex/0.1",
+		UserAgent: "fluxplane-plugin/0.1",
 	})
 	if err != nil {
 		return nil, "", err

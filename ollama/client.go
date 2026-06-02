@@ -53,7 +53,7 @@ func (c Client) do(method, path string, body []byte, out any) error {
 		Body:        body,
 		TimeoutMS:   30000,
 		MaxBytes:    16 * 1024 * 1024,
-		UserAgent:   "fluxplane-dex/0.1",
+		UserAgent:   "fluxplane-plugin/0.1",
 	})
 	if err != nil {
 		return err

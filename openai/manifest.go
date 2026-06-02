@@ -41,7 +41,7 @@ func manifestSpec() pluginbinding.ManifestSpec {
 		},
 		Auth: []core.AuthMethod{pluginbinding.BearerAuth(
 			AuthMethodAPIKey,
-			"OpenAI API key resolved by dex secret broker.",
+			"OpenAI API key resolved by the plugin host secret broker.",
 			pluginbinding.AuthField(AuthPurposeAPIKey, "OpenAI API key", true, true, EnvOpenAIAPIKey),
 			pluginbinding.AuthField(AuthPurposeOrganization, "OpenAI organization header", false, false, EnvOpenAIOrganization),
 			pluginbinding.AuthField(AuthPurposeProject, "OpenAI project header", false, false, EnvOpenAIProject),
@@ -72,7 +72,7 @@ func visionProviderSpec() vision.ProviderSpec {
 		OperationDescription: "Analyze one or more images using OpenAI vision-capable models.",
 		Auth: []core.AuthMethod{pluginbinding.BearerAuth(
 			AuthMethodAPIKey,
-			"OpenAI API key resolved by dex secret broker.",
+			"OpenAI API key resolved by the plugin host secret broker.",
 			pluginbinding.AuthField(AuthPurposeAPIKey, "OpenAI API key", true, true, EnvOpenAIAPIKey),
 			pluginbinding.AuthField(AuthPurposeOrganization, "OpenAI organization header", false, false, EnvOpenAIOrganization),
 			pluginbinding.AuthField(AuthPurposeProject, "OpenAI project header", false, false, EnvOpenAIProject),
