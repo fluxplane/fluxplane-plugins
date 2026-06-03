@@ -3,8 +3,10 @@ package aws
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	fpcontext "github.com/fluxplane/fluxplane-context"
+	evidence "github.com/fluxplane/fluxplane-evidence"
 	core "github.com/fluxplane/fluxplane-plugin/manifest"
 	"github.com/fluxplane/fluxplane-plugin/pluginbinding"
 )
@@ -32,6 +34,37 @@ type Environment struct {
 
 func Inspect(ctx pluginbinding.Context, input InspectInput) (Environment, error) {
 	return inspectEnvironment(ctx.Host, input)
+}
+
+func Observe(ctx pluginbinding.Context, _ pluginbinding.EvidenceObserveInput) (pluginbinding.EvidenceObserveResult, error) {
+	env, err := inspectEnvironment(ctx.Host, InspectInput{})
+	if err != nil {
+		return pluginbinding.EvidenceObserveResult{}, err
+	}
+	now := time.Now().UTC()
+	content := environmentContent(env)
+	var observations []evidence.Observation
+	if env.Configured {
+		observations = append(observations, evidence.Observation{
+			ID:          "integration:aws:configured:" + env.Scope,
+			Kind:        ObservationEnvironmentConfigured,
+			Scope:       env.Scope,
+			Content:     content,
+			At:          now,
+			Environment: evidence.Ref{Name: evidence.Name(PluginName)},
+		})
+	}
+	if env.Available {
+		observations = append(observations, evidence.Observation{
+			ID:          "integration:aws:available:" + env.Scope,
+			Kind:        ObservationEnvironmentAvailable,
+			Scope:       env.Scope,
+			Content:     content,
+			At:          now,
+			Environment: evidence.Ref{Name: evidence.Name(PluginName)},
+		})
+	}
+	return pluginbinding.EvidenceObserveResult{Observations: observations}, nil
 }
 
 func BuildContext(ctx pluginbinding.Context, _ pluginbinding.ContextBuildInput) (pluginbinding.ContextBuildResult, error) {
@@ -173,6 +206,22 @@ func renderEnvironment(env Environment) string {
 	fmt.Fprintf(&b, "\n- web identity configured: %t", env.WebIdentityConfigured)
 	fmt.Fprintf(&b, "\n- role ARN configured: %t", env.RoleARNConfigured)
 	return b.String()
+}
+
+func environmentContent(env Environment) map[string]any {
+	return map[string]any{
+		"configured":               env.Configured,
+		"available":                env.Available,
+		"profile":                  env.Profile,
+		"region":                   env.Region,
+		"access_key_configured":    env.AccessKeyConfigured,
+		"secret_key_configured":    env.SecretKeyConfigured,
+		"session_token_configured": env.SessionTokenConfigured,
+		"web_identity_configured":  env.WebIdentityConfigured,
+		"role_arn_configured":      env.RoleARNConfigured,
+		"source":                   env.Source,
+		"scope":                    env.Scope,
+	}
 }
 
 func awsScope(profile, region string) string {

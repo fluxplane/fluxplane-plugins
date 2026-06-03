@@ -10,6 +10,7 @@ func NewPlugin() *pluginbinding.Plugin {
 	return pluginbinding.Define(spec,
 		pluginbinding.RegisterOperation(inspectSpec(), Inspect),
 		pluginbinding.RegisterContextProvider(spec.Context[0], BuildContext),
+		pluginbinding.RegisterEvidenceObserver(environmentObserverSpec(), Observe),
 	)
 }
 

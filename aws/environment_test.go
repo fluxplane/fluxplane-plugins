@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	fpendpoint "github.com/fluxplane/fluxplane-endpoint"
+	evidence "github.com/fluxplane/fluxplane-evidence"
 	core "github.com/fluxplane/fluxplane-plugin/manifest"
 	"github.com/fluxplane/fluxplane-plugin/pluginbinding"
 	"github.com/fluxplane/fluxplane-plugin/pluginbinding/plugintest"
@@ -26,6 +27,12 @@ func TestManifestDeclaresAWSOperationAndContext(t *testing.T) {
 	}
 	if len(manifest.Context) != 1 || manifest.Context[0].Name != ContextName {
 		t.Fatalf("context = %#v, want AWS context", manifest.Context)
+	}
+	if len(manifest.Observers) != 1 || manifest.Observers[0].Name != ObserverEnvironment {
+		t.Fatalf("observers = %#v, want AWS environment observer", manifest.Observers)
+	}
+	if len(manifest.AssertionDerivers) != 2 {
+		t.Fatalf("assertion derivers = %#v, want configured and available derivers", manifest.AssertionDerivers)
 	}
 }
 
@@ -66,6 +73,61 @@ func TestInspectTreatsRegionOnlyAsConfiguredNotAvailable(t *testing.T) {
 	}
 	if env.Available {
 		t.Fatalf("env = %#v, want unavailable with region only", env)
+	}
+}
+
+func TestObserveReportsAWSConfiguredAndAvailableEvidence(t *testing.T) {
+	host := awsTestHost{values: map[string]string{
+		"AWS_PROFILE":           "dev-profile",
+		"AWS_REGION":            "us-east-1",
+		"AWS_ACCESS_KEY_ID":     "AKIAEXAMPLE",
+		"AWS_SECRET_ACCESS_KEY": "secret",
+		"AWS_SESSION_TOKEN":     "token",
+	}}
+	resp := NewPlugin().HandleWithHost(protocol.Request{
+		Command: protocol.CommandEvidenceObserve,
+		Plugin:  PluginName,
+		Payload: mustJSON(t, protocol.EvidenceObserveRequest{Phase: evidence.PhaseTurn}),
+	}, host)
+	if !resp.OK {
+		t.Fatalf("observe failed: %#v", resp.Error)
+	}
+	var result protocol.EvidenceObserveResult
+	if err := json.Unmarshal(resp.Result, &result); err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Observations) != 2 {
+		t.Fatalf("observations = %#v, want configured and available", result.Observations)
+	}
+	if !hasObservationKind(result.Observations, ObservationEnvironmentConfigured) || !hasObservationKind(result.Observations, ObservationEnvironmentAvailable) {
+		t.Fatalf("observations = %#v", result.Observations)
+	}
+	raw, err := json.Marshal(result)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, secret := range []string{"AKIAEXAMPLE", "secret", "token"} {
+		if containsJSONValue(raw, secret) {
+			t.Fatalf("observation leaked secret value %q: %s", secret, string(raw))
+		}
+	}
+}
+
+func TestObserveTreatsRegionOnlyAsConfiguredNotAvailable(t *testing.T) {
+	resp := NewPlugin().HandleWithHost(protocol.Request{
+		Command: protocol.CommandEvidenceObserve,
+		Plugin:  PluginName,
+		Payload: mustJSON(t, protocol.EvidenceObserveRequest{Phase: evidence.PhaseTurn}),
+	}, awsTestHost{values: map[string]string{"AWS_REGION": "eu-central-1"}})
+	if !resp.OK {
+		t.Fatalf("observe failed: %#v", resp.Error)
+	}
+	var result protocol.EvidenceObserveResult
+	if err := json.Unmarshal(resp.Result, &result); err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Observations) != 1 || result.Observations[0].Kind != ObservationEnvironmentConfigured {
+		t.Fatalf("observations = %#v, want configured only", result.Observations)
 	}
 }
 
@@ -170,6 +232,24 @@ func containsJSONValue(raw []byte, value string) bool {
 		return false
 	}
 	return containsValue(decoded, value)
+}
+
+func hasObservationKind(observations []evidence.Observation, kind string) bool {
+	for _, observation := range observations {
+		if observation.Kind == kind {
+			return true
+		}
+	}
+	return false
+}
+
+func mustJSON(t *testing.T, value any) []byte {
+	t.Helper()
+	data, err := json.Marshal(value)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return data
 }
 
 func containsValue(candidate any, value string) bool {

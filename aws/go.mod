@@ -5,6 +5,7 @@ go 1.26.1
 require (
 	github.com/fluxplane/fluxplane-context v0.0.0
 	github.com/fluxplane/fluxplane-endpoint v0.2.0
+	github.com/fluxplane/fluxplane-evidence v0.1.0
 	github.com/fluxplane/fluxplane-plugin v0.0.0
 )
 
