@@ -118,6 +118,7 @@ func TestLiveClientUploadPageAttachmentSendsMultipart(t *testing.T) {
 }
 
 type confluenceLiveClientTestHost struct {
+	pluginbinding.HostClient
 	t       *testing.T
 	baseURL string
 }

@@ -7,15 +7,19 @@ use (
 	../fluxplane-plugin
 	./atlassian
 	./asterisk
+	./clock
 	./docker
 	./duckduckgo
+	./git
 	./gitlab
 	./grafana
 	./kubernetes
 	./loki
 	./ollama
 	./openai
+	./openapi
 	./prometheus
+	./sleep
 	./slack
 	./sql
 	./system

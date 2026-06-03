@@ -7,6 +7,7 @@ Current migrated modules:
 
 - `atlassian`
 - `asterisk`
+- `clock`
 - `docker`
 - `gitlab`
 - `grafana`
@@ -14,6 +15,7 @@ Current migrated modules:
 - `loki`
 - `ollama`
 - `prometheus`
+- `sleep`
 - `slack`
 - `sql`
 - `system`

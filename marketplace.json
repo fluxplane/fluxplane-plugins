@@ -30,11 +30,32 @@
       "local_path": "slack"
     },
     {
+      "name": "git",
+      "description": "Local Git repository inspection, staging, commit, tag, and push operations.",
+      "binary": "fluxplane-plugin-git",
+      "go_install": "github.com/fluxplane/fluxplane-plugins/git/cmd/fluxplane-plugin-git@latest",
+      "local_path": "git"
+    },
+    {
       "name": "system",
       "description": "Local system information across OS, runtime, user, paths, CPU, time, environment, and network categories.",
       "binary": "fluxplane-plugin-system",
       "go_install": "github.com/fluxplane/fluxplane-plugins/system/cmd/fluxplane-plugin-system@latest",
       "local_path": "system"
+    },
+    {
+      "name": "sleep",
+      "description": "Interruptible local wait operation.",
+      "binary": "fluxplane-plugin-sleep",
+      "go_install": "github.com/fluxplane/fluxplane-plugins/sleep/cmd/fluxplane-plugin-sleep@latest",
+      "local_path": "sleep"
+    },
+    {
+      "name": "clock",
+      "description": "Current wall-clock time context provider.",
+      "binary": "fluxplane-plugin-clock",
+      "go_install": "github.com/fluxplane/fluxplane-plugins/clock/cmd/fluxplane-plugin-clock@latest",
+      "local_path": "clock"
     },
     {
       "name": "websearch",

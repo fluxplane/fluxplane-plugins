@@ -100,6 +100,7 @@ func TestLiveClientUploadIssueAttachmentSendsMultipart(t *testing.T) {
 }
 
 type liveClientTestHost struct {
+	pluginbinding.HostClient
 	t       *testing.T
 	baseURL string
 }

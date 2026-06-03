@@ -436,6 +436,7 @@ func testPlugin(client Client) *pluginbinding.Plugin {
 }
 
 type jiraTestHost struct {
+	pluginbinding.HostClient
 	blobs map[string]pluginbinding.BlobReadResponse
 }
 
