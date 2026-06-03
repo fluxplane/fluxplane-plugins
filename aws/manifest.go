@@ -10,7 +10,7 @@ import (
 
 const (
 	PluginName        = "aws"
-	PluginVersion     = "0.1.0"
+	PluginVersion     = "0.2.0"
 	PluginDescription = "AWS environment configuration and credential presence inspection."
 
 	OperationInspect                 = "aws.environment.inspect"
