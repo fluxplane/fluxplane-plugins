@@ -111,7 +111,7 @@ func TestManifestDeclaresDatasourceMetadata(t *testing.T) {
 
 func TestManifestDeclaresGitLabWriteOperations(t *testing.T) {
 	manifest := Manifest()
-	if manifest.Metadata["dex.protocol"] != protocol.Version {
+	if manifest.Metadata[pluginbinding.ManifestProtocolKey] != protocol.Version {
 		t.Fatalf("protocol metadata = %#v", manifest.Metadata)
 	}
 	operations := map[string]core.OperationSpec{}
