@@ -19,13 +19,37 @@ func NewService() Service {
 }
 
 func (s Service) client(ctx pluginbinding.Context, input any) (Client, string, error) {
-	endpointRef := strings.TrimSpace(pluginbinding.StringFromInput(pluginbinding.InputMap(input), "endpoint_ref"))
+	endpointRef := confluenceEndpointRef(ctx, input)
 	factory := s.ClientFactory
 	if factory == nil {
 		factory = NewLiveClient
 	}
 	client, err := factory(ctx, endpointRef)
 	return client, "", err
+}
+
+func confluenceEndpointRef(ctx pluginbinding.Context, input any) string {
+	if endpointRef := strings.TrimSpace(pluginbinding.StringFromInput(pluginbinding.InputMap(input), "endpoint_ref")); endpointRef != "" {
+		return endpointRef
+	}
+	return endpointRefFromConfig(ctx.Config, EndpointName)
+}
+
+func endpointRefFromConfig(config map[string]any, name string) string {
+	if len(config) == 0 {
+		return ""
+	}
+	if value, ok := config["endpoint_ref"]; ok {
+		if endpointRef := strings.TrimSpace(fmt.Sprint(value)); endpointRef != "" {
+			return endpointRef
+		}
+	}
+	if values, ok := config["endpoint_refs"].(map[string]any); ok {
+		if endpointRef := strings.TrimSpace(fmt.Sprint(values[name])); endpointRef != "" {
+			return endpointRef
+		}
+	}
+	return ""
 }
 
 type ConfluenceTargetInput struct {

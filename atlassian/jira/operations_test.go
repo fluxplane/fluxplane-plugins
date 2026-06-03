@@ -9,6 +9,7 @@ import (
 	core "github.com/fluxplane/fluxplane-plugin/manifest"
 	"github.com/fluxplane/fluxplane-plugin/pluginbinding"
 	"github.com/fluxplane/fluxplane-plugin/pluginbinding/plugintest"
+	"github.com/fluxplane/fluxplane-plugin/protocol"
 )
 
 func requestJSON(value any) string {
@@ -17,6 +18,10 @@ func requestJSON(value any) string {
 		return ""
 	}
 	return string(data)
+}
+
+func protocolRequestWithConfig(config map[string]any) protocol.Request {
+	return protocol.Request{Plugin: PluginName, Instance: "default", Config: config}
 }
 
 func TestServiceBuildsClientFromEndpointRef(t *testing.T) {
@@ -35,6 +40,24 @@ func TestServiceBuildsClientFromEndpointRef(t *testing.T) {
 	}
 	if capturedEndpointRef != "jira-dev" {
 		t.Fatalf("endpoint_ref = %q", capturedEndpointRef)
+	}
+}
+
+func TestServiceBuildsClientFromStoredEndpointConfig(t *testing.T) {
+	client := &fakeClient{user: User{AccountID: "acct-1", DisplayName: "Ada"}}
+	var capturedEndpointRef string
+	plugin := NewPluginWithService(Service{
+		ClientFactory: func(_ pluginbinding.Context, endpointRef string) (Client, error) {
+			capturedEndpointRef = endpointRef
+			return client, nil
+		},
+	})
+
+	out := plugintest.RunOK[AuthTestResult](t, plugin, OperationAuthTest, nil, plugintest.WithRequest(protocolRequestWithConfig(map[string]any{
+		"endpoint_refs": map[string]any{EndpointName: "jira-stored"},
+	})))
+	if out.Status != "ok" || capturedEndpointRef != "jira-stored" {
+		t.Fatalf("out = %#v endpoint_ref = %q", out, capturedEndpointRef)
 	}
 }
 

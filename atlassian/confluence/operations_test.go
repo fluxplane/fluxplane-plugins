@@ -7,6 +7,7 @@ import (
 
 	"github.com/fluxplane/fluxplane-plugin/pluginbinding"
 	"github.com/fluxplane/fluxplane-plugin/pluginbinding/plugintest"
+	"github.com/fluxplane/fluxplane-plugin/protocol"
 )
 
 func TestServiceBuildsClientFromEndpointRef(t *testing.T) {
@@ -25,6 +26,24 @@ func TestServiceBuildsClientFromEndpointRef(t *testing.T) {
 	}
 	if capturedEndpointRef != "confluence-dev" {
 		t.Fatalf("endpoint_ref = %q", capturedEndpointRef)
+	}
+}
+
+func TestServiceBuildsClientFromStoredEndpointConfig(t *testing.T) {
+	client := &fakeClient{user: User{AccountID: "acct-1", DisplayName: "Ada"}}
+	var capturedEndpointRef string
+	plugin := NewPluginWithService(Service{
+		ClientFactory: func(_ pluginbinding.Context, endpointRef string) (Client, error) {
+			capturedEndpointRef = endpointRef
+			return client, nil
+		},
+	})
+
+	out := plugintest.RunOK[AuthTestResult](t, plugin, OperationAuthTest, nil, plugintest.WithRequest(protocol.Request{
+		Plugin: PluginName, Instance: "default", Config: map[string]any{"endpoint_refs": map[string]any{EndpointName: "confluence-stored"}},
+	}))
+	if out.Status != "ok" || capturedEndpointRef != "confluence-stored" {
+		t.Fatalf("out = %#v endpoint_ref = %q", out, capturedEndpointRef)
 	}
 }
 

@@ -14,9 +14,15 @@ const (
 	AuthMethodPersonalAccessToken = "personal_access_token"
 	AuthPurposeAccessToken        = "access_token"
 
-	EnvGitLabPersonalToken = "GITLAB_PERSONAL_TOKEN"
-	EnvGitLabAccessToken   = "GITLAB_ACCESS_TOKEN"
-	EnvGitLabToken         = "GITLAB_TOKEN"
+	EnvGitLabPersonalToken       = "GITLAB_PERSONAL_TOKEN"
+	EnvGitLabPersonalAccessToken = "GITLAB_PERSONAL_ACCESS_TOKEN"
+	EnvGitLabAccessToken         = "GITLAB_ACCESS_TOKEN"
+	EnvGitLabToken               = "GITLAB_TOKEN"
+	EnvGitLabPrivateToken        = "GITLAB_PRIVATE_TOKEN"
+	EnvGitLabURL                 = "GITLAB_URL"
+	EnvGitLabBaseURL             = "GITLAB_BASE_URL"
+	EnvGitLabEndpoint            = "GITLAB_ENDPOINT"
+	EnvCIServerURL               = "CI_SERVER_URL"
 
 	OperationAuthTest           = "gitlab.auth.test"
 	OperationIndexBuild         = "gitlab.index.build"
@@ -68,9 +74,9 @@ func manifestSpec() pluginbinding.ManifestSpec {
 	auth := pluginbinding.BearerAuth(
 		AuthMethodPersonalAccessToken,
 		"GitLab personal access token resolved by the plugin host secret broker.",
-		pluginbinding.AuthField(AuthPurposeAccessToken, "GitLab personal access token", true, true, EnvGitLabPersonalToken, EnvGitLabAccessToken, EnvGitLabToken),
+		pluginbinding.AuthField(AuthPurposeAccessToken, "GitLab personal access token", true, true, EnvGitLabPersonalToken, EnvGitLabPersonalAccessToken, EnvGitLabPrivateToken, EnvGitLabAccessToken, EnvGitLabToken),
 	)
-	auth.Env = []string{EnvGitLabPersonalToken, EnvGitLabAccessToken, EnvGitLabToken}
+	auth.Env = []string{EnvGitLabPersonalToken, EnvGitLabPersonalAccessToken, EnvGitLabPrivateToken, EnvGitLabAccessToken, EnvGitLabToken}
 	return pluginbinding.ManifestSpec{
 		Name:        PluginName,
 		Version:     PluginVersion,
@@ -105,7 +111,12 @@ func manifestSpec() pluginbinding.ManifestSpec {
 			pluginbinding.ContextSpec(ContextName, "GitLab context blocks.", pluginbinding.ContextKindText, pluginbinding.ContextKindReference),
 		},
 		Endpoints: []core.EndpointSpec{
-			pluginbinding.Endpoint(EndpointName, "Configured GitLab API endpoint.", PluginName),
+			{
+				Name:        EndpointName,
+				Description: "Configured GitLab API endpoint.",
+				Products:    []string{PluginName},
+				Env:         []string{EnvGitLabURL, EnvGitLabBaseURL, EnvGitLabEndpoint, EnvCIServerURL},
+			},
 		},
 		Metadata: map[string]string{pluginbinding.ManifestProtocolKey: protocol.Version},
 	}

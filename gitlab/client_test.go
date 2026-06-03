@@ -49,6 +49,24 @@ func TestNewLiveClientRequiresEndpointRef(t *testing.T) {
 	}
 }
 
+func TestNewLiveClientUsesConfiguredEndpointRef(t *testing.T) {
+	host := &gitLabLiveClientTestHost{}
+	ctx := pluginbinding.Context{
+		Config: map[string]any{"endpoint_ref": "gitlab-work"},
+		Host:   host,
+	}
+	client, err := NewLiveClient(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := client.CurrentUser(); err != nil {
+		t.Fatal(err)
+	}
+	if host.request.EndpointRef != "gitlab-work" {
+		t.Fatalf("endpoint ref = %#v", host.request)
+	}
+}
+
 type gitLabLiveClientTestHost struct {
 	pluginbinding.HostClient
 

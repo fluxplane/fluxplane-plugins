@@ -9,7 +9,7 @@ import (
 const (
 	PluginName        = "kubernetes"
 	PluginVersion     = "0.18.2"
-	PluginDescription = "Kubernetes cluster discovery using kubeconfig and kubectl."
+	PluginDescription = "Kubernetes cluster discovery and operations using kubeconfig."
 
 	OperationClusterList      = "kubernetes.cluster.list"
 	OperationClusterTest      = "kubernetes.cluster.test"
@@ -152,7 +152,7 @@ func podLogsSpec() core.OperationSpec {
 func portForwardStartSpec() core.OperationSpec {
 	return pluginbinding.TypedOperationSpec[PortForwardStartInput, PortForwardResult](
 		OperationPortForwardStart,
-		"Start a managed kubectl port-forward for a Kubernetes service, pod, or deployment.",
+		"Start a managed Kubernetes port-forward for a service, pod, or deployment.",
 		pluginbinding.Effects(core.OperationEffectWrite),
 		pluginbinding.Access(core.OperationAccessProvider),
 		pluginbinding.Risk(core.OperationRiskMedium),
@@ -163,7 +163,7 @@ func portForwardStartSpec() core.OperationSpec {
 func portForwardStopSpec() core.OperationSpec {
 	return pluginbinding.TypedOperationSpec[PortForwardStopInput, PortForwardStopResult](
 		OperationPortForwardStop,
-		"Stop a managed kubectl port-forward by ID or process group.",
+		"Stop a managed Kubernetes port-forward by ID or process group.",
 		pluginbinding.Effects(core.OperationEffectWrite),
 		pluginbinding.Access(core.OperationAccessProvider),
 		pluginbinding.Risk(core.OperationRiskMedium),

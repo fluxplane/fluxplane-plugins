@@ -40,14 +40,23 @@ type ClientFactory func(pluginbinding.Context, string) (Client, error)
 
 func NewLiveClient(ctx pluginbinding.Context, endpointRef string) (Client, error) {
 	endpointRef = strings.TrimSpace(endpointRef)
-	if endpointRef == "" {
-		return nil, fmt.Errorf("confluence endpoint_ref is required")
+	client := liveClient{endpointRef: endpointRef, host: ctx.Host}
+	if ctx.Host != nil {
+		if material, err := ctx.Host.Secret(AuthPurposeCloudID); err == nil {
+			if cloudID := strings.TrimSpace(material.Value); cloudID != "" {
+				client.baseURL = "https://api.atlassian.com/ex/confluence/" + url.PathEscape(cloudID)
+			}
+		}
 	}
-	return liveClient{endpointRef: endpointRef, host: ctx.Host}, nil
+	if endpointRef == "" && strings.TrimSpace(client.baseURL) == "" {
+		return nil, fmt.Errorf("confluence endpoint_ref or cloud_id is required")
+	}
+	return client, nil
 }
 
 type liveClient struct {
 	endpointRef string
+	baseURL     string
 	host        pluginbinding.HostClient
 }
 
@@ -292,8 +301,16 @@ func (c liveClient) do(ctx context.Context, method, path string, query url.Value
 		}
 		payload = data
 	}
+	requestURL := ""
+	endpointRef := c.endpointRef
+	if strings.TrimSpace(c.baseURL) != "" {
+		requestURL = strings.TrimRight(c.baseURL, "/")
+		endpointRef = ""
+		path = "/" + strings.TrimLeft(path, "/")
+	}
 	resp, err := c.host.HTTP(pluginbinding.HTTPRequest{
-		EndpointRef: c.endpointRef,
+		URL:         requestURL,
+		EndpointRef: endpointRef,
 		Path:        path,
 		Query:       map[string][]string(query),
 		Method:      method,

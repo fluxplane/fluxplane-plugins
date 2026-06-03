@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/sha1"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/url"
@@ -68,10 +67,12 @@ type ClusterTestResult struct {
 }
 
 type EndpointDiscoverInput struct {
-	Product   string `json:"product,omitempty" jsonschema:"description=Product to discover, for example prometheus or loki."`
-	Context   string `json:"context,omitempty" jsonschema:"description=Kubeconfig context."`
-	Namespace string `json:"namespace,omitempty" jsonschema:"description=Namespace to inspect. Empty means all namespaces."`
-	Limit     int    `json:"limit,omitempty" jsonschema:"description=Maximum candidates."`
+	EndpointRef string `json:"endpoint_ref,omitempty" jsonschema:"description=Registered Kubernetes cluster endpoint ref resolved by the host."`
+	URL         string `json:"url,omitempty" jsonschema:"description=Kubernetes endpoint URL."`
+	Product     string `json:"product,omitempty" jsonschema:"description=Product to discover, for example prometheus or loki."`
+	Context     string `json:"context,omitempty" jsonschema:"description=Kubeconfig context."`
+	Namespace   string `json:"namespace,omitempty" jsonschema:"description=Namespace to inspect. Empty means all namespaces."`
+	Limit       int    `json:"limit,omitempty" jsonschema:"description=Maximum candidates."`
 }
 
 type EndpointDiscoverResult struct {
@@ -466,7 +467,7 @@ func (s Service) EndpointDiscover(ctx pluginbinding.Context, input EndpointDisco
 		if err != nil {
 			return EndpointDiscoverResult{}, pluginbinding.Errorf("kubernetes", "%s", err)
 		}
-		return EndpointDiscoverResult{Candidates: limitCandidates(clusterEndpointCandidates(result.Contexts, input), input.Limit)}, nil
+		return EndpointDiscoverResult{Candidates: nonNilCandidates(limitCandidates(clusterEndpointCandidates(result.Contexts, input), input.Limit))}, nil
 	}
 	services, err := s.services(ctx)(context.Background(), input)
 	if err != nil {
@@ -492,7 +493,7 @@ func (s Service) EndpointDiscover(ctx pluginbinding.Context, input EndpointDisco
 			candidates = attachGrafanaCredentials(candidates, secrets, input)
 		}
 	}
-	return EndpointDiscoverResult{Candidates: limitCandidates(candidates, input.Limit)}, nil
+	return EndpointDiscoverResult{Candidates: nonNilCandidates(limitCandidates(candidates, input.Limit))}, nil
 }
 
 func (s Service) DiscoverEndpointsCommand(ctx pluginbinding.Context) protocol.Response {
@@ -516,7 +517,7 @@ func (s Service) contexts(ctx pluginbinding.Context) func() (ClusterListResult, 
 		return s.Contexts
 	}
 	return func() (ClusterListResult, error) {
-		return providerCall[ClusterListResult](ctx, "contexts", ClusterListInput{})
+		return HostKubeContexts()
 	}
 }
 
@@ -525,7 +526,7 @@ func (s Service) clusterProbe(ctx pluginbinding.Context) func(context.Context, C
 		return s.ClusterProbe
 	}
 	return func(_ context.Context, input ClusterTestInput) (ClusterTestResult, error) {
-		return providerCall[ClusterTestResult](ctx, "cluster.probe", input)
+		return HostKubeClusterProbe(ctx, input)
 	}
 }
 
@@ -534,7 +535,7 @@ func (s Service) namespaces(ctx pluginbinding.Context) func(context.Context, Inv
 		return s.Namespaces
 	}
 	return func(_ context.Context, input InventoryInput) ([]corev1.Namespace, error) {
-		return providerCall[[]corev1.Namespace](ctx, "namespaces", input)
+		return HostKubeNamespaces(ctx, input)
 	}
 }
 
@@ -543,7 +544,7 @@ func (s Service) services(ctx pluginbinding.Context) func(context.Context, Endpo
 		return s.Services
 	}
 	return func(_ context.Context, input EndpointDiscoverInput) ([]corev1.Service, error) {
-		return providerCall[[]corev1.Service](ctx, "services", input)
+		return HostKubeServices(ctx, input)
 	}
 }
 
@@ -552,7 +553,7 @@ func (s Service) ingresses(ctx pluginbinding.Context) func(context.Context, Endp
 		return s.Ingresses
 	}
 	return func(_ context.Context, input EndpointDiscoverInput) ([]networkingv1.Ingress, error) {
-		return providerCall[[]networkingv1.Ingress](ctx, "ingresses", input)
+		return HostKubeIngresses(ctx, input)
 	}
 }
 
@@ -561,7 +562,7 @@ func (s Service) pods(ctx pluginbinding.Context) func(context.Context, Inventory
 		return s.Pods
 	}
 	return func(_ context.Context, input InventoryInput) ([]corev1.Pod, error) {
-		return providerCall[[]corev1.Pod](ctx, "pods", input)
+		return HostKubePods(ctx, input)
 	}
 }
 
@@ -570,7 +571,7 @@ func (s Service) deployments(ctx pluginbinding.Context) func(context.Context, In
 		return s.Deployments
 	}
 	return func(_ context.Context, input InventoryInput) ([]appsv1.Deployment, error) {
-		return providerCall[[]appsv1.Deployment](ctx, "deployments", input)
+		return HostKubeDeployments(ctx, input)
 	}
 }
 
@@ -579,7 +580,7 @@ func (s Service) logs(ctx pluginbinding.Context) func(context.Context, PodLogsIn
 		return s.Logs
 	}
 	return func(_ context.Context, input PodLogsInput) (PodLogsResult, error) {
-		return providerCall[PodLogsResult](ctx, "pod.logs", input)
+		return HostKubePodLogs(ctx, input)
 	}
 }
 
@@ -588,7 +589,7 @@ func (s Service) portForwardStart(ctx pluginbinding.Context) func(context.Contex
 		return s.ForwardStart
 	}
 	return func(_ context.Context, input PortForwardStartInput) (PortForwardResult, error) {
-		return providerCall[PortForwardResult](ctx, "portforward.start", input)
+		return HostKubePortForwardStart(ctx, input)
 	}
 }
 
@@ -597,7 +598,7 @@ func (s Service) portForwardStop(ctx pluginbinding.Context) func(context.Context
 		return s.ForwardStop
 	}
 	return func(_ context.Context, input PortForwardStopInput) (PortForwardStopResult, error) {
-		return providerCall[PortForwardStopResult](ctx, "portforward.stop", input)
+		return HostKubePortForwardStop(ctx, input)
 	}
 }
 
@@ -606,31 +607,8 @@ func (s Service) secrets(ctx pluginbinding.Context) func(context.Context, Endpoi
 		return s.Secrets
 	}
 	return func(_ context.Context, input EndpointDiscoverInput) ([]corev1.Secret, error) {
-		return providerCall[[]corev1.Secret](ctx, "secrets", input)
+		return HostKubeSecrets(ctx, input)
 	}
-}
-
-func providerCall[T any](ctx pluginbinding.Context, action string, input any) (T, error) {
-	var out T
-	payload, err := json.Marshal(input)
-	if err != nil {
-		return out, err
-	}
-	response, err := ctx.Host.CapabilityCall(pluginbinding.ProviderCallRequest{
-		Provider: PluginName,
-		Action:   action,
-		Payload:  payload,
-	})
-	if err != nil {
-		return out, err
-	}
-	if len(response.Result) == 0 {
-		return out, nil
-	}
-	if err := json.Unmarshal(response.Result, &out); err != nil {
-		return out, err
-	}
-	return out, nil
 }
 
 type podLogBoundOptions struct {
@@ -791,9 +769,11 @@ func clusterContextFromTestInput(input ClusterTestInput) string {
 
 func endpointInputFromInventory(input InventoryInput) EndpointDiscoverInput {
 	return EndpointDiscoverInput{
-		Context:   firstNonEmpty(input.Context, clusterContextFromEndpointURL(input.URL)),
-		Namespace: input.Namespace,
-		Limit:     input.Limit,
+		EndpointRef: input.EndpointRef,
+		URL:         input.URL,
+		Context:     firstNonEmpty(input.Context, clusterContextFromEndpointURL(input.URL)),
+		Namespace:   input.Namespace,
+		Limit:       input.Limit,
 	}
 }
 
@@ -1144,6 +1124,13 @@ func limitCandidates(candidates []core.EndpointCandidate, limit int) []core.Endp
 		return candidates
 	}
 	return candidates[:limit]
+}
+
+func nonNilCandidates(candidates []core.EndpointCandidate) []core.EndpointCandidate {
+	if candidates == nil {
+		return []core.EndpointCandidate{}
+	}
+	return candidates
 }
 
 func classifyService(item corev1.Service, productFilter string) (string, float64) {

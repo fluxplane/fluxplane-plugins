@@ -34,6 +34,9 @@ func TestManifestDeclaresSharedAtlassianEnvFallbacks(t *testing.T) {
 	if len(fields) != 2 {
 		t.Fatalf("auth fields = %#v", fields)
 	}
+	if len(manifest.Endpoints) != 1 || manifest.Endpoints[0].Name != EndpointName || len(manifest.Endpoints[0].Env) != 3 {
+		t.Fatalf("endpoints = %#v", manifest.Endpoints)
+	}
 	byEntity := map[string]core.DatasourceSpec{}
 	for _, datasource := range manifest.Datasources {
 		byEntity[datasource.Entity] = datasource

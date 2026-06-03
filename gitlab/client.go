@@ -71,6 +71,9 @@ func gitLabEndpointRef(ctx pluginbinding.Context) (string, error) {
 			return endpointRef, nil
 		}
 	}
+	if endpointRef := endpointRefFromConfig(ctx.Config); endpointRef != "" {
+		return endpointRef, nil
+	}
 	return "", fmt.Errorf("endpoint_ref is required")
 }
 
@@ -85,6 +88,23 @@ func endpointRefFromRaw(raw json.RawMessage) string {
 		return ""
 	}
 	return strings.TrimSpace(input.EndpointRef)
+}
+
+func endpointRefFromConfig(config map[string]any) string {
+	if len(config) == 0 {
+		return ""
+	}
+	if value, ok := config["endpoint_ref"]; ok {
+		if endpointRef := strings.TrimSpace(fmt.Sprint(value)); endpointRef != "" {
+			return endpointRef
+		}
+	}
+	if value, ok := config["endpoint_refs"].(map[string]any); ok {
+		if endpointRef := strings.TrimSpace(fmt.Sprint(value[EndpointName])); endpointRef != "" {
+			return endpointRef
+		}
+	}
+	return ""
 }
 
 type liveClient struct {

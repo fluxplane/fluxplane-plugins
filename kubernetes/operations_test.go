@@ -43,6 +43,26 @@ func TestEndpointDiscoverFindsPrometheusService(t *testing.T) {
 	}
 }
 
+func TestEndpointDiscoverSerializesEmptyCandidatesAsArray(t *testing.T) {
+	plugin := NewPluginWithService(Service{
+		Services:  func(_ context.Context, _ EndpointDiscoverInput) ([]corev1.Service, error) { return nil, nil },
+		Ingresses: func(_ context.Context, _ EndpointDiscoverInput) ([]networkingv1.Ingress, error) { return nil, nil },
+		Secrets:   func(_ context.Context, _ EndpointDiscoverInput) ([]corev1.Secret, error) { return nil, nil },
+	})
+
+	input, err := json.Marshal(protocol.OperationCall{Name: OperationEndpointDiscover, Input: json.RawMessage(`{"product":"loki"}`)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp := plugin.Handle(protocol.Request{Protocol: protocol.Version, Command: protocol.CommandOperationsCall, Plugin: PluginName, Payload: input})
+	if !resp.OK {
+		t.Fatalf("response = %#v", resp)
+	}
+	if !strings.Contains(string(resp.Result), `"candidates":[]`) {
+		t.Fatalf("result = %s", string(resp.Result))
+	}
+}
+
 func TestEndpointDiscoverFindsGrafanaIngressWithCredentialRef(t *testing.T) {
 	plugin := NewPluginWithService(Service{
 		Services: func(_ context.Context, _ EndpointDiscoverInput) ([]corev1.Service, error) {

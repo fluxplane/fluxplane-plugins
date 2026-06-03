@@ -17,6 +17,9 @@ const (
 
 	EnvAtlassianAPIToken = "ATLASSIAN_API_TOKEN"
 	EnvJiraAPIToken      = "JIRA_API_TOKEN"
+	EnvAtlassianURL      = "ATLASSIAN_URL"
+	EnvAtlassianSiteURL  = "ATLASSIAN_SITE_URL"
+	EnvJiraURL           = "JIRA_URL"
 
 	OperationAuthTest         = "jira.auth.test"
 	OperationIndexBuild       = "jira.index.build"
@@ -43,6 +46,8 @@ const (
 
 	EntityIssue = "jira.issue"
 	EntityUser  = "jira.user"
+
+	EndpointName = "jira.endpoint"
 )
 
 func Manifest() core.PluginManifest {
@@ -65,6 +70,12 @@ func manifestSpec() pluginbinding.ManifestSpec {
 				pluginbinding.AuthField(AuthPurposeAPIToken, "Atlassian API token", true, true, EnvJiraAPIToken, EnvAtlassianAPIToken),
 				pluginbinding.AuthField(AuthPurposeCloudID, "Atlassian Cloud ID", false, true, "ATLASSIAN_CLOUD_ID", "JIRA_CLOUD_ID"),
 			},
+		}},
+		Endpoints: []core.EndpointSpec{{
+			Name:        EndpointName,
+			Description: "Configured Jira API endpoint.",
+			Products:    []string{PluginName, "atlassian"},
+			Env:         []string{EnvJiraURL, EnvAtlassianURL, EnvAtlassianSiteURL},
 		}},
 		Operations: operationSpecs(),
 		IndexedDatasources: []pluginbinding.IndexedDatasourceSpec{

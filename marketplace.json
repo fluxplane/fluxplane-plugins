@@ -129,7 +129,7 @@
     },
     {
       "name": "kubernetes",
-      "description": "Kubernetes cluster discovery using kubeconfig and kubectl.",
+      "description": "Kubernetes cluster discovery and operations using kubeconfig.",
       "binary": "fluxplane-plugin-kubernetes",
       "go_install": "github.com/fluxplane/fluxplane-plugins/kubernetes/cmd/fluxplane-plugin-kubernetes@latest",
       "local_path": "kubernetes"

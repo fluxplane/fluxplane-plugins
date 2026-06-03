@@ -39,9 +39,6 @@ type ClientFactory func(pluginbinding.Context, string) (Client, error)
 
 func NewLiveClient(ctx pluginbinding.Context, endpointRef string) (Client, error) {
 	endpointRef = strings.TrimSpace(endpointRef)
-	if endpointRef == "" {
-		return nil, fmt.Errorf("jira endpoint_ref is required")
-	}
 	client := liveClient{endpointRef: endpointRef, host: ctx.Host}
 	if ctx.Host != nil {
 		if material, err := ctx.Host.Secret(AuthPurposeCloudID); err == nil {
@@ -49,6 +46,9 @@ func NewLiveClient(ctx pluginbinding.Context, endpointRef string) (Client, error
 				client.baseURL = "https://api.atlassian.com/ex/jira/" + url.PathEscape(cloudID)
 			}
 		}
+	}
+	if endpointRef == "" && strings.TrimSpace(client.baseURL) == "" {
+		return nil, fmt.Errorf("jira endpoint_ref or cloud_id is required")
 	}
 	return client, nil
 }

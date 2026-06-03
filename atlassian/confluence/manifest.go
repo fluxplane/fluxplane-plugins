@@ -13,9 +13,13 @@ const (
 
 	AuthMethodAtlassianCloud = "atlassian_cloud_basic"
 	AuthPurposeAPIToken      = "api_token"
+	AuthPurposeCloudID       = "cloud_id"
 
 	EnvAtlassianAPIToken  = "ATLASSIAN_API_TOKEN"
 	EnvConfluenceAPIToken = "CONFLUENCE_API_TOKEN"
+	EnvAtlassianURL       = "ATLASSIAN_URL"
+	EnvAtlassianSiteURL   = "ATLASSIAN_SITE_URL"
+	EnvConfluenceURL      = "CONFLUENCE_URL"
 
 	OperationAuthTest         = "confluence.auth.test"
 	OperationIndexBuild       = "confluence.index.build"
@@ -34,6 +38,8 @@ const (
 
 	EntityPage = "confluence.page"
 	EntityUser = "confluence.user"
+
+	EndpointName = "confluence.endpoint"
 )
 
 func Manifest() core.PluginManifest {
@@ -54,7 +60,14 @@ func manifestSpec() pluginbinding.ManifestSpec {
 			Env:         []string{EnvConfluenceAPIToken, EnvAtlassianAPIToken},
 			Fields: []core.AuthField{
 				pluginbinding.AuthField(AuthPurposeAPIToken, "Atlassian API token", true, true, EnvConfluenceAPIToken, EnvAtlassianAPIToken),
+				pluginbinding.AuthField(AuthPurposeCloudID, "Atlassian Cloud ID", false, true, "ATLASSIAN_CLOUD_ID", "CONFLUENCE_CLOUD_ID"),
 			},
+		}},
+		Endpoints: []core.EndpointSpec{{
+			Name:        EndpointName,
+			Description: "Configured Confluence API endpoint.",
+			Products:    []string{PluginName, "atlassian"},
+			Env:         []string{EnvConfluenceURL, EnvAtlassianURL, EnvAtlassianSiteURL},
 		}},
 		Operations: operationSpecs(),
 		IndexedDatasources: []pluginbinding.IndexedDatasourceSpec{
@@ -232,5 +245,5 @@ func confluenceUsersLookupSpec() core.DatasourceSpec {
 }
 
 func atlassianAuthPurposes() []string {
-	return []string{AuthPurposeAPIToken}
+	return []string{AuthPurposeAPIToken, AuthPurposeCloudID}
 }
