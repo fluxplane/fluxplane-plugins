@@ -167,6 +167,8 @@ func hasLokiDatasourceAccess(spec core.DatasourceSpec, want fpdatasource.Access)
 }
 
 type lokiTestHost struct {
+	pluginbinding.HostClient
+
 	baseURL  string
 	tenantID string
 }

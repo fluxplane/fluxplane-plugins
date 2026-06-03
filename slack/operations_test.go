@@ -1369,6 +1369,8 @@ type fakeClient struct {
 }
 
 type fakeHostClient struct {
+	pluginbinding.HostClient
+
 	users    []User
 	channels []Channel
 	blobs    map[string]pluginbinding.BlobReadResponse

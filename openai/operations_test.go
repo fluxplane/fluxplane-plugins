@@ -278,6 +278,8 @@ type hostRoute struct {
 }
 
 type routedHost struct {
+	pluginbinding.HostClient
+
 	t           *testing.T
 	routes      map[string]hostRoute
 	lastRequest pluginbinding.HTTPRequest

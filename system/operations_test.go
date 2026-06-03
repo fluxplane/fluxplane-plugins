@@ -123,6 +123,8 @@ func TestBuildContext(t *testing.T) {
 }
 
 type systemTestHost struct {
+	pluginbinding.HostClient
+
 	t *testing.T
 }
 

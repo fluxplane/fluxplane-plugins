@@ -84,6 +84,8 @@ func TestSearchFailsWhenProviderReturnsNoResults(t *testing.T) {
 }
 
 type fakeHostClient struct {
+	pluginbinding.HostClient
+
 	httpRequest pluginbinding.HTTPRequest
 	httpBody    string
 }

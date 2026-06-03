@@ -50,6 +50,8 @@ func TestNewLiveClientRequiresEndpointRef(t *testing.T) {
 }
 
 type gitLabLiveClientTestHost struct {
+	pluginbinding.HostClient
+
 	request pluginbinding.HTTPRequest
 }
 

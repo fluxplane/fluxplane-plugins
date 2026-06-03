@@ -79,6 +79,8 @@ func TestDatasourceHandlersUsePrometheusAPI(t *testing.T) {
 }
 
 type prometheusTestHost struct {
+	pluginbinding.HostClient
+
 	baseURL string
 }
 

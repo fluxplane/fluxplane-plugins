@@ -102,6 +102,8 @@ func TestQueryRowsBuildsDatasourceRecords(t *testing.T) {
 }
 
 type sqlTestHost struct {
+	pluginbinding.HostClient
+
 	t *testing.T
 }
 

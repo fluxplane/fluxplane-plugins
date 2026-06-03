@@ -279,6 +279,8 @@ func TestManifestIncludesExpectedOperations(t *testing.T) {
 }
 
 type grafanaTestHost struct {
+	pluginbinding.HostClient
+
 	baseURL string
 	token   string
 }
