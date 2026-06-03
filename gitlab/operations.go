@@ -431,60 +431,65 @@ func (s Service) indexBuild(ctx pluginbinding.Context, client Client, input map[
 	return pluginbinding.RunIndexJobs(ctx, selector, "gitlab",
 		pluginbinding.NewRequiredIndexJob(DatasourceProjects, EntityProject, OperationIndexBuild, func() ([]Project, error) {
 			options := projectListOptions(input, 100)
-			options.All = true
+			options.All = indexAllPages(input, "limit")
 			return client.ListProjects(options)
-		}, normalizeProjectRecord, projectIndexMetadata(projectListOptionsWithAll(input, 100))),
+		}, normalizeProjectRecord, projectIndexMetadata(projectIndexOptions(input, 100))),
 		pluginbinding.NewRequiredIndexJob(DatasourceUsers, EntityUser, OperationIndexBuild, func() ([]User, error) {
 			options := userListOptions(input, 100)
-			options.All = true
+			options.All = indexAllPages(input, "user_limit")
 			return client.ListUsers(options)
-		}, normalizeUserRecord, userIndexMetadata(userListOptionsWithAll(input, 100))),
+		}, normalizeUserRecord, userIndexMetadata(userIndexOptions(input, 100))),
 		pluginbinding.NewRequiredIndexJob(DatasourceGroups, EntityGroup, OperationIndexBuild, func() ([]Group, error) {
 			options := groupListOptions(input, 100)
-			options.All = true
+			options.All = indexAllPages(input, "group_limit")
 			return client.ListGroups(options)
-		}, normalizeGroupRecord, groupIndexMetadata(groupListOptionsWithAll(input, 100))),
+		}, normalizeGroupRecord, groupIndexMetadata(groupIndexOptions(input, 100))),
 		pluginbinding.NewRequiredIndexJob(DatasourceIssues, EntityIssue, OperationIndexBuild, func() ([]Issue, error) {
 			options := issueListOptions(input, 100)
-			options.All = true
+			options.All = indexAllPages(input, "issue_limit")
 			return client.ListIssues(options)
-		}, normalizeIssueRecord, issueIndexMetadata(issueListOptionsWithAll(input, 100))),
+		}, normalizeIssueRecord, issueIndexMetadata(issueIndexOptions(input, 100))),
 		pluginbinding.NewRequiredIndexJob(DatasourceMergeRequests, EntityMergeRequest, OperationIndexBuild, func() ([]MergeRequest, error) {
 			options := mergeRequestIndexOptions(input, 100)
-			options.All = true
+			options.All = indexAllPages(input, "mr_limit")
 			return client.ListMergeRequests(options)
-		}, normalizeMergeRequestRecord, mergeRequestIndexMetadata(mergeRequestIndexOptionsWithAll(input, 100))),
+		}, normalizeMergeRequestRecord, mergeRequestIndexMetadata(mergeRequestIndexOptionsForMetadata(input, 100))),
 	)
 }
 
-func projectListOptionsWithAll(input map[string]any, defaultLimit int) ProjectListOptions {
+func projectIndexOptions(input map[string]any, defaultLimit int) ProjectListOptions {
 	options := projectListOptions(input, defaultLimit)
-	options.All = true
+	options.All = indexAllPages(input, "limit")
 	return options
 }
 
-func userListOptionsWithAll(input map[string]any, defaultLimit int) UserListOptions {
+func userIndexOptions(input map[string]any, defaultLimit int) UserListOptions {
 	options := userListOptions(input, defaultLimit)
-	options.All = true
+	options.All = indexAllPages(input, "user_limit")
 	return options
 }
 
-func groupListOptionsWithAll(input map[string]any, defaultLimit int) GroupListOptions {
+func groupIndexOptions(input map[string]any, defaultLimit int) GroupListOptions {
 	options := groupListOptions(input, defaultLimit)
-	options.All = true
+	options.All = indexAllPages(input, "group_limit")
 	return options
 }
 
-func issueListOptionsWithAll(input map[string]any, defaultLimit int) IssueListOptions {
+func issueIndexOptions(input map[string]any, defaultLimit int) IssueListOptions {
 	options := issueListOptions(input, defaultLimit)
-	options.All = true
+	options.All = indexAllPages(input, "issue_limit")
 	return options
 }
 
-func mergeRequestIndexOptionsWithAll(input map[string]any, defaultLimit int) MergeRequestListOptions {
+func mergeRequestIndexOptionsForMetadata(input map[string]any, defaultLimit int) MergeRequestListOptions {
 	options := mergeRequestIndexOptions(input, defaultLimit)
-	options.All = true
+	options.All = indexAllPages(input, "mr_limit")
 	return options
+}
+
+func indexAllPages(input map[string]any, limitKey string) bool {
+	_, hasLimit := input[limitKey]
+	return !hasLimit
 }
 
 func projectListOptions(input map[string]any, defaultLimit int) ProjectListOptions {
@@ -665,10 +670,11 @@ func indexBuildMetadata(entity string, input map[string]any) map[string]any {
 
 func projectIndexMetadata(options ProjectListOptions) map[string]any {
 	metadata := map[string]any{
-		"limit":    options.Limit,
-		"search":   options.Search,
-		"order_by": options.OrderBy,
-		"sort":     options.Sort,
+		"fetch_mode": fetchMode(options.All),
+		"limit":      options.Limit,
+		"search":     options.Search,
+		"order_by":   options.OrderBy,
+		"sort":       options.Sort,
 	}
 	if options.Membership != nil {
 		metadata["membership"] = *options.Membership
@@ -678,8 +684,9 @@ func projectIndexMetadata(options ProjectListOptions) map[string]any {
 
 func userIndexMetadata(options UserListOptions) map[string]any {
 	metadata := map[string]any{
-		"limit":  options.Limit,
-		"search": options.Search,
+		"fetch_mode": fetchMode(options.All),
+		"limit":      options.Limit,
+		"search":     options.Search,
 	}
 	if options.Active != nil {
 		metadata["active"] = *options.Active
@@ -689,10 +696,11 @@ func userIndexMetadata(options UserListOptions) map[string]any {
 
 func groupIndexMetadata(options GroupListOptions) map[string]any {
 	metadata := map[string]any{
-		"limit":    options.Limit,
-		"search":   options.Search,
-		"order_by": options.OrderBy,
-		"sort":     options.Sort,
+		"fetch_mode": fetchMode(options.All),
+		"limit":      options.Limit,
+		"search":     options.Search,
+		"order_by":   options.OrderBy,
+		"sort":       options.Sort,
 	}
 	if options.Active != nil {
 		metadata["active"] = *options.Active
@@ -708,23 +716,32 @@ func groupIndexMetadata(options GroupListOptions) map[string]any {
 
 func issueIndexMetadata(options IssueListOptions) map[string]any {
 	return map[string]any{
-		"limit":    options.Limit,
-		"search":   options.Search,
-		"state":    options.State,
-		"order_by": options.OrderBy,
-		"sort":     options.Sort,
+		"fetch_mode": fetchMode(options.All),
+		"limit":      options.Limit,
+		"search":     options.Search,
+		"state":      options.State,
+		"order_by":   options.OrderBy,
+		"sort":       options.Sort,
 	}
 }
 
 func mergeRequestIndexMetadata(options MergeRequestListOptions) map[string]any {
 	return map[string]any{
-		"limit":    options.Limit,
-		"project":  options.Project,
-		"search":   options.Search,
-		"state":    options.State,
-		"order_by": options.OrderBy,
-		"sort":     options.Sort,
+		"fetch_mode": fetchMode(options.All),
+		"limit":      options.Limit,
+		"project":    options.Project,
+		"search":     options.Search,
+		"state":      options.State,
+		"order_by":   options.OrderBy,
+		"sort":       options.Sort,
 	}
+}
+
+func fetchMode(all bool) string {
+	if all {
+		return "all_pages"
+	}
+	return "single_page"
 }
 
 func boolPtr(value bool) *bool {
@@ -898,6 +915,18 @@ func parseMergeRequestRef(ref string) (string, int64, error) {
 	iid, err := strconv.ParseInt(strings.TrimSpace(iidText), 10, 64)
 	if err != nil || iid <= 0 {
 		return "", 0, fmt.Errorf("merge request IID must be a positive integer")
+	}
+	return strings.TrimSpace(project), iid, nil
+}
+
+func parseIssueRef(ref string) (string, int64, error) {
+	project, iidText, ok := strings.Cut(strings.TrimSpace(ref), "#")
+	if !ok || strings.TrimSpace(project) == "" || strings.TrimSpace(iidText) == "" {
+		return "", 0, fmt.Errorf("issue ref must be PROJECT#IID")
+	}
+	iid, err := strconv.ParseInt(strings.TrimSpace(iidText), 10, 64)
+	if err != nil || iid <= 0 {
+		return "", 0, fmt.Errorf("issue IID must be a positive integer")
 	}
 	return strings.TrimSpace(project), iid, nil
 }

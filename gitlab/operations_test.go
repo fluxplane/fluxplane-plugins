@@ -6,6 +6,7 @@ import (
 
 	"github.com/fluxplane/fluxplane-plugin/pluginbinding"
 	"github.com/fluxplane/fluxplane-plugin/pluginbinding/plugintest"
+	"github.com/fluxplane/fluxplane-plugin/protocol"
 )
 
 func TestServiceProjectListUsesClient(t *testing.T) {
@@ -559,6 +560,29 @@ func TestServiceIndexBuildCanTargetOneIndex(t *testing.T) {
 	}
 }
 
+func TestServiceIndexBuildExplicitLimitDoesNotFetchAllPages(t *testing.T) {
+	client := &fakeClient{
+		mergeRequests: []MergeRequest{{ID: 5, IID: 6, ProjectID: 1, Title: "Ship", Reference: "group/dex!6"}},
+	}
+	plugin := testPlugin(client)
+
+	out := plugintest.RunOK[struct {
+		Indexes []struct {
+			Index    string         `json:"index"`
+			Metadata map[string]any `json:"metadata"`
+		} `json:"indexes"`
+	}](t, plugin, OperationIndexBuild, map[string]any{"entity": "gitlab.merge_request", "mr_limit": 2})
+	if len(out.Indexes) != 1 || out.Indexes[0].Index != "gitlab.merge_requests" {
+		t.Fatalf("unexpected targeted index output: %#v", out.Indexes)
+	}
+	if client.mrListOptions.All || client.mrListOptions.Limit != 2 {
+		t.Fatalf("mr list options = %#v", client.mrListOptions)
+	}
+	if out.Indexes[0].Metadata["fetch_mode"] != "single_page" {
+		t.Fatalf("metadata = %#v", out.Indexes[0].Metadata)
+	}
+}
+
 func TestServiceLookupUsesSharedDatasourceShape(t *testing.T) {
 	client := &fakeClient{
 		project:       Project{ID: 1, Name: "dex", NameWithNamespace: "group / dex", PathWithNamespace: "group/dex", WebURL: "https://gitlab.example.com/group/dex"},
@@ -630,6 +654,47 @@ func TestServiceDatasourceGetUsesProvider(t *testing.T) {
 	}
 }
 
+func TestServiceIssueDatasourceGetUsesReference(t *testing.T) {
+	client := &fakeClient{issue: Issue{ID: 14, IID: 1, ProjectID: 217, Title: "Review top integrations", Reference: "jane/tigerscript-v3#1"}}
+	plugin := testPlugin(client)
+
+	out := plugintest.DatasourceGetOK[IssueGetResult](t, plugin, map[string]any{"entity": EntityIssue, "id": "jane/tigerscript-v3#1"})
+	if out.Source != PluginName || out.Record.ID != "jane/tigerscript-v3#1" {
+		t.Fatalf("get output = %#v", out)
+	}
+	if client.issueProject != "jane/tigerscript-v3" || client.issueIID != 1 {
+		t.Fatalf("issue ref = %#v %d", client.issueProject, client.issueIID)
+	}
+}
+
+func TestServiceDatasourceListUsesLiveProvider(t *testing.T) {
+	client := &fakeClient{
+		projects: []Project{{ID: 1, Name: "slack-bot", NameWithNamespace: "ai / agents / slack-bot", PathWithNamespace: "ai/agents/slack-bot", WebURL: "https://gitlab.example.com/ai/agents/slack-bot"}},
+	}
+	plugin := testPlugin(client)
+
+	out := plugintest.DatasourceOK[datasourceListResult](t, plugin, protocol.CommandDatasourcesRecords, map[string]any{"entity": EntityProject, "limit": 2}, plugintest.WithInstance("work"))
+	if out.Source != PluginName || out.Entity != EntityProject || out.Count != 1 || !out.Complete {
+		t.Fatalf("list output = %#v", out)
+	}
+	if client.listOptions.Limit != 2 || client.listOptions.Membership == nil || !*client.listOptions.Membership {
+		t.Fatalf("project list options = %#v", client.listOptions)
+	}
+}
+
+func TestServiceDatasourceBatchGetUsesLiveProvider(t *testing.T) {
+	client := &fakeClient{project: Project{ID: 1, Name: "slack-bot", NameWithNamespace: "ai / agents / slack-bot", PathWithNamespace: "ai/agents/slack-bot"}}
+	plugin := testPlugin(client)
+
+	out := plugintest.DatasourceOK[datasourceBatchGetResult](t, plugin, protocol.CommandDatasourcesBatchGet, map[string]any{"entity": EntityProject, "ids": []string{"ai/agents/slack-bot"}}, plugintest.WithInstance("work"))
+	if out.Source != PluginName || out.Entity != EntityProject || out.Count != 1 || len(out.Errors) != 0 {
+		t.Fatalf("batch output = %#v", out)
+	}
+	if client.projectID != "ai/agents/slack-bot" {
+		t.Fatalf("project id = %#v", client.projectID)
+	}
+}
+
 func TestServiceBuildsClientFromHostContext(t *testing.T) {
 	client := &fakeClient{user: User{ID: 9, Username: "jane"}}
 	var captured pluginbinding.Context
@@ -656,6 +721,7 @@ type fakeClient struct {
 	users                []User
 	groups               []Group
 	issues               []Issue
+	issue                Issue
 	project              Project
 	mergeRequest         MergeRequest
 	mergeRequests        []MergeRequest
@@ -687,6 +753,8 @@ type fakeClient struct {
 	pipelineCreate       PipelineCreateOptions
 	snippetCreate        SnippetCreateOptions
 	projectID            any
+	issueProject         any
+	issueIID             int64
 	mrProject            any
 	mrIID                int64
 	mrCreateProject      any
@@ -738,6 +806,12 @@ func (c *fakeClient) ListGroups(options GroupListOptions) ([]Group, error) {
 func (c *fakeClient) ListIssues(options IssueListOptions) ([]Issue, error) {
 	c.issueListOptions = options
 	return c.issues, nil
+}
+
+func (c *fakeClient) GetIssue(project any, iid int64) (Issue, error) {
+	c.issueProject = project
+	c.issueIID = iid
+	return c.issue, nil
 }
 
 func (c *fakeClient) ListMergeRequests(options MergeRequestListOptions) ([]MergeRequest, error) {

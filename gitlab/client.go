@@ -17,6 +17,7 @@ type Client interface {
 	ListUsers(UserListOptions) ([]User, error)
 	ListGroups(GroupListOptions) ([]Group, error)
 	ListIssues(IssueListOptions) ([]Issue, error)
+	GetIssue(any, int64) (Issue, error)
 	ListMergeRequests(MergeRequestListOptions) ([]MergeRequest, error)
 	GetMergeRequest(any, int64) (MergeRequest, error)
 	CreateMergeRequest(any, MergeRequestCreateOptions) (MergeRequest, error)
@@ -285,6 +286,14 @@ func (c liveClient) ListIssues(input IssueListOptions) ([]Issue, error) {
 		}
 		opt.Page = resp.NextPage
 	}
+}
+
+func (c liveClient) GetIssue(project any, iid int64) (Issue, error) {
+	issue, _, err := c.client.Issues.GetIssue(project, iid)
+	if err != nil {
+		return Issue{}, err
+	}
+	return issueFromAPI(issue), nil
 }
 
 func issueListAPIOptions(input IssueListOptions) *gitlabapi.ListIssuesOptions {
