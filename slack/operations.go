@@ -859,7 +859,19 @@ func (s Service) GetPresence(ctx pluginbinding.Context, input PresenceGetInput) 
 		return PresenceGetResult{}, err
 	}
 	presence, _, err := pluginbinding.ReadWithPreferredAuthPurposes[Client, Presence]([]string{AuthPurposeUser, AuthPurposeBot}, s.openClientForContext(ctx), func(client Client, _ string) (Presence, error) {
-		return client.GetPresence(context.Background(), user)
+		resolved := user
+		if resolved == "" {
+			info, err := client.AuthTest(context.Background())
+			if err != nil {
+				return Presence{}, err
+			}
+			resolved = strings.TrimSpace(info.UserID)
+		}
+		if resolved == "" {
+			return Presence{}, pluginbinding.Fail("bad_input", "user is required when Slack auth identity does not include a user_id")
+		}
+		user = resolved
+		return client.GetPresence(context.Background(), resolved)
 	}, fallbackableSlackError)
 	if err != nil {
 		return PresenceGetResult{}, pluginbinding.Errorf("slack", "%s", err)

@@ -770,7 +770,7 @@ func fallbackableSlackError(err error) bool {
 		return false
 	}
 	switch slackErr.Err {
-	case "missing_scope", "invalid_auth", "not_authed", "token_revoked", "account_inactive", "no_permission", "not_allowed_token_type":
+	case "missing_scope", "invalid_auth", "not_authed", "token_revoked", "account_inactive", "no_permission", "not_allowed_token_type", "file_not_found":
 		return true
 	default:
 		return false

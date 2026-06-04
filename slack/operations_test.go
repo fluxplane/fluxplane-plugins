@@ -613,6 +613,7 @@ func TestServiceListPresenceBookmarksEmojiAndMarkRead(t *testing.T) {
 	factory := &capturingFactory{
 		clients: map[string]*fakeClient{
 			"user_token": {
+				authInfo:  AuthInfo{UserID: "U1"},
 				users:     []User{{ID: "U1", Name: "jane", RealName: "Jane"}, {ID: "U2", Name: "ada"}},
 				channels:  []Channel{{ID: "C1", Name: "engineering"}, {ID: "C2", Name: "random"}},
 				emojis:    map[string]string{"shipit": "https://example/shipit.png", "thumbsup": "alias:+1"},
@@ -651,6 +652,10 @@ func TestServiceListPresenceBookmarksEmojiAndMarkRead(t *testing.T) {
 	presence := plugintest.RunOK[PresenceGetResult](t, plugin, OperationPresenceGet, map[string]any{"user": "@jane"}, withHost(factory))
 	if presence.User != "U1" || presence.Presence.Presence != "active" || !presence.Online {
 		t.Fatalf("presence result = %#v", presence)
+	}
+	selfPresence := plugintest.RunOK[PresenceGetResult](t, plugin, OperationPresenceGet, map[string]any{}, withHost(factory))
+	if selfPresence.User != "U1" || factory.clients["user_token"].authCalls != 1 || factory.clients["user_token"].lastPresenceUser != "U1" {
+		t.Fatalf("self presence result = %#v auth calls=%d last user=%q", selfPresence, factory.clients["user_token"].authCalls, factory.clients["user_token"].lastPresenceUser)
 	}
 
 	mark := plugintest.RunOK[ChannelMarkResult](t, plugin, OperationChannelMark, map[string]any{"ref": "#engineering:p1769777574026209"}, withHost(factory))
@@ -783,6 +788,21 @@ func TestServiceFileLifecycleAndBookmarkWrites(t *testing.T) {
 	removed := plugintest.RunOK[BookmarkDeleteResult](t, plugin, OperationBookmarkDelete, map[string]any{"channel": "C1", "bookmark_id": "BM1", "role": "user"})
 	if !removed.OK || removed.BookmarkID != "BM1" || factory.clients["user_token"].deleteBookmarkCalls != 1 {
 		t.Fatalf("bookmark delete = %#v calls=%d", removed, factory.clients["user_token"].deleteBookmarkCalls)
+	}
+}
+
+func TestServiceFileInfoFallsBackWhenUserCannotSeeBotFile(t *testing.T) {
+	factory := &capturingFactory{
+		clients: map[string]*fakeClient{
+			"user_token": {fileErr: slackapi.SlackErrorResponse{Err: "file_not_found"}},
+			"bot_token":  {file: FileRecord{ID: "F1", Name: "bot.txt", Size: 14}},
+		},
+	}
+	plugin := testPlugin(factory)
+
+	info := plugintest.RunOK[FileInfoResult](t, plugin, OperationFileInfo, map[string]any{"file_id": "F1"})
+	if info.File.ID != "F1" || factory.clients["user_token"].fileInfoCalls != 1 || factory.clients["bot_token"].fileInfoCalls != 1 {
+		t.Fatalf("file info fallback = %#v user calls=%d bot calls=%d", info, factory.clients["user_token"].fileInfoCalls, factory.clients["bot_token"].fileInfoCalls)
 	}
 }
 
