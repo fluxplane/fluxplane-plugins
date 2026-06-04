@@ -156,22 +156,22 @@ func indexBuildSpec() core.OperationSpec {
 }
 
 func bookmarkAddSpec() core.OperationSpec {
-	return slackWriteOperation[BookmarkAddInput, BookmarkResult](OperationBookmarkAdd, "Add a Slack channel bookmark.")
+	return slackWriteOperation[BookmarkAddInput, BookmarkResult](OperationBookmarkAdd, "Add a Slack channel bookmark.", pluginbinding.AuthScopes("bookmarks:write"))
 }
 
 func bookmarkEditSpec() core.OperationSpec {
-	return slackWriteOperation[BookmarkEditInput, BookmarkResult](OperationBookmarkEdit, "Edit a Slack channel bookmark.")
+	return slackWriteOperation[BookmarkEditInput, BookmarkResult](OperationBookmarkEdit, "Edit a Slack channel bookmark.", pluginbinding.AuthScopes("bookmarks:write"))
 }
 
 func bookmarkDeleteSpec() core.OperationSpec {
-	return slackWriteOperation[BookmarkDeleteInput, BookmarkDeleteResult](OperationBookmarkDelete, "Delete a Slack channel bookmark.")
+	return slackWriteOperation[BookmarkDeleteInput, BookmarkDeleteResult](OperationBookmarkDelete, "Delete a Slack channel bookmark.", pluginbinding.AuthScopes("bookmarks:write"))
 }
 
 func bookmarkListSpec() core.OperationSpec {
 	return pluginbinding.TypedOperationSpec[BookmarkListInput, BookmarkListResult](
 		OperationBookmarkList,
 		"List Slack channel bookmarks.",
-		slackReadOptions(core.OperationIdempotent)...,
+		append(slackReadOptions(core.OperationIdempotent), pluginbinding.AuthScopes("bookmarks:read"))...,
 	)
 }
 
@@ -287,15 +287,19 @@ func reactionRemoveSpec() core.OperationSpec {
 	return slackWriteOperation[ReactionAddInput, ReactionAddResult](OperationReactionRemove, "Remove a reaction from a Slack message.")
 }
 
-func slackWriteOperation[I any, O any](name, description string) core.OperationSpec {
-	return pluginbinding.TypedOperationSpec[I, O](
-		name,
-		description,
+func slackWriteOperation[I any, O any](name, description string, options ...pluginbinding.OperationSpecOption) core.OperationSpec {
+	base := []pluginbinding.OperationSpecOption{
 		pluginbinding.SecretPurposes(AuthPurposeBot, AuthPurposeUser),
 		pluginbinding.Effects(core.OperationEffectWrite, core.OperationEffectNetwork),
 		pluginbinding.Access(core.OperationAccessAuth, core.OperationAccessSecret, core.OperationAccessNetwork),
 		pluginbinding.Risk(core.OperationRiskMedium),
 		pluginbinding.Idempotency(core.OperationNonIdempotent),
+	}
+	base = append(base, options...)
+	return pluginbinding.TypedOperationSpec[I, O](
+		name,
+		description,
+		base...,
 	)
 }
 

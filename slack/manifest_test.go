@@ -61,9 +61,34 @@ func TestManifestWriteOperationsExposeRoleInput(t *testing.T) {
 	}
 }
 
+func TestManifestDeclaresBookmarkScopes(t *testing.T) {
+	manifest := Manifest()
+	operations := map[string]core.OperationSpec{}
+	for _, operation := range manifest.Operations {
+		operations[operation.Name] = operation
+	}
+	for _, name := range []string{OperationBookmarkAdd, OperationBookmarkEdit, OperationBookmarkDelete} {
+		if !hasString(operations[name].AuthScopes, "bookmarks:write") {
+			t.Fatalf("%s auth scopes = %#v", name, operations[name].AuthScopes)
+		}
+	}
+	if !hasString(operations[OperationBookmarkList].AuthScopes, "bookmarks:read") {
+		t.Fatalf("%s auth scopes = %#v", OperationBookmarkList, operations[OperationBookmarkList].AuthScopes)
+	}
+}
+
 func operationHasEffect(operation core.OperationSpec, effect core.OperationEffect) bool {
 	for _, candidate := range operation.Effects {
 		if candidate == effect {
+			return true
+		}
+	}
+	return false
+}
+
+func hasString(values []string, candidate string) bool {
+	for _, value := range values {
+		if value == candidate {
 			return true
 		}
 	}

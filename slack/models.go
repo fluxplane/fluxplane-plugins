@@ -20,13 +20,15 @@ type User struct {
 }
 
 type AuthInfo struct {
-	URL          string `json:"url,omitempty"`
-	Team         string `json:"team,omitempty"`
-	User         string `json:"user,omitempty"`
-	TeamID       string `json:"team_id,omitempty"`
-	UserID       string `json:"user_id,omitempty"`
-	BotID        string `json:"bot_id,omitempty"`
-	EnterpriseID string `json:"enterprise_id,omitempty"`
+	URL            string   `json:"url,omitempty"`
+	Team           string   `json:"team,omitempty"`
+	User           string   `json:"user,omitempty"`
+	TeamID         string   `json:"team_id,omitempty"`
+	UserID         string   `json:"user_id,omitempty"`
+	BotID          string   `json:"bot_id,omitempty"`
+	EnterpriseID   string   `json:"enterprise_id,omitempty"`
+	Scopes         []string `json:"scopes,omitempty"`
+	AcceptedScopes []string `json:"accepted_scopes,omitempty"`
 }
 
 type UserRecord struct {

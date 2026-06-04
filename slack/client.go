@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/fluxplane/fluxplane-plugin/pluginbinding"
@@ -58,7 +59,7 @@ func NewLiveClient(ctx pluginbinding.Context, purpose string) (Client, error) {
 			pluginbinding.HostHTTPClientMaxBytes(32*1024*1024),
 		)),
 		slackapi.OptionLog(discardLogger{}),
-	)}, nil
+	), host: ctx.Host, purpose: purpose}, nil
 }
 
 type discardLogger struct{}
@@ -66,23 +67,74 @@ type discardLogger struct{}
 func (discardLogger) Output(int, string) error { return nil }
 
 type liveClient struct {
-	client *slackapi.Client
+	client  *slackapi.Client
+	host    pluginbinding.HostClient
+	purpose string
 }
 
 func (c liveClient) AuthTest(ctx context.Context) (AuthInfo, error) {
-	response, err := c.client.AuthTestContext(ctx)
+	response, err := c.host.HTTP(pluginbinding.HTTPRequest{
+		URL:       "https://slack.com/api/auth.test",
+		Method:    "POST",
+		Auth:      &pluginbinding.HTTPAuthRequest{BearerTokenPurpose: c.purpose},
+		TimeoutMS: 30000,
+		MaxBytes:  1024 * 1024,
+	})
 	if err != nil {
 		return AuthInfo{}, err
 	}
+	if response.StatusCode < 200 || response.StatusCode >= 300 {
+		return AuthInfo{}, fmt.Errorf("auth.test failed: %s", firstNonEmpty(response.Status, strconv.Itoa(response.StatusCode)))
+	}
+	var body struct {
+		OK           bool   `json:"ok"`
+		Error        string `json:"error"`
+		URL          string `json:"url"`
+		Team         string `json:"team"`
+		User         string `json:"user"`
+		TeamID       string `json:"team_id"`
+		UserID       string `json:"user_id"`
+		BotID        string `json:"bot_id"`
+		EnterpriseID string `json:"enterprise_id"`
+	}
+	if err := json.Unmarshal(response.Body, &body); err != nil {
+		return AuthInfo{}, err
+	}
+	if !body.OK {
+		return AuthInfo{}, errors.New(firstNonEmpty(body.Error, "auth.test failed"))
+	}
 	return AuthInfo{
-		URL:          strings.TrimSpace(response.URL),
-		Team:         strings.TrimSpace(response.Team),
-		User:         strings.TrimSpace(response.User),
-		TeamID:       strings.TrimSpace(response.TeamID),
-		UserID:       strings.TrimSpace(response.UserID),
-		BotID:        strings.TrimSpace(response.BotID),
-		EnterpriseID: strings.TrimSpace(response.EnterpriseID),
+		URL:            strings.TrimSpace(body.URL),
+		Team:           strings.TrimSpace(body.Team),
+		User:           strings.TrimSpace(body.User),
+		TeamID:         strings.TrimSpace(body.TeamID),
+		UserID:         strings.TrimSpace(body.UserID),
+		BotID:          strings.TrimSpace(body.BotID),
+		EnterpriseID:   strings.TrimSpace(body.EnterpriseID),
+		Scopes:         slackScopeHeader(response.Headers, "X-Oauth-Scopes"),
+		AcceptedScopes: slackScopeHeader(response.Headers, "X-Accepted-Oauth-Scopes"),
 	}, nil
+}
+
+func slackScopeHeader(headers map[string][]string, name string) []string {
+	var out []string
+	seen := map[string]bool{}
+	for key, values := range headers {
+		if !strings.EqualFold(key, name) {
+			continue
+		}
+		for _, value := range values {
+			for _, scope := range strings.Split(value, ",") {
+				scope = strings.TrimSpace(scope)
+				if scope == "" || seen[scope] {
+					continue
+				}
+				seen[scope] = true
+				out = append(out, scope)
+			}
+		}
+	}
+	return out
 }
 
 func (c liveClient) ListUsers(ctx context.Context) ([]User, error) {
@@ -369,11 +421,20 @@ func (c liveClient) DownloadFile(ctx context.Context, request FileDownloadReques
 	if downloadURL == "" {
 		return FileDownloadResult{}, errors.New("file has no private download URL")
 	}
-	var out bytes.Buffer
-	if err := c.client.GetFileContext(ctx, downloadURL, &out); err != nil {
+	response, err := c.host.HTTP(pluginbinding.HTTPRequest{
+		URL:       downloadURL,
+		Method:    "GET",
+		Auth:      &pluginbinding.HTTPAuthRequest{BearerTokenPurpose: c.purpose},
+		TimeoutMS: 30000,
+		MaxBytes:  32 * 1024 * 1024,
+	})
+	if err != nil {
 		return FileDownloadResult{}, err
 	}
-	content := append([]byte(nil), out.Bytes()...)
+	if response.StatusCode < 200 || response.StatusCode >= 300 {
+		return FileDownloadResult{}, fmt.Errorf("download failed: %s", firstNonEmpty(response.Status, strconv.Itoa(response.StatusCode)))
+	}
+	content := append([]byte(nil), response.Body...)
 	return FileDownloadResult{OK: true, FileID: file.ID, Size: len(content), File: file, content: content}, nil
 }
 
