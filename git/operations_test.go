@@ -176,6 +176,14 @@ func (h *fakeHost) ProcessRun(req pluginbinding.ProcessRunRequest) (pluginbindin
 	}, resp.err
 }
 
+func (h *fakeHost) ProcessStart(pluginbinding.ProcessStartRequest) (pluginbinding.ProcessStartResponse, error) {
+	return pluginbinding.ProcessStartResponse{}, nil
+}
+
+func (h *fakeHost) ProcessStop(pluginbinding.ProcessStopRequest) (pluginbinding.ProcessStopResponse, error) {
+	return pluginbinding.ProcessStopResponse{}, nil
+}
+
 func (h *fakeHost) expectCalls(t *testing.T, want []string) {
 	t.Helper()
 	var got []string
