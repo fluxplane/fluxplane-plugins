@@ -2,7 +2,7 @@ module github.com/fluxplane/fluxplane-plugins/asterisk
 
 go 1.26.1
 
-require github.com/fluxplane/fluxplane-plugin v0.1.0
+require github.com/fluxplane/fluxplane-plugin v0.3.0
 
 require (
 	github.com/bahlo/generic-list-go v0.2.0 // indirect

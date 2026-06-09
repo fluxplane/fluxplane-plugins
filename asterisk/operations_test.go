@@ -1,32 +1,142 @@
 package asterisk
 
 import (
+	"bufio"
 	"encoding/json"
+	"fmt"
+	"net"
+	"strconv"
+	"sync"
 	"testing"
 
+	core "github.com/fluxplane/fluxplane-plugin/manifest"
 	"github.com/fluxplane/fluxplane-plugin/pluginbinding"
 	"github.com/fluxplane/fluxplane-plugin/pluginbinding/plugintest"
 	"github.com/fluxplane/fluxplane-plugin/protocol"
 )
 
-func TestAMIPingDelegatesToHostProvider(t *testing.T) {
-	plugin := NewPluginWithService(Service{
-		ProviderCall: func(_ pluginbinding.Context, action string, input any) (json.RawMessage, error) {
-			if action != "ami.ping" {
-				t.Fatalf("action = %q", action)
-			}
-			pingInput := input.(AMIPingInput)
-			if pingInput.EndpointRef != "pbx-dev" {
-				t.Fatalf("endpoint_ref = %q", pingInput.EndpointRef)
-			}
-			return json.RawMessage(`{"endpoint_ref":"pbx-dev","url":"ami://asterisk.latest.svc:5038","ok":true,"authenticated":true,"pong":true}`), nil
-		},
-	})
+func TestAMIPingConnectsViaHostDialer(t *testing.T) {
+	addr := startFakeAMIServer(t)
+	host := &amiTestHost{url: "ami://operator:topsecret@" + addr}
+	plugin := NewPluginWithService(NewService())
 
-	out := plugintest.RunOK[AMIPingResult](t, plugin, OperationAMIPing, map[string]any{"endpoint_ref": "pbx-dev"})
+	out := plugintest.RunOK[AMIPingResult](t, plugin, OperationAMIPing,
+		map[string]any{"endpoint_ref": "pbx-dev"}, plugintest.WithHost(host))
 	if !out.OK || !out.Authenticated || !out.Pong {
 		t.Fatalf("out = %#v", out)
 	}
+}
+
+// startFakeAMIServer runs a minimal Asterisk Manager Interface server that
+// greets, accepts a Login, and answers Ping with Pong. It returns its address.
+func startFakeAMIServer(t *testing.T) string {
+	t.Helper()
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	t.Cleanup(func() { _ = ln.Close() })
+	go func() {
+		conn, err := ln.Accept()
+		if err != nil {
+			return
+		}
+		defer conn.Close()
+		reader := bufio.NewReader(conn)
+		_, _ = fmt.Fprint(conn, "Asterisk Call Manager/2.10.0\r\n")
+		drainAMIAction(reader) // Login
+		_, _ = fmt.Fprint(conn, "Response: Success\r\nMessage: Authentication accepted\r\n\r\n")
+		drainAMIAction(reader) // Ping
+		_, _ = fmt.Fprint(conn, "Response: Success\r\nPing: Pong\r\nTimestamp: 0\r\n\r\n")
+		drainAMIAction(reader) // Logoff (best effort)
+	}()
+	return ln.Addr().String()
+}
+
+func drainAMIAction(reader *bufio.Reader) {
+	for {
+		line, err := reader.ReadString('\n')
+		if err != nil {
+			return
+		}
+		if line == "\r\n" || line == "\n" {
+			return
+		}
+	}
+}
+
+// amiTestHost provides only the host surface runAMIPing needs: endpoint
+// resolution plus the conn dial capability (backed by real loopback sockets).
+type amiTestHost struct {
+	pluginbinding.HostClient
+
+	url   string
+	mu    sync.Mutex
+	seq   int
+	conns map[string]net.Conn
+}
+
+func (h *amiTestHost) ResolveEndpoint(string) (core.EndpointRef, error) {
+	return core.EndpointRef{URL: h.url}, nil
+}
+
+func (h *amiTestHost) ConnDial(req pluginbinding.ConnDialRequest) (pluginbinding.ConnDialResponse, error) {
+	conn, err := net.Dial(req.Network, req.Address)
+	if err != nil {
+		return pluginbinding.ConnDialResponse{}, err
+	}
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.conns == nil {
+		h.conns = map[string]net.Conn{}
+	}
+	h.seq++
+	id := "c" + strconv.Itoa(h.seq)
+	h.conns[id] = conn
+	return pluginbinding.ConnDialResponse{ID: id, Network: req.Network}, nil
+}
+
+func (h *amiTestHost) conn(id string) net.Conn {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return h.conns[id]
+}
+
+func (h *amiTestHost) ConnRead(req pluginbinding.ConnReadRequest) (pluginbinding.ConnReadResponse, error) {
+	c := h.conn(req.ID)
+	if c == nil {
+		return pluginbinding.ConnReadResponse{}, fmt.Errorf("no conn %q", req.ID)
+	}
+	max := req.MaxBytes
+	if max <= 0 {
+		max = 4096
+	}
+	buf := make([]byte, max)
+	n, err := c.Read(buf)
+	resp := pluginbinding.ConnReadResponse{Data: buf[:n]}
+	if err != nil {
+		if n == 0 {
+			return pluginbinding.ConnReadResponse{}, err
+		}
+	}
+	return resp, nil
+}
+
+func (h *amiTestHost) ConnWrite(req pluginbinding.ConnWriteRequest) (pluginbinding.ConnWriteResponse, error) {
+	c := h.conn(req.ID)
+	if c == nil {
+		return pluginbinding.ConnWriteResponse{}, fmt.Errorf("no conn %q", req.ID)
+	}
+	n, err := c.Write(req.Data)
+	return pluginbinding.ConnWriteResponse{Written: n}, err
+}
+
+func (h *amiTestHost) ConnClose(req pluginbinding.ConnCloseRequest) (pluginbinding.ConnCloseResponse, error) {
+	c := h.conn(req.ID)
+	if c == nil {
+		return pluginbinding.ConnCloseResponse{}, nil
+	}
+	return pluginbinding.ConnCloseResponse{Closed: true}, c.Close()
 }
 
 func TestEndpointDiscoverFindsAMIServiceAndSecret(t *testing.T) {

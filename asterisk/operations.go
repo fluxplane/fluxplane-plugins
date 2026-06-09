@@ -102,15 +102,7 @@ func (s Service) AMIPing(ctx pluginbinding.Context, input AMIPingInput) (AMIPing
 	if strings.TrimSpace(input.EndpointRef) == "" && strings.TrimSpace(input.URL) == "" {
 		return AMIPingResult{}, pluginbinding.Fail("bad_input", "endpoint_ref or url is required")
 	}
-	raw, err := s.providerCall(ctx, PluginName, "ami.ping", input)
-	if err != nil {
-		return AMIPingResult{}, pluginbinding.Errorf("asterisk", "%s", err)
-	}
-	var out AMIPingResult
-	if err := json.Unmarshal(raw, &out); err != nil {
-		return AMIPingResult{}, pluginbinding.Errorf("asterisk", "decode AMI ping result: %s", err)
-	}
-	return out, nil
+	return runAMIPing(ctx, input)
 }
 
 func (s Service) EndpointDiscover(ctx pluginbinding.Context, input EndpointDiscoverInput) (EndpointDiscoverResult, error) {
