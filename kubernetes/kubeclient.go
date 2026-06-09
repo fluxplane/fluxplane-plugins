@@ -34,7 +34,7 @@ func HostKubeClusterProbe(ctx pluginbinding.Context, input ClusterTestInput) (Cl
 	if err != nil {
 		return ClusterTestResult{}, err
 	}
-	client, err := kubeClientForContext(contextName)
+	client, err := kubeClientForContext(ctx, contextName)
 	if err != nil {
 		return ClusterTestResult{}, err
 	}
@@ -129,7 +129,7 @@ func HostKubePodLogs(ctx pluginbinding.Context, input PodLogsInput) (PodLogsResu
 	if err != nil {
 		return PodLogsResult{}, err
 	}
-	client, err := kubeClientForContext(contextName)
+	client, err := kubeClientForContext(ctx, contextName)
 	if err != nil {
 		return PodLogsResult{}, err
 	}
@@ -274,7 +274,7 @@ func kubeClientFromInventory(ctx pluginbinding.Context, input InventoryInput) (k
 	if err != nil {
 		return nil, err
 	}
-	return kubeClientForContext(contextName)
+	return kubeClientForContext(ctx, contextName)
 }
 
 func kubeClientFromEndpointInput(ctx pluginbinding.Context, input EndpointDiscoverInput) (kubernetes.Interface, error) {
@@ -282,10 +282,10 @@ func kubeClientFromEndpointInput(ctx pluginbinding.Context, input EndpointDiscov
 	if err != nil {
 		return nil, err
 	}
-	return kubeClientForContext(contextName)
+	return kubeClientForContext(ctx, contextName)
 }
 
-func kubeClientForContext(contextName string) (kubernetes.Interface, error) {
+func kubeClientForContext(ctx pluginbinding.Context, contextName string) (kubernetes.Interface, error) {
 	loadingRules := clientcmd.NewDefaultClientConfigLoadingRules()
 	overrides := &clientcmd.ConfigOverrides{}
 	if contextName = strings.TrimSpace(contextName); contextName != "" {
@@ -295,7 +295,25 @@ func kubeClientForContext(contextName string) (kubernetes.Interface, error) {
 	if err != nil {
 		return nil, err
 	}
+	// Route the API-server connection through the host conn capability so the
+	// plugin performs no direct network IO; client-go still terminates TLS using
+	// the kubeconfig CA over the host-dialed stream.
+	if dial := hostDial(ctx); dial != nil {
+		restConfig.Dial = dial
+	}
 	return kubernetes.NewForConfig(restConfig)
+}
+
+// hostDial returns a dialer backed by the host conn capability, or nil when the
+// host does not advertise it (so client-go falls back to its own dialer).
+func hostDial(ctx pluginbinding.Context) func(context.Context, string, string) (net.Conn, error) {
+	if ctx.Host == nil {
+		return nil
+	}
+	if _, ok := ctx.Host.(pluginbinding.ConnDialer); !ok {
+		return nil
+	}
+	return pluginbinding.HostDialer(ctx.Host)
 }
 
 func loadKubeConfig() (*clientcmdapi.Config, error) {
