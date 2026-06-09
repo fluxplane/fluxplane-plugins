@@ -1,14 +1,40 @@
 package jira
 
 import (
+	"encoding/json"
+
 	core "github.com/fluxplane/fluxplane-plugin/manifest"
 	"github.com/fluxplane/fluxplane-plugin/pluginbinding"
 	"github.com/fluxplane/fluxplane-plugin/protocol"
 )
 
+// withInputExamples injects JSON Schema `examples` into an operation's input
+// schema. The fluxplane-plugin CLI surfaces the first example as the runnable
+// invocation in `operation describe` and treats an example-bearing op as having
+// conditional (one-of) input during local `--dry-run` validation. Kept local to
+// the jira plugin — the only current consumer — rather than promoted to the SDK.
+func withInputExamples(spec core.OperationSpec, examples ...map[string]any) core.OperationSpec {
+	if len(examples) == 0 || len(spec.Input) == 0 {
+		return spec
+	}
+	var schema map[string]any
+	if err := json.Unmarshal(spec.Input, &schema); err != nil {
+		return spec
+	}
+	arr := make([]any, 0, len(examples))
+	for _, example := range examples {
+		arr = append(arr, example)
+	}
+	schema["examples"] = arr
+	if raw, err := json.Marshal(schema); err == nil {
+		spec.Input = raw
+	}
+	return spec
+}
+
 const (
 	PluginName        = "jira"
-	PluginVersion     = "0.20.0"
+	PluginVersion     = "0.21.0"
 	PluginDescription = "Jira Cloud issue operations, comments, attachments, transitions, datasources, indexes, and reverse lookups."
 
 	AuthMethodAtlassianCloud = "atlassian_cloud_basic"
@@ -142,11 +168,17 @@ func transitionListSpec() core.OperationSpec {
 }
 
 func transitionRunSpec() core.OperationSpec {
-	return pluginbinding.TypedOperationSpec[IssueTransitionRunInput, IssueTransitionRunResult](OperationTransitionRun, "Run a Jira issue transition. Provide exactly one of transition_id, transition_name, or target_status (these are flat top-level keys, not a nested transition object). Run jira.issue.transition.list first to see the available transition IDs and names. With auto_transition, walks intermediate transitions until target_status is reached.", jiraWriteOptions(core.OperationNonIdempotent)...)
+	return withInputExamples(
+		pluginbinding.TypedOperationSpec[IssueTransitionRunInput, IssueTransitionRunResult](OperationTransitionRun, "Run a Jira issue transition. Provide exactly one of transition_id, transition_name, or target_status (these are flat top-level keys, not a nested transition object). Run jira.issue.transition.list first to see the available transition IDs and names. With auto_transition, walks intermediate transitions until target_status is reached.", jiraWriteOptions(core.OperationNonIdempotent)...),
+		map[string]any{"key": "DEV-123", "target_status": "In Progress", "auto_transition": true},
+	)
 }
 
 func commentAddSpec() core.OperationSpec {
-	return pluginbinding.TypedOperationSpec[CommentAddInput, CommentResult](OperationCommentAdd, "Add a Markdown comment to a Jira issue.", jiraFilesystemWriteOptions(core.OperationNonIdempotent)...)
+	return withInputExamples(
+		pluginbinding.TypedOperationSpec[CommentAddInput, CommentResult](OperationCommentAdd, "Add a Markdown comment to a Jira issue.", jiraFilesystemWriteOptions(core.OperationNonIdempotent)...),
+		map[string]any{"key": "DEV-123", "body_markdown": "Investigated — root cause is `worker.go`. See **logs**."},
+	)
 }
 
 func commentEditSpec() core.OperationSpec {
@@ -162,7 +194,10 @@ func commentListSpec() core.OperationSpec {
 }
 
 func attachmentAddSpec() core.OperationSpec {
-	return pluginbinding.TypedOperationSpec[AttachmentAddInput, AttachmentUploadResult](OperationAttachmentAdd, "Upload an attachment to a Jira issue.", jiraFilesystemWriteOptions(core.OperationNonIdempotent)...)
+	return withInputExamples(
+		pluginbinding.TypedOperationSpec[AttachmentAddInput, AttachmentUploadResult](OperationAttachmentAdd, "Upload an attachment to a Jira issue. Provide exactly one of blob_ref or content_bytes.", jiraFilesystemWriteOptions(core.OperationNonIdempotent)...),
+		map[string]any{"key": "DEV-123", "blob_ref": "<host blob ref>", "filename": "report.pdf"},
+	)
 }
 
 func attachmentListSpec() core.OperationSpec {
@@ -178,11 +213,17 @@ func attachmentDeleteSpec() core.OperationSpec {
 }
 
 func issueCreateSpec() core.OperationSpec {
-	return pluginbinding.TypedOperationSpec[IssueCreateInput, IssueMutationResult](OperationIssueCreate, "Create a Jira issue from structured fields and Markdown. Typed fields (summary, parent_key, assignee) are verified against the created issue and any that Jira silently dropped are reported in a warning.", jiraFilesystemWriteOptions(core.OperationNonIdempotent)...)
+	return withInputExamples(
+		pluginbinding.TypedOperationSpec[IssueCreateInput, IssueMutationResult](OperationIssueCreate, "Create a Jira issue from structured fields and Markdown. Typed fields (summary, parent_key, assignee) are verified against the created issue and any that Jira silently dropped are reported in a warning.", jiraFilesystemWriteOptions(core.OperationNonIdempotent)...),
+		map[string]any{"project_key": "DEV", "issue_type": "Task", "summary": "Investigate flaky transition test", "description_markdown": "Steps:\n\n1. Run the suite\n2. Observe the retry on `transition.run`", "labels": []string{"ai"}},
+	)
 }
 
 func issueEditSpec() core.OperationSpec {
-	return pluginbinding.TypedOperationSpec[IssueEditInput, IssueMutationResult](OperationIssueEdit, "Edit a Jira issue from structured fields and Markdown, including reparenting via parent_key. Typed fields (summary, parent_key, assignee) are verified against the updated issue and any that Jira silently dropped are reported in a warning.", jiraFilesystemWriteOptions(core.OperationNonIdempotent)...)
+	return withInputExamples(
+		pluginbinding.TypedOperationSpec[IssueEditInput, IssueMutationResult](OperationIssueEdit, "Edit a Jira issue from structured fields and Markdown, including reparenting via parent_key. Typed fields (summary, parent_key, assignee) are verified against the updated issue and any that Jira silently dropped are reported in a warning.", jiraFilesystemWriteOptions(core.OperationNonIdempotent)...),
+		map[string]any{"key": "DEV-123", "parent_key": "DEV-100", "labels": []string{"triaged"}},
+	)
 }
 
 func issueDeleteSpec() core.OperationSpec {

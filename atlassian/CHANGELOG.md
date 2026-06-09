@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.5.0
+
+### Added
+- Runnable JSON Schema `examples` on the write operations whose input is
+  conditional or non-obvious — `issue.transition.run` (the one-of
+  transition_id/transition_name/target_status), `issue.attachment.add` (the
+  one-of blob_ref/content_bytes), `issue.create`, `issue.edit` (reparenting via
+  parent_key), and `issue.comment.add`. `fluxplane-plugin operation describe`
+  now shows a copy-pasteable example for these, and local `--dry-run` validation
+  treats them as one-of inputs. Bumped the jira plugin manifest to 0.21.0.
+
 ## v0.4.0
 
 ### Changed
