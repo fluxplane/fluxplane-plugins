@@ -25,9 +25,13 @@ import (
 type Client interface {
 	CurrentUser(context.Context) (User, error)
 	SearchPages(context.Context, PageSearchOptions) ([]Page, error)
+	ListPages(context.Context, PageSearchOptions) (PageList, error)
 	GetPage(context.Context, string) (Page, error)
 	CreatePage(context.Context, PageCreateRequest) (PageMutationResult, error)
+	UpdatePage(context.Context, string, PageUpdateRequest) (PageMutationResult, error)
 	DeletePage(context.Context, string) (PageMutationResult, error)
+	ListComments(context.Context, string, CommentListOptions) (CommentList, error)
+	CreateComment(context.Context, string, string) (Comment, error)
 	UploadPageAttachment(context.Context, string, AttachmentUploadRequest) (AttachmentUploadResult, error)
 	ListPageAttachments(context.Context, string) (AttachmentListResult, error)
 	GetAttachment(context.Context, string, string, bool) (AttachmentGetResult, error)
@@ -126,6 +130,31 @@ func (c liveClient) searchPages(ctx context.Context, input PageSearchOptions) ([
 	}
 }
 
+// ListPages returns a single page of results (unlike listPages, which
+// aggregates when All is set) so callers can surface pagination signals.
+func (c liveClient) ListPages(ctx context.Context, input PageSearchOptions) (PageList, error) {
+	limit := clamp(input.Limit, 25, 100)
+	query := url.Values{}
+	query.Set("limit", strconv.Itoa(limit))
+	query.Set("status", defaultString(input.Status, "current"))
+	query.Set("type", "page")
+	query.Set("expand", "version,space")
+	if input.Title != "" {
+		query.Set("title", input.Title)
+	}
+	if input.SpaceKey != "" {
+		query.Set("spaceKey", input.SpaceKey)
+	}
+	if input.Cursor != "" {
+		query.Set("start", input.Cursor)
+	}
+	var out pageListResponse
+	if err := c.getJSON(ctx, "/wiki/rest/api/content", query, &out); err != nil {
+		return PageList{}, err
+	}
+	return PageList{Pages: out.Results, NextStart: startFromNext(out.Links.Next)}, nil
+}
+
 func (c liveClient) GetPage(ctx context.Context, id string) (Page, error) {
 	query := url.Values{}
 	query.Set("expand", "body.storage,version,space,ancestors")
@@ -159,6 +188,47 @@ func (c liveClient) CreatePage(ctx context.Context, request PageCreateRequest) (
 	}
 	out := PageMutationResult{OK: true, ID: created.ID, Page: &created}
 	if page, err := c.GetPage(ctx, created.ID); err == nil {
+		out.Page = &page
+	}
+	return out, nil
+}
+
+// UpdatePage reads the current page to learn the version (and to preserve
+// title or body when the caller leaves them empty), then PUTs the next
+// version. Confluence v1 replaces the whole content on PUT, so the body is
+// always resent.
+func (c liveClient) UpdatePage(ctx context.Context, id string, request PageUpdateRequest) (PageMutationResult, error) {
+	id = strings.TrimSpace(id)
+	current, err := c.GetPage(ctx, id)
+	if err != nil {
+		return PageMutationResult{}, err
+	}
+	body := request.BodyStorage
+	if strings.TrimSpace(body) == "" && current.Body != nil && current.Body.Storage != nil {
+		body = current.Body.Storage.Value
+	}
+	payload := map[string]any{
+		"id":      id,
+		"type":    "page",
+		"title":   firstNonEmpty(request.Title, current.Title),
+		"version": map[string]any{"number": current.Version.Number + 1},
+		"body": map[string]any{
+			"storage": map[string]string{
+				"value":          body,
+				"representation": "storage",
+			},
+		},
+	}
+	data, err := json.Marshal(payload)
+	if err != nil {
+		return PageMutationResult{}, err
+	}
+	var updated Page
+	if err := c.doJSON(ctx, "PUT", "/wiki/rest/api/content/"+url.PathEscape(id), nil, bytes.NewReader(data), &updated); err != nil {
+		return PageMutationResult{}, err
+	}
+	out := PageMutationResult{OK: true, ID: id, Page: &updated}
+	if page, err := c.GetPage(ctx, id); err == nil {
 		out.Page = &page
 	}
 	return out, nil
@@ -236,6 +306,52 @@ func (c liveClient) DeleteAttachment(ctx context.Context, id string) (Attachment
 		return AttachmentDeleteResult{}, err
 	}
 	return AttachmentDeleteResult{OK: true, AttachmentID: id}, nil
+}
+
+// ListComments returns one page of a page's comments (footer and inline,
+// including replies via depth=all), oldest first.
+func (c liveClient) ListComments(ctx context.Context, pageID string, options CommentListOptions) (CommentList, error) {
+	pageID = strings.TrimSpace(pageID)
+	limit := clamp(options.Limit, 25, 100)
+	query := url.Values{}
+	query.Set("limit", strconv.Itoa(limit))
+	query.Set("depth", "all")
+	query.Set("expand", "body.storage,version,history,extensions.location")
+	if start := strings.TrimSpace(options.Start); start != "" {
+		query.Set("start", start)
+	}
+	var out commentListResponse
+	if err := c.getJSON(ctx, "/wiki/rest/api/content/"+url.PathEscape(pageID)+"/child/comment", query, &out); err != nil {
+		return CommentList{}, err
+	}
+	comments := make([]Comment, 0, len(out.Results))
+	for _, raw := range out.Results {
+		comments = append(comments, commentFromAPI(raw))
+	}
+	return CommentList{Comments: comments, NextStart: startFromNext(out.Links.Next)}, nil
+}
+
+func (c liveClient) CreateComment(ctx context.Context, pageID, bodyStorage string) (Comment, error) {
+	pageID = strings.TrimSpace(pageID)
+	payload := map[string]any{
+		"type":      "comment",
+		"container": map[string]string{"id": pageID, "type": "page"},
+		"body": map[string]any{
+			"storage": map[string]string{
+				"value":          bodyStorage,
+				"representation": "storage",
+			},
+		},
+	}
+	data, err := json.Marshal(payload)
+	if err != nil {
+		return Comment{}, err
+	}
+	var created apiComment
+	if err := c.doJSON(ctx, "POST", "/wiki/rest/api/content", nil, bytes.NewReader(data), &created); err != nil {
+		return Comment{}, err
+	}
+	return commentFromAPI(created), nil
 }
 
 func (c liveClient) GetUser(ctx context.Context, accountID string) (User, error) {

@@ -215,6 +215,111 @@ func TestPageMutationOperations(t *testing.T) {
 	}
 }
 
+func TestPageShowRendersMarkdownBodyByDefault(t *testing.T) {
+	makeClient := func() *fakeClient {
+		return &fakeClient{page: Page{
+			ID:    "123",
+			Title: "Runbook",
+			Space: &searchSpace{ID: "999", Key: "OPS"},
+			Body:  &PageBody{Storage: &PageBodyValue{Value: "<p>Use <strong>caution</strong> with <code>kubectl</code></p>", Representation: "storage"}},
+		}}
+	}
+
+	out := plugintest.RunOK[pluginbinding.ShowResult[Page]](t, testPlugin(makeClient()), OperationPageShow, map[string]any{"page_id": "123"})
+	if out.Record.BodyMarkdown != "Use **caution** with `kubectl`" {
+		t.Fatalf("body markdown = %q", out.Record.BodyMarkdown)
+	}
+	if out.Record.BodyStorage != "" || out.Record.Body != nil {
+		t.Fatalf("default body_format should omit raw storage: %#v", out.Record)
+	}
+	if out.Record.SpaceKey != "OPS" || out.Record.SpaceID != "999" || out.Record.Space != nil {
+		t.Fatalf("space was not folded into flat fields: %#v", out.Record)
+	}
+
+	raw := plugintest.RunOK[pluginbinding.ShowResult[Page]](t, testPlugin(makeClient()), OperationPageShow, map[string]any{"page_id": "123", "body_format": "storage"})
+	if raw.Record.BodyMarkdown != "" || raw.Record.BodyStorage != "<p>Use <strong>caution</strong> with <code>kubectl</code></p>" {
+		t.Fatalf("storage body_format output = %#v", raw.Record)
+	}
+}
+
+func TestPageListPaginates(t *testing.T) {
+	client := &fakeClient{pageList: PageList{
+		Pages:     []Page{{ID: "1", Title: "A"}, {ID: "2", Title: "B"}},
+		NextStart: "2",
+	}}
+	plugin := testPlugin(client)
+
+	out := plugintest.RunOK[pluginbinding.ListResult[Page]](t, plugin, OperationPageList, map[string]any{"space_key": "OPS", "limit": 2})
+	if out.Count != 2 || !out.HasMore || out.NextPageToken != "2" {
+		t.Fatalf("page list output = %#v", out)
+	}
+	if client.pageListOptions.SpaceKey != "OPS" || client.pageListOptions.Limit != 2 {
+		t.Fatalf("page list options = %#v", client.pageListOptions)
+	}
+}
+
+func TestPageCreateAndUpdateConvertMarkdownBodies(t *testing.T) {
+	client := &fakeClient{
+		pageCreateResult: PageMutationResult{OK: true, ID: "123", Page: &Page{ID: "123", Title: "Notes"}},
+		pageUpdateResult: PageMutationResult{OK: true, ID: "123", Page: &Page{ID: "123", Title: "Notes", Body: &PageBody{Storage: &PageBodyValue{Value: "<h2>Updated</h2>"}}}},
+	}
+	plugin := testPlugin(client)
+
+	created := plugintest.RunOK[PageMutationResult](t, plugin, OperationPageCreate, map[string]any{"space_key": "DEV", "title": "Notes", "body_markdown": "## Summary\n\n**bold**"})
+	if !created.OK || client.pageCreateRequest.BodyStorage != "<h2>Summary</h2>\n<p><strong>bold</strong></p>" {
+		t.Fatalf("create request body = %q", client.pageCreateRequest.BodyStorage)
+	}
+
+	updated := plugintest.RunOK[PageMutationResult](t, plugin, OperationPageUpdate, map[string]any{"page_id": "123", "body_markdown": "## Updated"})
+	if !updated.OK || client.updatedPageID != "123" || client.pageUpdateRequest.BodyStorage != "<h2>Updated</h2>" {
+		t.Fatalf("update = %#v request = %#v", updated, client.pageUpdateRequest)
+	}
+	if updated.Page == nil || updated.Page.BodyMarkdown != "## Updated" || updated.Page.BodyStorage != "" {
+		t.Fatalf("updated page body = %#v", updated.Page)
+	}
+
+	if err := plugintest.RunError(t, plugin, OperationPageUpdate, map[string]any{"page_id": "123"}); err.Code != "bad_input" {
+		t.Fatalf("update with nothing to change should fail with bad_input, got %#v", err)
+	}
+}
+
+func TestCommentOperations(t *testing.T) {
+	client := &fakeClient{
+		comments: CommentList{
+			Comments: []Comment{{
+				ID:          "C1",
+				BodyStorage: "<p>Looks <em>good</em></p>",
+				AuthorName:  "Ada",
+				Location:    "footer",
+			}},
+			NextStart: "1",
+		},
+		createdComment: Comment{ID: "C2", BodyStorage: "<p>Reviewed — see <strong>notes</strong></p>"},
+	}
+	plugin := testPlugin(client)
+
+	list := plugintest.RunOK[CommentListResult](t, plugin, OperationCommentList, map[string]any{"page_id": "123"})
+	if list.Count != 1 || list.Comments[0].BodyMarkdown != "Looks *good*" || list.Comments[0].BodyStorage != "" {
+		t.Fatalf("comment list = %#v", list)
+	}
+	if !list.HasMore || list.NextStart != "1" || client.commentListPageID != "123" {
+		t.Fatalf("comment pagination = %#v page=%q", list, client.commentListPageID)
+	}
+
+	raw := plugintest.RunOK[CommentListResult](t, plugin, OperationCommentList, map[string]any{"page_id": "123", "body_format": "storage"})
+	if raw.Comments[0].BodyStorage != "<p>Looks <em>good</em></p>" || raw.Comments[0].BodyMarkdown != "" {
+		t.Fatalf("raw comment list = %#v", raw.Comments[0])
+	}
+
+	added := plugintest.RunOK[Comment](t, plugin, OperationCommentAdd, map[string]any{"page_id": "123", "body_markdown": "Reviewed — see **notes**"})
+	if added.ID != "C2" || added.BodyMarkdown != "Reviewed — see **notes**" {
+		t.Fatalf("comment add = %#v", added)
+	}
+	if client.commentPageID != "123" || client.commentBody != "<p>Reviewed — see <strong>notes</strong></p>" {
+		t.Fatalf("comment create call = page %q body %q", client.commentPageID, client.commentBody)
+	}
+}
+
 func testPlugin(client Client) *pluginbinding.Plugin {
 	return NewPluginWithService(Service{ClientFactory: func(pluginbinding.Context, string) (Client, error) { return client, nil }})
 }
@@ -226,12 +331,23 @@ type fakeClient struct {
 	users                  []User
 	userID                 string
 	pageOptions            PageSearchOptions
+	pageListOptions        PageSearchOptions
+	pageList               PageList
 	userOptions            UserSearchOptions
 	pageID                 string
 	pageCreateResult       PageMutationResult
+	pageUpdateResult       PageMutationResult
 	pageDeleteResult       PageMutationResult
 	pageCreateRequest      PageCreateRequest
+	pageUpdateRequest      PageUpdateRequest
+	updatedPageID          string
 	deletedPageID          string
+	comments               CommentList
+	commentListPageID      string
+	commentListOptions     CommentListOptions
+	createdComment         Comment
+	commentPageID          string
+	commentBody            string
 	attachmentUploadResult AttachmentUploadResult
 	attachmentListResult   AttachmentListResult
 	attachmentGetResult    AttachmentGetResult
@@ -262,9 +378,35 @@ func (c *fakeClient) CreatePage(_ context.Context, request PageCreateRequest) (P
 	return c.pageCreateResult, nil
 }
 
+func (c *fakeClient) ListPages(_ context.Context, options PageSearchOptions) (PageList, error) {
+	c.pageListOptions = options
+	return c.pageList, nil
+}
+
+func (c *fakeClient) UpdatePage(_ context.Context, id string, request PageUpdateRequest) (PageMutationResult, error) {
+	c.updatedPageID = id
+	c.pageUpdateRequest = request
+	return c.pageUpdateResult, nil
+}
+
 func (c *fakeClient) DeletePage(_ context.Context, id string) (PageMutationResult, error) {
 	c.deletedPageID = id
 	return c.pageDeleteResult, nil
+}
+
+func (c *fakeClient) ListComments(_ context.Context, pageID string, options CommentListOptions) (CommentList, error) {
+	c.commentListPageID = pageID
+	c.commentListOptions = options
+	// Return a fresh copy: handlers render comment bodies in place.
+	out := c.comments
+	out.Comments = append([]Comment(nil), c.comments.Comments...)
+	return out, nil
+}
+
+func (c *fakeClient) CreateComment(_ context.Context, pageID, bodyStorage string) (Comment, error) {
+	c.commentPageID = pageID
+	c.commentBody = bodyStorage
+	return c.createdComment, nil
 }
 
 func (c *fakeClient) UploadPageAttachment(_ context.Context, pageID string, request AttachmentUploadRequest) (AttachmentUploadResult, error) {

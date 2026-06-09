@@ -1,15 +1,41 @@
 package confluence
 
 import (
+	"encoding/json"
+
 	core "github.com/fluxplane/fluxplane-plugin/manifest"
 	"github.com/fluxplane/fluxplane-plugin/pluginbinding"
 	"github.com/fluxplane/fluxplane-plugin/protocol"
 )
 
+// withInputExamples injects JSON Schema `examples` into an operation's input
+// schema. The fluxplane-plugin CLI surfaces the first example as the runnable
+// invocation in `operation describe` and treats an example-bearing op as having
+// conditional (one-of) input during local `--dry-run` validation. Kept local to
+// the confluence plugin rather than promoted to the SDK.
+func withInputExamples(spec core.OperationSpec, examples ...map[string]any) core.OperationSpec {
+	if len(examples) == 0 || len(spec.Input) == 0 {
+		return spec
+	}
+	var schema map[string]any
+	if err := json.Unmarshal(spec.Input, &schema); err != nil {
+		return spec
+	}
+	arr := make([]any, 0, len(examples))
+	for _, example := range examples {
+		arr = append(arr, example)
+	}
+	schema["examples"] = arr
+	if raw, err := json.Marshal(schema); err == nil {
+		spec.Input = raw
+	}
+	return spec
+}
+
 const (
 	PluginName        = "confluence"
-	PluginVersion     = "0.18.2"
-	PluginDescription = "Confluence Cloud page/user operations, attachments, datasources, indexes, and reverse lookups."
+	PluginVersion     = "0.19.0"
+	PluginDescription = "Confluence Cloud page/user operations, comments, attachments, datasources, indexes, and reverse lookups."
 
 	AuthMethodAtlassianCloud = "atlassian_cloud_basic"
 	AuthPurposeAPIToken      = "api_token"
@@ -28,9 +54,13 @@ const (
 	OperationAttachmentGet    = "confluence.attachment.get"
 	OperationAttachmentDelete = "confluence.attachment.delete"
 	OperationPageCreate       = "confluence.page.create"
+	OperationPageUpdate       = "confluence.page.update"
 	OperationPageDelete       = "confluence.page.delete"
 	OperationPageSearch       = "confluence.page.search"
+	OperationPageList         = "confluence.page.list"
 	OperationPageShow         = "confluence.page.show"
+	OperationCommentList      = "confluence.page.comment.list"
+	OperationCommentAdd       = "confluence.page.comment.add"
 	OperationUserSearch       = "confluence.user.search"
 
 	DatasourcePages = "confluence.pages"
@@ -96,9 +126,13 @@ func operationSpecs() []core.OperationSpec {
 		attachmentGetSpec(),
 		attachmentDeleteSpec(),
 		pageCreateSpec(),
+		pageUpdateSpec(),
 		pageDeleteSpec(),
 		pageSearchSpec(),
+		pageListSpec(),
 		pageShowSpec(),
+		commentListSpec(),
+		commentAddSpec(),
 		userSearchSpec(),
 	}
 }
@@ -128,7 +162,17 @@ func attachmentDeleteSpec() core.OperationSpec {
 }
 
 func pageCreateSpec() core.OperationSpec {
-	return pluginbinding.TypedOperationSpec[PageCreateInput, PageMutationResult](OperationPageCreate, "Create a Confluence page with storage-format content.", confluenceWriteOptions(core.OperationNonIdempotent)...)
+	return withInputExamples(
+		pluginbinding.TypedOperationSpec[PageCreateInput, PageMutationResult](OperationPageCreate, "Create a Confluence page from Markdown (body_markdown, preferred) or storage-format XHTML (body_storage).", confluenceWriteOptions(core.OperationNonIdempotent)...),
+		map[string]any{"space_key": "DEV", "title": "Release notes", "body_markdown": "## Summary\n\n- shipped **v2**\n- fixed `worker.go`"},
+	)
+}
+
+func pageUpdateSpec() core.OperationSpec {
+	return withInputExamples(
+		pluginbinding.TypedOperationSpec[PageUpdateInput, PageMutationResult](OperationPageUpdate, "Update a Confluence page's title and/or body (Markdown preferred), incrementing the page version. The body replaces the whole page content.", confluenceWriteOptions(core.OperationNonIdempotent)...),
+		map[string]any{"page_id": "123456", "body_markdown": "## Updated\n\nNew **content**."},
+	)
 }
 
 func pageDeleteSpec() core.OperationSpec {
@@ -139,8 +183,23 @@ func pageSearchSpec() core.OperationSpec {
 	return confluenceCompactReadOperation[PageSearchInput, PageSearchResult](OperationPageSearch, "Search Confluence pages.")
 }
 
+func pageListSpec() core.OperationSpec {
+	return confluenceCompactReadOperation[PageListInput, pluginbinding.ListResult[Page]](OperationPageList, "List Confluence pages, filterable by space and title, with offset pagination via next_page_token.")
+}
+
 func pageShowSpec() core.OperationSpec {
-	return confluenceReadOperation[PageShowInput, pluginbinding.ShowResult[Page]](OperationPageShow, "Show one Confluence page.")
+	return confluenceReadOperation[PageShowInput, pluginbinding.ShowResult[Page]](OperationPageShow, "Show one Confluence page with its body as Markdown (body_format selects markdown/storage/both).")
+}
+
+func commentListSpec() core.OperationSpec {
+	return confluenceReadOperation[CommentListInput, CommentListResult](OperationCommentList, "List comments on a Confluence page as Markdown, with raw storage XHTML available via body_format.")
+}
+
+func commentAddSpec() core.OperationSpec {
+	return withInputExamples(
+		pluginbinding.TypedOperationSpec[CommentAddInput, Comment](OperationCommentAdd, "Add a Markdown comment to a Confluence page.", confluenceWriteOptions(core.OperationNonIdempotent)...),
+		map[string]any{"page_id": "123456", "body_markdown": "Reviewed — root cause is `worker.go`. See **notes**."},
+	)
 }
 
 func userSearchSpec() core.OperationSpec {

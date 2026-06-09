@@ -22,6 +22,6 @@ require (
 	github.com/fluxplane/fluxplane-plugin v0.5.0
 	github.com/invopop/jsonschema v0.14.0 // indirect
 	github.com/pb33f/ordered-map/v2 v2.3.1 // indirect
-	github.com/yuin/goldmark v1.8.2 // indirect
+	github.com/yuin/goldmark v1.8.2
 	go.yaml.in/yaml/v4 v4.0.0-rc.4 // indirect
 )

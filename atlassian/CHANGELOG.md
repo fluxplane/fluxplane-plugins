@@ -1,5 +1,33 @@
 # Changelog
 
+## v0.6.0
+
+### Added
+- **Confluence: storage-XHTML ↔ Markdown conversion** in `internal/atlassian`
+  (`StorageToMarkdown`/`MarkdownToStorage`), mirroring the jira ADF work. Page
+  and comment bodies are now rendered to **Markdown by default** so agents
+  never handle raw storage XML; `body_format` (`markdown` default / `storage` /
+  `both`) selects the representation. Handles headings, lists, tables, code /
+  info / note / warning / tip / panel / expand macros, task lists, page/user/
+  attachment links (including block-appearance cards), images, emoticons, and
+  layouts.
+- **`confluence.page.update`** — update a page's title and/or body (Markdown
+  preferred), reading the current version and incrementing it automatically.
+- **`confluence.page.list`** — list pages by space/title/status with offset
+  pagination (`has_more`, `next_page_token`).
+- **`confluence.page.comment.list` / `confluence.page.comment.add`** — read and
+  write page comments (footer + inline, replies included via `depth=all`) with
+  author, timestamps, and Markdown bodies.
+- `confluence.page.create` now accepts **`body_markdown`** (converted to
+  storage format) in addition to `body_storage`.
+- Runnable JSON Schema `examples` on `page.create`, `page.update`, and
+  `page.comment.add`. Bumped the confluence plugin manifest to 0.19.0.
+
+### Changed
+- `confluence.page.show` folds the nested v1 `space` object into the flat
+  `spaceId`/`spaceKey` fields and renders the body per `body_format` instead of
+  returning the raw API `body` object.
+
 ## v0.5.0
 
 ### Added

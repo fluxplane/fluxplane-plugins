@@ -81,18 +81,67 @@ type PageSearchInput struct {
 	Status   string `json:"status,omitempty" jsonschema:"description=Page status"`
 }
 
+// BodyFormatInput lets callers choose how rich-text bodies are returned. The
+// default keeps agents away from raw storage XHTML.
+type BodyFormatInput struct {
+	BodyFormat string `json:"body_format,omitempty" jsonschema:"description=Rich text body format for page and comment bodies. markdown (default) renders readable Markdown; storage returns the raw Confluence storage XHTML; both returns each,enum=markdown,enum=storage,enum=both"`
+}
+
+func (b BodyFormatInput) format() bodyFormat {
+	return parseBodyFormat(b.BodyFormat)
+}
+
 type PageShowInput struct {
 	ConfluenceTargetInput
+	BodyFormatInput
 	ID     string `json:"id,omitempty" jsonschema:"description=Page ID"`
 	PageID string `json:"page_id,omitempty" jsonschema:"description=Alias for id"`
 }
 
+type PageListInput struct {
+	ConfluenceTargetInput
+	SpaceKey string `json:"space_key,omitempty" jsonschema:"description=Confluence space key filter (e.g. OPS, DEV)"`
+	Title    string `json:"title,omitempty" jsonschema:"description=Exact page title filter"`
+	Status   string `json:"status,omitempty" jsonschema:"description=Page status filter (default current),enum=current,enum=archived,enum=draft,enum=trashed"`
+	Limit    int    `json:"limit,omitempty" jsonschema:"description=Maximum pages to return (default 25, max 100)"`
+	Start    string `json:"start,omitempty" jsonschema:"description=Pagination offset from a previous result's next_page_token"`
+}
+
 type PageCreateInput struct {
 	ConfluenceTargetInput
-	SpaceKey    string `json:"space_key,omitempty" jsonschema:"required,description=Confluence space key."`
-	Title       string `json:"title,omitempty" jsonschema:"required,description=Page title."`
-	BodyStorage string `json:"body_storage,omitempty" jsonschema:"description=Confluence storage-format XHTML body. Defaults to a minimal paragraph."`
-	ParentID    string `json:"parent_id,omitempty" jsonschema:"description=Optional parent page ID."`
+	SpaceKey     string `json:"space_key,omitempty" jsonschema:"required,description=Confluence space key."`
+	Title        string `json:"title,omitempty" jsonschema:"required,description=Page title."`
+	BodyMarkdown string `json:"body_markdown,omitempty" jsonschema:"description=Page body as Markdown, converted to Confluence storage format. Preferred over body_storage."`
+	BodyStorage  string `json:"body_storage,omitempty" jsonschema:"description=Confluence storage-format XHTML body for hand-authored macros. Mutually exclusive with body_markdown."`
+	ParentID     string `json:"parent_id,omitempty" jsonschema:"description=Optional parent page ID."`
+}
+
+type PageUpdateInput struct {
+	ConfluenceTargetInput
+	BodyFormatInput
+	ID           string `json:"id,omitempty" jsonschema:"description=Page ID"`
+	PageID       string `json:"page_id,omitempty" jsonschema:"description=Alias for id"`
+	Title        string `json:"title,omitempty" jsonschema:"description=New page title. Empty keeps the current title."`
+	BodyMarkdown string `json:"body_markdown,omitempty" jsonschema:"description=New page body as Markdown, converted to Confluence storage format. Replaces the whole body."`
+	BodyStorage  string `json:"body_storage,omitempty" jsonschema:"description=New body as storage-format XHTML. Mutually exclusive with body_markdown."`
+}
+
+type CommentListInput struct {
+	ConfluenceTargetInput
+	BodyFormatInput
+	PageID string `json:"page_id,omitempty" jsonschema:"description=Confluence page ID."`
+	ID     string `json:"id,omitempty" jsonschema:"description=Alias for page_id."`
+	Limit  int    `json:"limit,omitempty" jsonschema:"description=Maximum comments to return (default 25, max 100)"`
+	Start  string `json:"start,omitempty" jsonschema:"description=Pagination offset from a previous result's next_start"`
+}
+
+type CommentAddInput struct {
+	ConfluenceTargetInput
+	PageID       string `json:"page_id,omitempty" jsonschema:"description=Confluence page ID."`
+	ID           string `json:"id,omitempty" jsonschema:"description=Alias for page_id."`
+	BodyMarkdown string `json:"body_markdown,omitempty" jsonschema:"description=Comment body as Markdown, converted to Confluence storage format."`
+	Body         string `json:"body,omitempty" jsonschema:"description=Alias for body_markdown."`
+	BodyStorage  string `json:"body_storage,omitempty" jsonschema:"description=Comment body as storage-format XHTML. Mutually exclusive with body_markdown."`
 }
 
 type PageDeleteInput struct {
@@ -185,10 +234,32 @@ func (s Service) PageShow(ctx pluginbinding.Context, input PageShowInput) (plugi
 	if err != nil {
 		return pluginbinding.ShowResult[Page]{}, pluginbinding.Errorf("confluence", "%s", err)
 	}
+	page.renderBody(input.format())
 	if attachments, attachErr := client.ListPageAttachments(context.Background(), id); attachErr == nil {
 		page.Attachments = attachments.Attachments
 	}
 	return pluginbinding.NewShowResult(page, map[string]any{"id": id}), nil
+}
+
+func (s Service) PageList(ctx pluginbinding.Context, input PageListInput) (pluginbinding.ListResult[Page], error) {
+	client, _, err := s.client(ctx, input)
+	if err != nil {
+		return pluginbinding.ListResult[Page]{}, pluginbinding.Errorf("secret", "%s", err)
+	}
+	list, err := client.ListPages(context.Background(), PageSearchOptions{
+		SpaceKey: strings.TrimSpace(input.SpaceKey),
+		Title:    strings.TrimSpace(input.Title),
+		Status:   strings.TrimSpace(input.Status),
+		Limit:    input.Limit,
+		Cursor:   strings.TrimSpace(input.Start),
+	})
+	if err != nil {
+		return pluginbinding.ListResult[Page]{}, pluginbinding.Errorf("confluence", "%s", err)
+	}
+	for i := range list.Pages {
+		list.Pages[i].renderBody(bodyFormatMarkdown)
+	}
+	return pluginbinding.NewPagedListResult(list.Pages, 0, list.NextStart), nil
 }
 
 func (s Service) PageCreate(ctx pluginbinding.Context, input PageCreateInput) (PageMutationResult, error) {
@@ -204,7 +275,99 @@ func (s Service) PageCreate(ctx pluginbinding.Context, input PageCreateInput) (P
 	if err != nil {
 		return PageMutationResult{}, pluginbinding.Errorf("confluence", "%s", err)
 	}
+	result.Page.renderBody(bodyFormatMarkdown)
 	return result, nil
+}
+
+func (s Service) PageUpdate(ctx pluginbinding.Context, input PageUpdateInput) (PageMutationResult, error) {
+	client, _, err := s.client(ctx, input)
+	if err != nil {
+		return PageMutationResult{}, pluginbinding.Errorf("secret", "%s", err)
+	}
+	id := strings.TrimSpace(pluginbinding.FirstString(pluginbinding.InputMap(input), "id", "page_id"))
+	if id == "" {
+		return PageMutationResult{}, pluginbinding.Fail("bad_input", "page id is required")
+	}
+	body, err := resolveBodyStorage(input.BodyMarkdown, input.BodyStorage)
+	if err != nil {
+		return PageMutationResult{}, pluginbinding.Errorf("bad_input", "%s", err)
+	}
+	if strings.TrimSpace(input.Title) == "" && body == "" {
+		return PageMutationResult{}, pluginbinding.Fail("bad_input", "nothing to update: provide title, body_markdown, or body_storage")
+	}
+	result, err := client.UpdatePage(context.Background(), id, PageUpdateRequest{
+		Title:       strings.TrimSpace(input.Title),
+		BodyStorage: body,
+	})
+	if err != nil {
+		return PageMutationResult{}, pluginbinding.Errorf("confluence", "%s", err)
+	}
+	result.Page.renderBody(input.format())
+	return result, nil
+}
+
+func (s Service) CommentList(ctx pluginbinding.Context, input CommentListInput) (CommentListResult, error) {
+	client, _, err := s.client(ctx, input)
+	if err != nil {
+		return CommentListResult{}, pluginbinding.Errorf("secret", "%s", err)
+	}
+	pageID := strings.TrimSpace(pluginbinding.FirstString(pluginbinding.InputMap(input), "page_id", "id"))
+	if pageID == "" {
+		return CommentListResult{}, pluginbinding.Fail("bad_input", "page_id is required")
+	}
+	list, err := client.ListComments(context.Background(), pageID, CommentListOptions{Limit: input.Limit, Start: strings.TrimSpace(input.Start)})
+	if err != nil {
+		return CommentListResult{}, pluginbinding.Errorf("confluence", "%s", err)
+	}
+	format := input.format()
+	for i := range list.Comments {
+		list.Comments[i].renderBody(format)
+	}
+	return CommentListResult{
+		PageID:    pageID,
+		Count:     len(list.Comments),
+		HasMore:   list.NextStart != "",
+		NextStart: list.NextStart,
+		Comments:  list.Comments,
+	}, nil
+}
+
+func (s Service) CommentAdd(ctx pluginbinding.Context, input CommentAddInput) (Comment, error) {
+	client, _, err := s.client(ctx, input)
+	if err != nil {
+		return Comment{}, pluginbinding.Errorf("secret", "%s", err)
+	}
+	pageID := strings.TrimSpace(pluginbinding.FirstString(pluginbinding.InputMap(input), "page_id", "id"))
+	if pageID == "" {
+		return Comment{}, pluginbinding.Fail("bad_input", "page_id is required")
+	}
+	body, err := resolveBodyStorage(firstNonEmpty(input.BodyMarkdown, input.Body), input.BodyStorage)
+	if err != nil {
+		return Comment{}, pluginbinding.Errorf("bad_input", "%s", err)
+	}
+	if body == "" {
+		return Comment{}, pluginbinding.Fail("bad_input", "body_markdown (or body_storage) is required")
+	}
+	comment, err := client.CreateComment(context.Background(), pageID, body)
+	if err != nil {
+		return Comment{}, pluginbinding.Errorf("confluence", "%s", err)
+	}
+	comment.renderBody(bodyFormatMarkdown)
+	return comment, nil
+}
+
+// resolveBodyStorage turns the caller's choice of body representation into
+// storage XHTML, rejecting ambiguous input.
+func resolveBodyStorage(markdown, storage string) (string, error) {
+	markdown = strings.TrimSpace(markdown)
+	storage = strings.TrimSpace(storage)
+	if markdown != "" && storage != "" {
+		return "", fmt.Errorf("provide only one of body_markdown or body_storage")
+	}
+	if markdown != "" {
+		return atlassian.MarkdownToStorage(markdown), nil
+	}
+	return storage, nil
 }
 
 func (s Service) PageDelete(ctx pluginbinding.Context, input PageDeleteInput) (PageMutationResult, error) {
@@ -501,7 +664,10 @@ func pageCreateRequest(input PageCreateInput) (PageCreateRequest, error) {
 	if spaceKey == "" || title == "" {
 		return PageCreateRequest{}, fmt.Errorf("space_key and title are required")
 	}
-	body := strings.TrimSpace(input.BodyStorage)
+	body, err := resolveBodyStorage(input.BodyMarkdown, input.BodyStorage)
+	if err != nil {
+		return PageCreateRequest{}, err
+	}
 	if body == "" {
 		body = "<p>Created by Fluxplane.</p>"
 	}

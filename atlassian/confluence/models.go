@@ -1,12 +1,35 @@
 package confluence
 
 import (
+	"encoding/json"
 	"net/url"
 	"regexp"
 	"strings"
 
 	"github.com/fluxplane/fluxplane-plugin/pluginbinding"
+	"github.com/fluxplane/fluxplane-plugins/atlassian/internal/atlassian"
 )
+
+// bodyFormat selects how rich-text bodies (page bodies, comments) are
+// rendered for callers. The default keeps agents away from raw storage XHTML.
+type bodyFormat string
+
+const (
+	bodyFormatMarkdown bodyFormat = "markdown"
+	bodyFormatStorage  bodyFormat = "storage"
+	bodyFormatBoth     bodyFormat = "both"
+)
+
+func parseBodyFormat(value string) bodyFormat {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case string(bodyFormatStorage):
+		return bodyFormatStorage
+	case string(bodyFormatBoth):
+		return bodyFormatBoth
+	default:
+		return bodyFormatMarkdown
+	}
+}
 
 type User struct {
 	AccountID    string `json:"accountId,omitempty"`
@@ -30,18 +53,63 @@ type UserRecord struct {
 }
 
 type Page struct {
-	ID          string       `json:"id,omitempty"`
-	Status      string       `json:"status,omitempty"`
-	Title       string       `json:"title,omitempty"`
-	SpaceID     string       `json:"spaceId,omitempty"`
-	SpaceKey    string       `json:"spaceKey,omitempty"`
-	ParentID    string       `json:"parentId,omitempty"`
-	AuthorID    string       `json:"authorId,omitempty"`
-	CreatedAt   string       `json:"createdAt,omitempty"`
-	Version     PageVersion  `json:"version,omitempty"`
-	Links       PageLinks    `json:"_links,omitempty"`
-	Body        any          `json:"body,omitempty"`
-	Attachments []Attachment `json:"attachments,omitempty"`
+	ID        string       `json:"id,omitempty"`
+	Status    string       `json:"status,omitempty"`
+	Title     string       `json:"title,omitempty"`
+	SpaceID   string       `json:"spaceId,omitempty"`
+	SpaceKey  string       `json:"spaceKey,omitempty"`
+	ParentID  string       `json:"parentId,omitempty"`
+	AuthorID  string       `json:"authorId,omitempty"`
+	CreatedAt string       `json:"createdAt,omitempty"`
+	Version   PageVersion  `json:"version,omitempty"`
+	Links     PageLinks    `json:"_links,omitempty"`
+	Space     *searchSpace `json:"space,omitempty"`
+	// Body carries the raw API body until renderBody decides which
+	// representation(s) to expose; rendered output never includes it.
+	Body *PageBody `json:"body,omitempty"`
+	// BodyMarkdown is the page body rendered to Markdown by default so callers
+	// never handle raw storage XHTML. BodyStorage carries the raw storage
+	// format and is only populated when body_format is storage or both.
+	BodyMarkdown string       `json:"body_markdown,omitempty"`
+	BodyStorage  string       `json:"body_storage,omitempty"`
+	Attachments  []Attachment `json:"attachments,omitempty"`
+}
+
+type PageBody struct {
+	Storage *PageBodyValue `json:"storage,omitempty"`
+	View    *PageBodyValue `json:"view,omitempty"`
+}
+
+type PageBodyValue struct {
+	Value          string `json:"value,omitempty"`
+	Representation string `json:"representation,omitempty"`
+}
+
+// renderBody resolves the raw API body into the representation(s) the caller
+// asked for and folds the nested v1 space object into the flat fields.
+func (p *Page) renderBody(format bodyFormat) {
+	if p == nil {
+		return
+	}
+	if p.Space != nil {
+		p.SpaceID = firstNonEmpty(p.SpaceID, p.Space.ID.String())
+		p.SpaceKey = firstNonEmpty(p.SpaceKey, p.Space.Key)
+		p.Space = nil
+	}
+	storage := ""
+	if p.Body != nil && p.Body.Storage != nil {
+		storage = p.Body.Storage.Value
+	}
+	p.Body = nil
+	if strings.TrimSpace(storage) == "" {
+		return
+	}
+	if format == bodyFormatMarkdown || format == bodyFormatBoth {
+		p.BodyMarkdown = atlassian.StorageToMarkdown(storage)
+	}
+	if format == bodyFormatStorage || format == bodyFormatBoth {
+		p.BodyStorage = storage
+	}
 }
 
 type PageVersion struct {
@@ -92,10 +160,121 @@ type PageCreateRequest struct {
 	ParentID    string
 }
 
+// PageUpdateRequest updates a page in place. Empty fields keep the current
+// value; the client increments the version automatically.
+type PageUpdateRequest struct {
+	Title       string
+	BodyStorage string
+}
+
 type PageMutationResult struct {
 	OK   bool   `json:"ok"`
 	ID   string `json:"id,omitempty"`
 	Page *Page  `json:"page,omitempty"`
+}
+
+// PageList is one page of a paginated page listing. NextStart is the offset
+// for the following page ("" when this is the last page).
+type PageList struct {
+	Pages     []Page
+	NextStart string
+}
+
+// Comment is a Confluence page comment. BodyMarkdown is the body rendered to
+// Markdown by default so callers never handle raw storage XHTML; BodyStorage
+// carries the raw storage format and is only kept when body_format is storage
+// or both.
+type Comment struct {
+	ID           string `json:"id,omitempty"`
+	Status       string `json:"status,omitempty"`
+	Title        string `json:"title,omitempty"`
+	BodyMarkdown string `json:"body_markdown,omitempty"`
+	BodyStorage  string `json:"body_storage,omitempty"`
+	AuthorID     string `json:"author_id,omitempty"`
+	AuthorName   string `json:"author_name,omitempty"`
+	CreatedAt    string `json:"created_at,omitempty"`
+	UpdatedAt    string `json:"updated_at,omitempty"`
+	Location     string `json:"location,omitempty"`
+}
+
+// renderBody resolves the raw storage body (always present in BodyStorage as
+// returned by the client) into the representation(s) the caller asked for.
+func (c *Comment) renderBody(format bodyFormat) {
+	if c == nil {
+		return
+	}
+	if format == bodyFormatMarkdown || format == bodyFormatBoth {
+		c.BodyMarkdown = atlassian.StorageToMarkdown(c.BodyStorage)
+	}
+	if format == bodyFormatMarkdown {
+		c.BodyStorage = ""
+	}
+}
+
+type CommentListOptions struct {
+	Limit int
+	Start string
+}
+
+// CommentList is one page of a paginated comment listing.
+type CommentList struct {
+	Comments  []Comment
+	NextStart string
+}
+
+type CommentListResult struct {
+	PageID    string    `json:"page_id,omitempty"`
+	Count     int       `json:"count"`
+	HasMore   bool      `json:"has_more,omitempty"`
+	NextStart string    `json:"next_start,omitempty"`
+	Comments  []Comment `json:"comments"`
+}
+
+// apiComment decodes the v1 comment representation.
+type apiComment struct {
+	ID      string    `json:"id"`
+	Status  string    `json:"status"`
+	Title   string    `json:"title"`
+	Body    *PageBody `json:"body"`
+	Version struct {
+		Number int    `json:"number"`
+		When   string `json:"when"`
+		By     User   `json:"by"`
+	} `json:"version"`
+	History struct {
+		CreatedDate string `json:"createdDate"`
+		CreatedBy   User   `json:"createdBy"`
+	} `json:"history"`
+	Extensions struct {
+		Location string `json:"location"`
+	} `json:"extensions"`
+}
+
+type commentListResponse struct {
+	Results []apiComment `json:"results"`
+	Links   PageLinks    `json:"_links"`
+}
+
+func commentFromAPI(raw apiComment) Comment {
+	body := ""
+	if raw.Body != nil && raw.Body.Storage != nil {
+		body = raw.Body.Storage.Value
+	}
+	updated := ""
+	if raw.Version.Number > 1 {
+		updated = raw.Version.When
+	}
+	return Comment{
+		ID:          raw.ID,
+		Status:      raw.Status,
+		Title:       raw.Title,
+		BodyStorage: body,
+		AuthorID:    firstNonEmpty(raw.History.CreatedBy.AccountID, raw.Version.By.AccountID),
+		AuthorName:  firstNonEmpty(raw.History.CreatedBy.DisplayName, raw.Version.By.DisplayName),
+		CreatedAt:   firstNonEmpty(raw.History.CreatedDate, raw.Version.When),
+		UpdatedAt:   updated,
+		Location:    raw.Extensions.Location,
+	}
 }
 
 type UserSearchOptions struct {
@@ -187,10 +366,37 @@ type searchContent struct {
 	Version PageVersion `json:"version,omitempty"`
 }
 
+// searchSpace decodes the nested space object; Confluence emits the id as a
+// JSON number or a string depending on the endpoint.
 type searchSpace struct {
-	ID  string `json:"id,omitempty"`
+	ID  flexID `json:"id,omitempty"`
 	Key string `json:"key,omitempty"`
 }
+
+// flexID decodes an identifier that Confluence emits as either a JSON number
+// or a string depending on the endpoint.
+type flexID string
+
+func (f *flexID) UnmarshalJSON(data []byte) error {
+	value := strings.TrimSpace(string(data))
+	if value == "" || value == "null" {
+		*f = ""
+		return nil
+	}
+	var s string
+	if err := json.Unmarshal(data, &s); err == nil {
+		*f = flexID(s)
+		return nil
+	}
+	var n json.Number
+	if err := json.Unmarshal(data, &n); err != nil {
+		return err
+	}
+	*f = flexID(n.String())
+	return nil
+}
+
+func (f flexID) String() string { return string(f) }
 
 func normalizePageRecord(source pluginbinding.DatasourceSource, baseURL string, page Page) (PageRecord, bool) {
 	id := strings.TrimSpace(page.ID)
@@ -276,7 +482,7 @@ func pagesFromSearch(results []searchResult) []Page {
 			ID:       content.ID,
 			Status:   content.Status,
 			Title:    firstNonEmpty(content.Title, result.Title),
-			SpaceID:  content.Space.ID,
+			SpaceID:  content.Space.ID.String(),
 			SpaceKey: content.Space.Key,
 			Version:  content.Version,
 			Links:    content.Links,
