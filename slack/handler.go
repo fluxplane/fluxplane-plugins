@@ -37,6 +37,7 @@ func NewPluginWithService(service Service) *pluginbinding.Plugin {
 		pluginbinding.RegisterOperation(presenceGetSpec(), service.GetPresence),
 		pluginbinding.RegisterOperation(presenceSetSpec(), service.SetPresence),
 		pluginbinding.RegisterOperation(messageSendSpec(), service.SendMessage),
+		pluginbinding.RegisterOperation(messageListSpec(), service.MessageList),
 		pluginbinding.RegisterOperation(reactionAddSpec(), service.AddReaction),
 		pluginbinding.RegisterOperation(reactionRemoveSpec(), service.RemoveReaction),
 		pluginbinding.RegisterOperation(searchSpec(), service.Search),

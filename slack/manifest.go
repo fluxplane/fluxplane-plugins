@@ -1,6 +1,8 @@
 package slack
 
 import (
+	"encoding/json"
+
 	core "github.com/fluxplane/fluxplane-plugin/manifest"
 	"github.com/fluxplane/fluxplane-plugin/pluginbinding"
 	"github.com/fluxplane/fluxplane-plugin/protocol"
@@ -8,7 +10,7 @@ import (
 
 const (
 	PluginName        = "slack"
-	PluginVersion     = "0.18.2"
+	PluginVersion     = "0.19.0"
 	PluginDescription = "Slack token info, messaging, file upload, search, thread, channel member, and reverse lookup operations."
 
 	AuthMethodTokenSet = "token_set"
@@ -43,6 +45,7 @@ const (
 	OperationPresenceGet    = "slack.presence.get"
 	OperationPresenceSet    = "slack.presence.set"
 	OperationMessageSend    = "slack.message.send"
+	OperationMessageList    = "slack.message.list"
 	OperationReactionAdd    = "slack.reaction.add"
 	OperationReactionRemove = "slack.reaction.remove"
 	OperationSearch         = "slack.search"
@@ -130,6 +133,7 @@ func operationSpecs() []core.OperationSpec {
 		presenceGetSpec(),
 		presenceSetSpec(),
 		messageSendSpec(),
+		messageListSpec(),
 		reactionAddSpec(),
 		reactionRemoveSpec(),
 		searchSpec(),
@@ -320,7 +324,36 @@ func searchSpec() core.OperationSpec {
 }
 
 func threadSpec() core.OperationSpec {
-	return pluginbinding.TypedOperationSpec[ThreadInput, ThreadResult](OperationThread, "View a Slack thread.", slackReadOptions(core.OperationIdempotent)...)
+	return pluginbinding.TypedOperationSpec[ThreadInput, ThreadResult](OperationThread, "View a Slack thread. Message text is rendered to Markdown by default (text_format selects mrkdwn/both).", slackReadOptions(core.OperationIdempotent)...)
+}
+
+func messageListSpec() core.OperationSpec {
+	return withInputExamples(
+		pluginbinding.TypedOperationSpec[MessageListInput, MessageListResult](OperationMessageList, "Read recent messages from a Slack channel (conversations.history). Text is rendered to Markdown by default; paginate with next_cursor.", slackReadOptions(core.OperationIdempotent)...),
+		map[string]any{"channel": "#general", "limit": 20},
+	)
+}
+
+// withInputExamples injects JSON Schema examples into an operation's input
+// schema; the CLI surfaces the first as a runnable example and treats the op as
+// having conditional input during local --dry-run validation.
+func withInputExamples(spec core.OperationSpec, examples ...map[string]any) core.OperationSpec {
+	if len(examples) == 0 || len(spec.Input) == 0 {
+		return spec
+	}
+	var schema map[string]any
+	if err := json.Unmarshal(spec.Input, &schema); err != nil {
+		return spec
+	}
+	arr := make([]any, 0, len(examples))
+	for _, example := range examples {
+		arr = append(arr, example)
+	}
+	schema["examples"] = arr
+	if raw, err := json.Marshal(schema); err == nil {
+		spec.Input = raw
+	}
+	return spec
 }
 
 func unreadsSpec() core.OperationSpec {

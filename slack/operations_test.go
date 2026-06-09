@@ -365,6 +365,11 @@ func TestServiceSendSearchAndThreadUseLiveClient(t *testing.T) {
 				searchMessages: []SearchMessage{{Channel: "C1", TS: "1710000000.123456", User: "U1", Text: "hello"}},
 				searchTotal:    1,
 				thread:         []ThreadMessage{{TS: "1710000000.123456", User: "U1", Text: "root"}},
+				messageHistory: MessageHistory{
+					Messages:   []ThreadMessage{{TS: "1710000000.123456", User: "U1", Text: "*deploy* done <@U1|ada>"}},
+					NextCursor: "cur-2",
+					HasMore:    true,
+				},
 			},
 		},
 	}
@@ -388,6 +393,20 @@ func TestServiceSendSearchAndThreadUseLiveClient(t *testing.T) {
 	thread := plugintest.RunOK[ThreadResult](t, plugin, OperationThread, map[string]any{"channel": "C1", "ts": "1710000000.123456"})
 	if thread.Count != 1 || thread.Messages[0].Text != "root" || factory.clients["user_token"].threadCalls != 1 {
 		t.Fatalf("thread result = %#v calls=%d", thread, factory.clients["user_token"].threadCalls)
+	}
+
+	// message.list reads channel history and renders mrkdwn -> Markdown by default.
+	hist := plugintest.RunOK[MessageListResult](t, plugin, OperationMessageList, map[string]any{"channel": "C1", "limit": 20})
+	if hist.Count != 1 || hist.NextCursor != "cur-2" || !hist.HasMore {
+		t.Fatalf("message.list result = %#v", hist)
+	}
+	if hist.Messages[0].Text != "**deploy** done @ada" {
+		t.Fatalf("message.list should render Markdown, got %q", hist.Messages[0].Text)
+	}
+	// text_format=mrkdwn returns the raw mrkdwn unchanged.
+	raw := plugintest.RunOK[MessageListResult](t, plugin, OperationMessageList, map[string]any{"channel": "C1", "text_format": "mrkdwn"})
+	if raw.Messages[0].Text != "*deploy* done <@U1|ada>" {
+		t.Fatalf("text_format=mrkdwn should be raw, got %q", raw.Messages[0].Text)
 	}
 }
 
@@ -1310,6 +1329,8 @@ type fakeClient struct {
 	presence                   Presence
 	searchMessages             []SearchMessage
 	thread                     []ThreadMessage
+	messageHistory             MessageHistory
+	messageHistoryErr          error
 	sendTS                     string
 	latestTS                   string
 	searchTotal                int
@@ -1672,4 +1693,12 @@ func (c *fakeClient) SearchMessages(_ context.Context, _ string, _ int) ([]Searc
 func (c *fakeClient) GetThread(_ context.Context, _, _ string, _, _ int) ([]ThreadMessage, error) {
 	c.threadCalls++
 	return c.thread, c.threadErr
+}
+
+func (c *fakeClient) ListMessages(_ context.Context, _ MessageHistoryRequest) (MessageHistory, error) {
+	// Return a fresh copy so the handler's in-place text rendering does not leak
+	// across calls (a live client returns fresh API data each call).
+	out := c.messageHistory
+	out.Messages = append([]ThreadMessage(nil), c.messageHistory.Messages...)
+	return out, c.messageHistoryErr
 }

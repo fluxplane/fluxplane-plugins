@@ -572,11 +572,12 @@ type Reaction struct {
 }
 
 type ThreadInput struct {
-	Ref      string `json:"ref,omitempty" jsonschema:"description=Slack message reference as URL or channel:timestamp"`
-	Channel  string `json:"channel,omitempty" jsonschema:"description=Slack channel ID or name"`
-	TS       string `json:"ts,omitempty" jsonschema:"description=Slack message timestamp"`
-	Limit    int    `json:"limit,omitempty" jsonschema:"description=Maximum thread messages to return"`
-	MaxBytes int    `json:"max_bytes,omitempty" jsonschema:"description=Maximum bytes to download per image. Defaults to 10485760."`
+	Ref        string `json:"ref,omitempty" jsonschema:"description=Slack message reference as URL or channel:timestamp"`
+	Channel    string `json:"channel,omitempty" jsonschema:"description=Slack channel ID or name"`
+	TS         string `json:"ts,omitempty" jsonschema:"description=Slack message timestamp"`
+	Limit      int    `json:"limit,omitempty" jsonschema:"description=Maximum thread messages to return"`
+	MaxBytes   int    `json:"max_bytes,omitempty" jsonschema:"description=Maximum bytes to download per image. Defaults to 10485760."`
+	TextFormat string `json:"text_format,omitempty" jsonschema:"description=Message text format. markdown (default) renders readable Markdown; mrkdwn returns raw Slack mrkdwn; both returns each,enum=markdown,enum=mrkdwn,enum=both"`
 }
 
 type ThreadMessagesInput struct {
@@ -598,11 +599,66 @@ type ThreadResult struct {
 }
 
 type ThreadMessage struct {
-	TS        string      `json:"ts,omitempty"`
-	User      string      `json:"user,omitempty"`
-	Text      string      `json:"text,omitempty"`
-	Files     []SlackFile `json:"files,omitempty"`
-	Reactions []Reaction  `json:"reactions,omitempty"`
+	TS string `json:"ts,omitempty"`
+	// ThreadTS is set when the message is part of a thread (its parent's ts).
+	ThreadTS string `json:"thread_ts,omitempty"`
+	User     string `json:"user,omitempty"`
+	// Text is rendered to Markdown by default so agents never handle raw Slack
+	// mrkdwn. TextMrkdwn carries the original mrkdwn and is only populated when
+	// text_format is mrkdwn or both.
+	Text       string      `json:"text,omitempty"`
+	TextMrkdwn string      `json:"text_mrkdwn,omitempty"`
+	Files      []SlackFile `json:"files,omitempty"`
+	Reactions  []Reaction  `json:"reactions,omitempty"`
+}
+
+// renderText applies the requested text format to a message's mrkdwn text.
+func (m *ThreadMessage) renderText(format textFormat) {
+	raw := m.Text
+	switch format {
+	case textFormatMrkdwn:
+		m.Text, m.TextMrkdwn = raw, ""
+	case textFormatBoth:
+		m.Text, m.TextMrkdwn = MrkdwnToMarkdown(raw), raw
+	default:
+		m.Text, m.TextMrkdwn = MrkdwnToMarkdown(raw), ""
+	}
+}
+
+// MessageHistoryRequest is the client-level request for conversations.history.
+type MessageHistoryRequest struct {
+	Channel string
+	Limit   int
+	Cursor  string
+	Oldest  string
+	Latest  string
+}
+
+// MessageHistory is the client-level result of conversations.history.
+type MessageHistory struct {
+	Messages   []ThreadMessage
+	NextCursor string
+	HasMore    bool
+}
+
+type MessageListInput struct {
+	SlackRoleInput
+	Channel    string `json:"channel,omitempty" jsonschema:"required,description=Slack channel ID or name to read history from"`
+	Limit      int    `json:"limit,omitempty" jsonschema:"description=Maximum messages to return. Defaults to 50."`
+	Cursor     string `json:"cursor,omitempty" jsonschema:"description=Pagination cursor from a previous next_cursor."`
+	Oldest     string `json:"oldest,omitempty" jsonschema:"description=Only messages at or after this Slack timestamp (epoch seconds.micros)."`
+	Latest     string `json:"latest,omitempty" jsonschema:"description=Only messages at or before this Slack timestamp."`
+	TextFormat string `json:"text_format,omitempty" jsonschema:"description=Message text format. markdown (default) renders readable Markdown; mrkdwn returns raw Slack mrkdwn; both returns each,enum=markdown,enum=mrkdwn,enum=both"`
+}
+
+func (i MessageListInput) format() textFormat { return parseTextFormat(i.TextFormat) }
+
+type MessageListResult struct {
+	Channel    string          `json:"channel,omitempty"`
+	Count      int             `json:"count"`
+	NextCursor string          `json:"next_cursor,omitempty"`
+	HasMore    bool            `json:"has_more,omitempty"`
+	Messages   []ThreadMessage `json:"messages,omitempty"`
 }
 
 type SlackFile struct {
@@ -1341,7 +1397,32 @@ func (s Service) Thread(ctx pluginbinding.Context, input ThreadInput) (ThreadRes
 		return ThreadResult{}, pluginbinding.Errorf("slack", "%s", err)
 	}
 	messages = limitThreadMessages(messages, input.Limit)
+	format := parseTextFormat(input.TextFormat)
+	for i := range messages {
+		messages[i].renderText(format)
+	}
 	return ThreadResult{Channel: ref.Channel, TS: ref.TS, Count: len(messages), Messages: messages}, nil
+}
+
+// MessageList reads recent messages from a channel (conversations.history), the
+// counterpart to thread/search for catching up on a channel. Message text is
+// rendered to Markdown by default (text_format selects mrkdwn/both).
+func (s Service) MessageList(ctx pluginbinding.Context, input MessageListInput) (MessageListResult, error) {
+	channel, err := s.resolveChannel(ctx, input.Channel)
+	if err != nil {
+		return MessageListResult{}, err
+	}
+	history, _, err := pluginbinding.ReadWithPreferredAuthPurposes[Client, MessageHistory]([]string{AuthPurposeUser, AuthPurposeBot}, s.openClientForContext(ctx), func(client Client, _ string) (MessageHistory, error) {
+		return client.ListMessages(context.Background(), MessageHistoryRequest{Channel: channel, Limit: input.Limit, Cursor: input.Cursor, Oldest: input.Oldest, Latest: input.Latest})
+	}, fallbackableSlackError)
+	if err != nil {
+		return MessageListResult{}, pluginbinding.Errorf("slack", "%s", err)
+	}
+	format := input.format()
+	for i := range history.Messages {
+		history.Messages[i].renderText(format)
+	}
+	return MessageListResult{Channel: channel, Count: len(history.Messages), NextCursor: history.NextCursor, HasMore: history.HasMore, Messages: history.Messages}, nil
 }
 
 func (s Service) ThreadMessagesDatasource(ctx pluginbinding.Context, input ThreadMessagesInput) (ThreadMessagesDatasourceResult, error) {

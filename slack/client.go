@@ -43,6 +43,7 @@ type Client interface {
 	UploadFile(context.Context, FileUploadRequest) (FileUploadResult, error)
 	SearchMessages(context.Context, string, int) ([]SearchMessage, int, error)
 	GetThread(context.Context, string, string, int, int) ([]ThreadMessage, error)
+	ListMessages(context.Context, MessageHistoryRequest) (MessageHistory, error)
 }
 
 type ClientFactory func(pluginbinding.Context, string) (Client, error)
@@ -617,6 +618,38 @@ func (c liveClient) GetThread(ctx context.Context, channel, ts string, limit, ma
 		})
 	}
 	return limitThreadMessages(out, limit), nil
+}
+
+func (c liveClient) ListMessages(ctx context.Context, request MessageHistoryRequest) (MessageHistory, error) {
+	limit := request.Limit
+	if limit <= 0 {
+		limit = 50
+	}
+	resp, err := c.client.GetConversationHistoryContext(ctx, &slackapi.GetConversationHistoryParameters{
+		ChannelID: request.Channel,
+		Limit:     limit,
+		Cursor:    request.Cursor,
+		Oldest:    request.Oldest,
+		Latest:    request.Latest,
+		Inclusive: true,
+	})
+	if err != nil {
+		return MessageHistory{}, err
+	}
+	if !resp.Ok {
+		return MessageHistory{}, fmt.Errorf("conversations.history failed: %s", firstNonEmpty(resp.Error, "unknown error"))
+	}
+	out := make([]ThreadMessage, 0, len(resp.Messages))
+	for _, message := range resp.Messages {
+		out = append(out, ThreadMessage{
+			TS:        message.Timestamp,
+			User:      firstNonEmpty(message.User, message.BotID),
+			Text:      strings.TrimSpace(message.Text),
+			ThreadTS:  message.ThreadTimestamp,
+			Reactions: reactionsFromAPI(message.Reactions),
+		})
+	}
+	return MessageHistory{Messages: out, NextCursor: resp.ResponseMetaData.NextCursor, HasMore: resp.HasMore}, nil
 }
 
 func (c liveClient) threadMessageFiles(ctx context.Context, message slackapi.Message, maxBytes int) ([]SlackFile, error) {
