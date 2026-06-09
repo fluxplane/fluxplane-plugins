@@ -395,34 +395,6 @@ func fakeService() Service {
 	return Service{ClientFactory: func(pluginbinding.Context) (Client, error) { return client, nil }}
 }
 
-func limitContainers(items []Container, limit int) []Container {
-	if limit > 0 && len(items) > limit {
-		return items[:limit]
-	}
-	return items
-}
-
-func limitImages(items []Image, limit int) []Image {
-	if limit > 0 && len(items) > limit {
-		return items[:limit]
-	}
-	return items
-}
-
-func limitNetworks(items []Network, limit int) []Network {
-	if limit > 0 && len(items) > limit {
-		return items[:limit]
-	}
-	return items
-}
-
-func limitVolumes(items []Volume, limit int) []Volume {
-	if limit > 0 && len(items) > limit {
-		return items[:limit]
-	}
-	return items
-}
-
 type fakeClient struct {
 	info       DockerInfo
 	containers []Container
