@@ -1026,38 +1026,25 @@ func verifyTypedFieldsApplied(result *IssueMutationResult, summary, assigneeAcco
 		return
 	}
 	fields := result.Issue.Fields
-	var unapplied []string
-	if want := strings.TrimSpace(parentKey); want != "" {
-		got := ""
-		if fields.Parent != nil {
-			got = strings.TrimSpace(fields.Parent.Key)
-		}
-		if !strings.EqualFold(got, want) {
-			unapplied = append(unapplied, fmt.Sprintf("parent (requested %q, issue has %q)", want, orNone(got)))
-		}
+	parent := ""
+	if fields.Parent != nil {
+		parent = fields.Parent.Key
 	}
-	if want := strings.TrimSpace(summary); want != "" && strings.TrimSpace(fields.Summary) != want {
-		unapplied = append(unapplied, fmt.Sprintf("summary (requested %q, issue has %q)", want, fields.Summary))
+	assignee := ""
+	if fields.Assignee != nil {
+		assignee = fields.Assignee.AccountID
 	}
-	if want := strings.TrimSpace(assigneeAccountID); want != "" {
-		got := ""
-		if fields.Assignee != nil {
-			got = strings.TrimSpace(fields.Assignee.AccountID)
-		}
-		if got != want {
-			unapplied = append(unapplied, fmt.Sprintf("assignee (requested %q, issue has %q)", want, orNone(got)))
-		}
-	}
-	if len(unapplied) == 0 {
+	// Use the shared write-verification convention so the same silent-no-op
+	// guard applies uniformly across plugins.
+	warning := pluginbinding.VerifyAppliedWarning(
+		pluginbinding.FieldCheck{Field: "parent", Requested: parentKey, Applied: parent, IgnoreCase: true},
+		pluginbinding.FieldCheck{Field: "summary", Requested: summary, Applied: fields.Summary},
+		pluginbinding.FieldCheck{Field: "assignee", Requested: assigneeAccountID, Applied: assignee},
+	)
+	if warning == "" {
 		return
 	}
-	appendWarning(result, fmt.Sprintf(
-		"Jira accepted the write but these fields are not set on the issue afterward: %s. "+
-			"The field may not be on the project's create/edit screen, may require a different API "+
-			"(e.g. epic link in a company-managed project), or the account may lack permission. "+
-			"Run jira.issue.edit_meta to see which fields are settable.",
-		strings.Join(unapplied, "; "),
-	))
+	appendWarning(result, warning+" Run jira.issue.edit_meta to see which fields are settable.")
 }
 
 func appendWarning(result *IssueMutationResult, message string) {
@@ -1066,13 +1053,6 @@ func appendWarning(result *IssueMutationResult, message string) {
 		return
 	}
 	result.Warning = result.Warning + "; " + message
-}
-
-func orNone(value string) string {
-	if strings.TrimSpace(value) == "" {
-		return "(unset)"
-	}
-	return value
 }
 
 func applyIssueCommonFields(fields map[string]any, descriptionMarkdown string, labels []string, assigneeAccountID, priority string) {

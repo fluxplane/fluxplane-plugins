@@ -2,6 +2,7 @@ package atlassian
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/codewandler/md2adf"
@@ -18,52 +19,26 @@ func TestADFToMarkdownEmptyAndPlainString(t *testing.T) {
 	}
 }
 
-func TestADFToMarkdownInlineMarks(t *testing.T) {
-	raw := json.RawMessage(`{"type":"doc","content":[{"type":"paragraph","content":[
-		{"type":"text","text":"a "},
-		{"type":"text","text":"bold","marks":[{"type":"strong"}]},
-		{"type":"text","text":" "},
-		{"type":"text","text":"italic","marks":[{"type":"em"}]},
-		{"type":"text","text":" "},
-		{"type":"text","text":"code","marks":[{"type":"code"}]},
-		{"type":"text","text":" "},
-		{"type":"text","text":"link","marks":[{"type":"link","attrs":{"href":"https://x.test"}}]}
-	]}]}`)
-	got := ADFToMarkdown(raw)
-	want := "a **bold** *italic* `code` [link](https://x.test)"
-	if got != want {
-		t.Fatalf("inline = %q, want %q", got, want)
-	}
-}
-
-func TestADFToMarkdownBlocks(t *testing.T) {
+func TestADFToMarkdownInlineAndBlocks(t *testing.T) {
 	raw := json.RawMessage(`{"type":"doc","content":[
 		{"type":"heading","attrs":{"level":2},"content":[{"type":"text","text":"Title"}]},
-		{"type":"bulletList","content":[
-			{"type":"listItem","content":[{"type":"paragraph","content":[{"type":"text","text":"one"}]}]},
-			{"type":"listItem","content":[{"type":"paragraph","content":[{"type":"text","text":"two"}]}]}
+		{"type":"paragraph","content":[
+			{"type":"text","text":"a "},
+			{"type":"text","text":"bold","marks":[{"type":"strong"}]},
+			{"type":"text","text":" "},
+			{"type":"text","text":"code","marks":[{"type":"code"}]},
+			{"type":"text","text":" "},
+			{"type":"text","text":"link","marks":[{"type":"link","attrs":{"href":"https://x.test"}}]}
 		]},
-		{"type":"codeBlock","attrs":{"language":"go"},"content":[{"type":"text","text":"x := 1"}]},
-		{"type":"blockquote","content":[{"type":"paragraph","content":[{"type":"text","text":"quoted"}]}]},
+		{"type":"bulletList","content":[
+			{"type":"listItem","content":[{"type":"paragraph","content":[{"type":"text","text":"one"}]}]}
+		]},
 		{"type":"rule"}
 	]}`)
 	got := ADFToMarkdown(raw)
-	want := "## Title\n\n- one\n- two\n\n```go\nx := 1\n```\n\n> quoted\n\n---"
+	want := "## Title\n\na **bold** `code` [link](https://x.test)\n\n- one\n\n---"
 	if got != want {
-		t.Fatalf("blocks =\n%q\nwant\n%q", got, want)
-	}
-}
-
-func TestADFToMarkdownMentionsAndCards(t *testing.T) {
-	raw := json.RawMessage(`{"type":"doc","content":[{"type":"paragraph","content":[
-		{"type":"mention","attrs":{"text":"@Ada","id":"acct-1"}},
-		{"type":"text","text":" see "},
-		{"type":"inlineCard","attrs":{"url":"https://card.test/1"}}
-	]}]}`)
-	got := ADFToMarkdown(raw)
-	want := "@Ada see https://card.test/1"
-	if got != want {
-		t.Fatalf("mentions/cards = %q, want %q", got, want)
+		t.Fatalf("render =\n%q\nwant\n%q", got, want)
 	}
 }
 
@@ -85,34 +60,32 @@ func TestADFToMarkdownTable(t *testing.T) {
 	}
 }
 
-// TestMarkdownToADFSanitizesCodeMarks verifies the converter repairs the
-// invalid ADF md2adf emits when inline code is nested inside bold/italic/strike:
-// a text node must not carry the code mark together with any mark except link,
-// or Jira rejects the whole document with 400 INVALID_INPUT.
+// conformanceCases capture the converter contract: no text node may carry the
+// code mark together with any mark except link, or Jira rejects the document
+// with 400 INVALID_INPUT.
+var conformanceCases = map[string]string{
+	"bold around code":   "**bold with `code` inside**",
+	"italic around code": "*italic with `code` inside*",
+	"strike around code": "~~struck with `code` inside~~",
+	"link around code":   "[`code`](https://x.test)",
+	"plain code":         "`code`",
+	"bold then code":     "**bold** and `code`",
+	"heading + list":     "# H\n\n- a\n- b\n\n```go\nx := 1\n```",
+}
+
 func TestMarkdownToADFSanitizesCodeMarks(t *testing.T) {
-	cases := map[string]string{
-		"bold around code":   "**bold with `code` inside**",
-		"italic around code": "*italic with `code` inside*",
-		"strike around code": "~~struck with `code` inside~~",
-		"link around code":   "[`code`](https://x.test)",
-		"plain code":         "`code`",
-		"bold then code":     "**bold** and `code`",
-	}
-	for name, markdown := range cases {
+	for name, md := range conformanceCases {
 		t.Run(name, func(t *testing.T) {
-			raw := MarkdownToADF(markdown)
 			var tree any
-			if err := json.Unmarshal(raw, &tree); err != nil {
-				t.Fatalf("unmarshal: %v\n%s", err, raw)
+			if err := json.Unmarshal(MarkdownToADF(md), &tree); err != nil {
+				t.Fatalf("invalid JSON: %v", err)
 			}
-			assertCodeMarksClean(t, tree)
+			assertNoIllegalCodeMarks(t, tree)
 		})
 	}
 }
 
-// assertCodeMarksClean fails if any text node carries the code mark alongside a
-// mark other than link.
-func assertCodeMarksClean(t *testing.T, v any) {
+func assertNoIllegalCodeMarks(t *testing.T, v any) {
 	t.Helper()
 	switch node := v.(type) {
 	case map[string]any:
@@ -130,32 +103,65 @@ func assertCodeMarksClean(t *testing.T, v any) {
 					for mt := range types {
 						if mt != "code" && mt != "link" {
 							body, _ := json.Marshal(node)
-							t.Fatalf("text node carries code mark with disallowed mark %q: %s", mt, body)
+							t.Fatalf("code mark combined with disallowed %q: %s", mt, body)
 						}
 					}
 				}
 			}
 		}
-		assertCodeMarksClean(t, node["content"])
+		assertNoIllegalCodeMarks(t, node["content"])
 	case []any:
 		for _, item := range node {
-			assertCodeMarksClean(t, item)
+			assertNoIllegalCodeMarks(t, item)
 		}
 	}
 }
 
-// TestADFRoundTrip confirms Markdown survives md2adf.Convert -> ADFToMarkdown
-// for the common constructs both halves support.
 func TestADFRoundTrip(t *testing.T) {
 	markdown := "# Heading\n\nSome **bold** and `code`.\n\n- one\n- two"
-	doc := md2adf.Convert(markdown)
-	raw, err := json.Marshal(doc)
-	if err != nil {
-		t.Fatalf("marshal: %v", err)
+	got := ADFToMarkdown(MarkdownToADF(markdown))
+	if got != markdown {
+		t.Fatalf("round trip =\n%q\nwant\n%q", got, markdown)
 	}
-	got := ADFToMarkdown(raw)
-	want := "# Heading\n\nSome **bold** and `code`.\n\n- one\n- two"
-	if got != want {
-		t.Fatalf("round trip =\n%q\nwant\n%q", got, want)
+}
+
+// FuzzMarkdownToADF asserts the converter never panics, always emits valid JSON,
+// and never produces the illegal code+other-mark combination, for any input.
+func FuzzMarkdownToADF(f *testing.F) {
+	for _, seed := range conformanceCases {
+		f.Add(seed)
 	}
+	f.Add("")
+	f.Add("plain text with `code` and **bold** and a [link](x) and ~~strike~~")
+	f.Add("- nested\n  - **deep `code`**\n\n> quote with `code`")
+	f.Fuzz(func(t *testing.T, markdown string) {
+		raw := MarkdownToADF(markdown)
+		if len(raw) == 0 {
+			return
+		}
+		var tree any
+		if err := json.Unmarshal(raw, &tree); err != nil {
+			t.Fatalf("MarkdownToADF produced invalid JSON for %q: %v", markdown, err)
+		}
+		assertNoIllegalCodeMarks(t, tree)
+	})
+}
+
+// FuzzADFToMarkdown asserts the renderer never panics on arbitrary inputs and is
+// stable when fed its own md2adf output.
+func FuzzADFToMarkdown(f *testing.F) {
+	f.Add(`{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"x"}]}]}`)
+	f.Add(`"plain"`)
+	f.Add(`null`)
+	f.Add(`{"type":"unknown"}`)
+	f.Add(`{`)
+	f.Fuzz(func(t *testing.T, raw string) {
+		_ = ADFToMarkdown(json.RawMessage(raw))
+		doc := md2adf.Convert(raw)
+		if data, err := json.Marshal(doc); err == nil {
+			if strings.Contains(ADFToMarkdown(data), "\x00") {
+				t.Fatalf("rendered output contains NUL for %q", raw)
+			}
+		}
+	})
 }

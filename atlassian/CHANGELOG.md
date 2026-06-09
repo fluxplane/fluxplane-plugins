@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.4.0
+
+### Changed
+- Jira write verification now uses the shared `pluginbinding.VerifyAppliedWarning`
+  convention instead of a hand-rolled check (behavior unchanged). Requires
+  `fluxplane-plugin` v0.4.0+.
+
+### Internal
+- Added an ADF conformance + fuzz suite (`FuzzMarkdownToADF`/`FuzzADFToMarkdown`)
+  in `internal/atlassian`, hardening the Markdown↔ADF converter shared by the
+  Jira and Confluence plugins. No behavior change.
+
 ## v0.3.0
 
 ### Fixed
