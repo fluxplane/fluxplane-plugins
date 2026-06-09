@@ -6,7 +6,83 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+
+	"github.com/codewandler/md2adf"
 )
+
+// MarkdownToADF converts Markdown into an Atlassian Document Format document,
+// repairing mark combinations that Jira's ADF validator rejects. The returned
+// JSON is ready to embed directly in a Jira rich-text field (description,
+// comment body).
+//
+// The underlying md2adf converter emits a single text node carrying both the
+// code mark and any enclosing formatting marks when inline code is nested inside
+// bold/italic/strikethrough (e.g. "**bold with `code` inside**"). ADF forbids
+// the code mark alongside any mark other than link, so Jira rejects the whole
+// payload with 400 INVALID_INPUT. We post-process the tree to drop the
+// incompatible marks, keeping the document valid.
+func MarkdownToADF(markdown string) json.RawMessage {
+	doc := md2adf.Convert(markdown)
+	data, err := json.Marshal(doc)
+	if err != nil {
+		return nil
+	}
+	var tree any
+	if err := json.Unmarshal(data, &tree); err != nil {
+		return data
+	}
+	sanitizeADFMarks(tree)
+	out, err := json.Marshal(tree)
+	if err != nil {
+		return data
+	}
+	return out
+}
+
+// sanitizeADFMarks walks a decoded ADF tree and repairs every text node so that
+// the code mark never coexists with a mark ADF disallows.
+func sanitizeADFMarks(v any) {
+	switch node := v.(type) {
+	case map[string]any:
+		if node["type"] == "text" {
+			pruneCodeMarks(node)
+		}
+		sanitizeADFMarks(node["content"])
+	case []any:
+		for _, item := range node {
+			sanitizeADFMarks(item)
+		}
+	}
+}
+
+// pruneCodeMarks drops every mark except code and link from a text node that
+// carries the code mark. ADF only permits code to combine with link.
+func pruneCodeMarks(node map[string]any) {
+	marks, ok := node["marks"].([]any)
+	if !ok || len(marks) == 0 {
+		return
+	}
+	hasCode := false
+	for _, mark := range marks {
+		if mm, ok := mark.(map[string]any); ok && mm["type"] == "code" {
+			hasCode = true
+			break
+		}
+	}
+	if !hasCode {
+		return
+	}
+	kept := make([]any, 0, len(marks))
+	for _, mark := range marks {
+		if mm, ok := mark.(map[string]any); ok {
+			switch mm["type"] {
+			case "code", "link":
+				kept = append(kept, mark)
+			}
+		}
+	}
+	node["marks"] = kept
+}
 
 // adfNode is a generic Atlassian Document Format node. ADF documents are JSON
 // trees whose nodes carry a type, optional child content, leaf text, inline

@@ -85,6 +85,65 @@ func TestADFToMarkdownTable(t *testing.T) {
 	}
 }
 
+// TestMarkdownToADFSanitizesCodeMarks verifies the converter repairs the
+// invalid ADF md2adf emits when inline code is nested inside bold/italic/strike:
+// a text node must not carry the code mark together with any mark except link,
+// or Jira rejects the whole document with 400 INVALID_INPUT.
+func TestMarkdownToADFSanitizesCodeMarks(t *testing.T) {
+	cases := map[string]string{
+		"bold around code":   "**bold with `code` inside**",
+		"italic around code": "*italic with `code` inside*",
+		"strike around code": "~~struck with `code` inside~~",
+		"link around code":   "[`code`](https://x.test)",
+		"plain code":         "`code`",
+		"bold then code":     "**bold** and `code`",
+	}
+	for name, markdown := range cases {
+		t.Run(name, func(t *testing.T) {
+			raw := MarkdownToADF(markdown)
+			var tree any
+			if err := json.Unmarshal(raw, &tree); err != nil {
+				t.Fatalf("unmarshal: %v\n%s", err, raw)
+			}
+			assertCodeMarksClean(t, tree)
+		})
+	}
+}
+
+// assertCodeMarksClean fails if any text node carries the code mark alongside a
+// mark other than link.
+func assertCodeMarksClean(t *testing.T, v any) {
+	t.Helper()
+	switch node := v.(type) {
+	case map[string]any:
+		if node["type"] == "text" {
+			if marks, ok := node["marks"].([]any); ok {
+				types := map[string]bool{}
+				for _, m := range marks {
+					if mm, ok := m.(map[string]any); ok {
+						if mt, ok := mm["type"].(string); ok {
+							types[mt] = true
+						}
+					}
+				}
+				if types["code"] {
+					for mt := range types {
+						if mt != "code" && mt != "link" {
+							body, _ := json.Marshal(node)
+							t.Fatalf("text node carries code mark with disallowed mark %q: %s", mt, body)
+						}
+					}
+				}
+			}
+		}
+		assertCodeMarksClean(t, node["content"])
+	case []any:
+		for _, item := range node {
+			assertCodeMarksClean(t, item)
+		}
+	}
+}
+
 // TestADFRoundTrip confirms Markdown survives md2adf.Convert -> ADFToMarkdown
 // for the common constructs both halves support.
 func TestADFRoundTrip(t *testing.T) {

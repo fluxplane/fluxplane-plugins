@@ -8,6 +8,7 @@ import (
 	"io"
 	"mime/multipart"
 	"net/url"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -436,19 +437,38 @@ func (c liveClient) getBytes(ctx context.Context, path string, query url.Values)
 	return resp.Body, resp.ContentType, nil
 }
 
+// jiraHTTPError turns a non-2xx Jira response into an error that preserves the
+// field-level detail Jira returns. A 400 from issue create/edit carries an
+// "errors" map naming the offending field(s) and reason; discarding it forces
+// callers to bisect their payload by hand, so we surface every part.
 func jiraHTTPError(status int, data []byte) error {
-	message := strings.TrimSpace(string(data))
 	var payload struct {
-		Message       string   `json:"message"`
-		ErrorMessages []string `json:"errorMessages"`
+		Message       string            `json:"message"`
+		ErrorMessages []string          `json:"errorMessages"`
+		Errors        map[string]string `json:"errors"`
 	}
+	var parts []string
 	if err := json.Unmarshal(data, &payload); err == nil {
-		switch {
-		case strings.TrimSpace(payload.Message) != "":
-			message = strings.TrimSpace(payload.Message)
-		case len(payload.ErrorMessages) > 0:
-			message = strings.Join(payload.ErrorMessages, "; ")
+		for _, msg := range payload.ErrorMessages {
+			if msg = strings.TrimSpace(msg); msg != "" {
+				parts = append(parts, msg)
+			}
 		}
+		fields := make([]string, 0, len(payload.Errors))
+		for field := range payload.Errors {
+			fields = append(fields, field)
+		}
+		sort.Strings(fields)
+		for _, field := range fields {
+			parts = append(parts, fmt.Sprintf("%s: %s", field, strings.TrimSpace(payload.Errors[field])))
+		}
+		if len(parts) == 0 && strings.TrimSpace(payload.Message) != "" {
+			parts = append(parts, strings.TrimSpace(payload.Message))
+		}
+	}
+	message := strings.Join(parts, "; ")
+	if message == "" {
+		message = strings.TrimSpace(string(data))
 	}
 	if message == "" {
 		message = "request failed"
@@ -460,7 +480,7 @@ func issueFields(fields []string) []string {
 	if len(fields) > 0 {
 		return fields
 	}
-	return []string{"summary", "description", "attachment", "status", "assignee", "reporter", "creator", "updated", "created", "project", "issuetype", "priority", "labels"}
+	return []string{"summary", "description", "attachment", "status", "assignee", "reporter", "creator", "updated", "created", "project", "issuetype", "priority", "labels", "parent"}
 }
 
 func clamp(value, fallback, max int) int {

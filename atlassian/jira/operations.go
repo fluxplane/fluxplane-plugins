@@ -7,7 +7,6 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/codewandler/md2adf"
 	"github.com/fluxplane/fluxplane-plugin/pluginbinding"
 	"github.com/fluxplane/fluxplane-plugins/atlassian/internal/atlassian"
 )
@@ -138,6 +137,7 @@ type IssueEditInput struct {
 	Labels              []string       `json:"labels,omitempty" jsonschema:"description=Labels to set."`
 	AssigneeAccountID   string         `json:"assignee_account_id,omitempty" jsonschema:"description=Assignee Atlassian account ID."`
 	Priority            string         `json:"priority,omitempty" jsonschema:"description=Priority name."`
+	ParentKey           string         `json:"parent_key,omitempty" jsonschema:"description=Parent issue key to reparent under (epic for stories; parent issue for subtasks)."`
 	Fields              map[string]any `json:"fields,omitempty" jsonschema:"description=Raw Jira fields. Explicit typed inputs override matching fields."`
 	Update              map[string]any `json:"update,omitempty" jsonschema:"description=Raw Jira update instructions."`
 }
@@ -447,6 +447,7 @@ func (s Service) IssueCreate(ctx pluginbinding.Context, input IssueCreateInput) 
 			result.Warning = fmt.Sprintf("issue %s created, but uploading inline images failed: %s", result.Key, uploadErr)
 		}
 	}
+	verifyTypedFieldsApplied(&result, input.Summary, input.AssigneeAccountID, input.ParentKey)
 	return result, nil
 }
 
@@ -658,6 +659,7 @@ func (s Service) IssueEdit(ctx pluginbinding.Context, input IssueEditInput) (Iss
 		return IssueMutationResult{}, pluginbinding.Errorf("jira", "%s", err)
 	}
 	result.Issue.render(bodyFormatMarkdown)
+	verifyTypedFieldsApplied(&result, input.Summary, input.AssigneeAccountID, input.ParentKey)
 	return result, nil
 }
 
@@ -1001,6 +1003,9 @@ func issueEditRequest(input IssueEditInput) (IssueEditRequest, error) {
 		fields["summary"] = summary
 	}
 	applyIssueCommonFields(fields, input.DescriptionMarkdown, input.Labels, input.AssigneeAccountID, input.Priority)
+	if parent := strings.TrimSpace(input.ParentKey); parent != "" {
+		fields["parent"] = map[string]string{"key": parent}
+	}
 	update := cloneAnyMap(input.Update)
 	if len(fields) == 0 && len(update) == 0 {
 		return IssueEditRequest{}, fmt.Errorf("at least one field or update instruction is required")
@@ -1008,9 +1013,71 @@ func issueEditRequest(input IssueEditInput) (IssueEditRequest, error) {
 	return IssueEditRequest{Fields: fields, Update: update}, nil
 }
 
+// verifyTypedFieldsApplied guards against Jira's silent no-op writes: it accepts
+// a field write with HTTP 200 even when the targeted field is not on the
+// edit/create screen, is unsupported by the project or issue type, or the
+// account lacks permission — most notoriously the parent / epic-link field. We
+// re-read the issue after every write, so here we compare the typed values the
+// caller asked to set against what the issue actually carries and attach a loud
+// warning naming the field(s) that did not stick, rather than letting "ok": true
+// mask a change that never happened.
+func verifyTypedFieldsApplied(result *IssueMutationResult, summary, assigneeAccountID, parentKey string) {
+	if result == nil || result.Issue == nil {
+		return
+	}
+	fields := result.Issue.Fields
+	var unapplied []string
+	if want := strings.TrimSpace(parentKey); want != "" {
+		got := ""
+		if fields.Parent != nil {
+			got = strings.TrimSpace(fields.Parent.Key)
+		}
+		if !strings.EqualFold(got, want) {
+			unapplied = append(unapplied, fmt.Sprintf("parent (requested %q, issue has %q)", want, orNone(got)))
+		}
+	}
+	if want := strings.TrimSpace(summary); want != "" && strings.TrimSpace(fields.Summary) != want {
+		unapplied = append(unapplied, fmt.Sprintf("summary (requested %q, issue has %q)", want, fields.Summary))
+	}
+	if want := strings.TrimSpace(assigneeAccountID); want != "" {
+		got := ""
+		if fields.Assignee != nil {
+			got = strings.TrimSpace(fields.Assignee.AccountID)
+		}
+		if got != want {
+			unapplied = append(unapplied, fmt.Sprintf("assignee (requested %q, issue has %q)", want, orNone(got)))
+		}
+	}
+	if len(unapplied) == 0 {
+		return
+	}
+	appendWarning(result, fmt.Sprintf(
+		"Jira accepted the write but these fields are not set on the issue afterward: %s. "+
+			"The field may not be on the project's create/edit screen, may require a different API "+
+			"(e.g. epic link in a company-managed project), or the account may lack permission. "+
+			"Run jira.issue.edit_meta to see which fields are settable.",
+		strings.Join(unapplied, "; "),
+	))
+}
+
+func appendWarning(result *IssueMutationResult, message string) {
+	if strings.TrimSpace(result.Warning) == "" {
+		result.Warning = message
+		return
+	}
+	result.Warning = result.Warning + "; " + message
+}
+
+func orNone(value string) string {
+	if strings.TrimSpace(value) == "" {
+		return "(unset)"
+	}
+	return value
+}
+
 func applyIssueCommonFields(fields map[string]any, descriptionMarkdown string, labels []string, assigneeAccountID, priority string) {
 	if strings.TrimSpace(descriptionMarkdown) != "" {
-		fields["description"] = md2adf.Convert(descriptionMarkdown)
+		fields["description"] = atlassian.MarkdownToADF(descriptionMarkdown)
 	}
 	if labels := cleanedStrings(labels); len(labels) > 0 {
 		fields["labels"] = labels
@@ -1027,7 +1094,7 @@ func commentRequest(bodyMarkdown string) (CommentRequest, error) {
 	if strings.TrimSpace(bodyMarkdown) == "" {
 		return CommentRequest{}, fmt.Errorf("body_markdown is required")
 	}
-	return CommentRequest{Body: md2adf.Convert(bodyMarkdown)}, nil
+	return CommentRequest{Body: atlassian.MarkdownToADF(bodyMarkdown)}, nil
 }
 
 func attachmentUploadRequest(ctx pluginbinding.Context, blobRef string, contentBytes []byte, filename, contentType string) (AttachmentUploadRequest, error) {

@@ -105,6 +105,7 @@ type IssueFields struct {
 	IssueType      NamedValue      `json:"issuetype,omitempty"`
 	Priority       NamedValue      `json:"priority,omitempty"`
 	Labels         []string        `json:"labels,omitempty"`
+	Parent         *IssueReference `json:"parent,omitempty"`
 	Updated        string          `json:"updated,omitempty"`
 	Created        string          `json:"created,omitempty"`
 	Raw            interface{}     `json:"-"`
@@ -148,6 +149,20 @@ func (i *Issue) render(format bodyFormat) {
 		return
 	}
 	i.Fields.render(format)
+}
+
+// IssueReference is a lightweight pointer to another issue (a parent epic or
+// the parent of a subtask) as Jira returns it under fields.parent.
+type IssueReference struct {
+	ID     string               `json:"id,omitempty"`
+	Key    string               `json:"key,omitempty"`
+	Fields *IssueReferenceField `json:"fields,omitempty"`
+}
+
+type IssueReferenceField struct {
+	Summary   string     `json:"summary,omitempty"`
+	Status    NamedValue `json:"status,omitempty"`
+	IssueType NamedValue `json:"issuetype,omitempty"`
 }
 
 type Project struct {

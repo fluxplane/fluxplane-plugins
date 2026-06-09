@@ -225,6 +225,124 @@ func TestIssueCreateConvertsMarkdownDescriptionToADF(t *testing.T) {
 	}
 }
 
+func TestJiraHTTPErrorIncludesFieldErrors(t *testing.T) {
+	body := []byte(`{"errorMessages":["You must specify a project."],"errors":{"parent":"Issue does not exist or you do not have permission to see it.","summary":"You must specify a summary."}}`)
+	err := jiraHTTPError(400, body)
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	msg := err.Error()
+	for _, want := range []string{
+		"status 400",
+		"You must specify a project.",
+		"parent: Issue does not exist or you do not have permission to see it.",
+		"summary: You must specify a summary.",
+	} {
+		if !strings.Contains(msg, want) {
+			t.Fatalf("error = %q, missing %q", msg, want)
+		}
+	}
+}
+
+func TestJiraHTTPErrorFallsBackToMessageThenBody(t *testing.T) {
+	if got := jiraHTTPError(401, []byte(`{"message":"Unauthorized"}`)).Error(); !strings.Contains(got, "Unauthorized") {
+		t.Fatalf("message fallback = %q", got)
+	}
+	if got := jiraHTTPError(503, []byte("upstream down")).Error(); !strings.Contains(got, "upstream down") {
+		t.Fatalf("raw-body fallback = %q", got)
+	}
+}
+
+func TestIssueCreateWarnsWhenParentSilentlyDropped(t *testing.T) {
+	// The created issue comes back without the requested parent — the Jira
+	// silent no-op the warning is meant to surface.
+	client := &fakeClient{createResult: IssueMutationResult{
+		OK:    true,
+		Key:   "DEV-9",
+		Issue: &Issue{Key: "DEV-9", Fields: IssueFields{Summary: "Story"}},
+	}}
+	plugin := testPlugin(client)
+
+	out := plugintest.RunOK[IssueMutationResult](t, plugin, OperationIssueCreate, map[string]any{
+		"project_key": "DEV",
+		"issue_type":  "Story",
+		"summary":     "Story",
+		"parent_key":  "EPIC-1",
+	})
+	if out.Warning == "" || !strings.Contains(out.Warning, "parent") || !strings.Contains(out.Warning, "EPIC-1") {
+		t.Fatalf("expected parent warning, got %q", out.Warning)
+	}
+}
+
+func TestIssueCreateNoWarningWhenParentApplied(t *testing.T) {
+	client := &fakeClient{createResult: IssueMutationResult{
+		OK:    true,
+		Key:   "DEV-9",
+		Issue: &Issue{Key: "DEV-9", Fields: IssueFields{Summary: "Story", Parent: &IssueReference{Key: "EPIC-1"}}},
+	}}
+	plugin := testPlugin(client)
+
+	out := plugintest.RunOK[IssueMutationResult](t, plugin, OperationIssueCreate, map[string]any{
+		"project_key": "DEV",
+		"issue_type":  "Story",
+		"summary":     "Story",
+		"parent_key":  "EPIC-1",
+	})
+	if out.Warning != "" {
+		t.Fatalf("unexpected warning: %q", out.Warning)
+	}
+}
+
+func TestIssueEditSetsParentAndVerifies(t *testing.T) {
+	client := &fakeClient{editResult: IssueMutationResult{
+		OK:    true,
+		Key:   "DEV-9",
+		Issue: &Issue{Key: "DEV-9", Fields: IssueFields{Parent: &IssueReference{Key: "EPIC-2"}}},
+	}}
+	plugin := testPlugin(client)
+
+	out := plugintest.RunOK[IssueMutationResult](t, plugin, OperationIssueEdit, map[string]any{
+		"key":        "DEV-9",
+		"parent_key": "EPIC-2",
+	})
+	body := requestJSON(client.editRequest)
+	if !strings.Contains(body, `"parent":{"key":"EPIC-2"}`) {
+		t.Fatalf("edit request = %s, missing parent field", body)
+	}
+	if out.Warning != "" {
+		t.Fatalf("unexpected warning: %q", out.Warning)
+	}
+}
+
+func TestIssueCreateConvertsBoldNestedCodeToValidADF(t *testing.T) {
+	client := &fakeClient{createResult: IssueMutationResult{OK: true, Key: "DEV-9"}}
+	plugin := testPlugin(client)
+
+	plugintest.RunOK[IssueMutationResult](t, plugin, OperationIssueCreate, map[string]any{
+		"project_key":          "DEV",
+		"issue_type":           "Task",
+		"summary":              "S",
+		"description_markdown": "**bold with `code` inside**",
+	})
+	desc, ok := client.createRequest.Fields["description"]
+	if !ok {
+		t.Fatal("description field missing from create request")
+	}
+	raw, err := json.Marshal(desc)
+	if err != nil {
+		t.Fatalf("marshal description: %v", err)
+	}
+	// The code-marked text node must not also carry the strong mark, or Jira
+	// rejects the document. Assert the invalid combination is absent.
+	if strings.Contains(string(raw), `{"type":"code"},{"type":"strong"}`) ||
+		strings.Contains(string(raw), `{"type":"strong"},{"type":"code"}`) {
+		t.Fatalf("description ADF still nests code inside strong: %s", raw)
+	}
+	if !strings.Contains(string(raw), `"type":"code"`) {
+		t.Fatalf("description ADF lost the code mark entirely: %s", raw)
+	}
+}
+
 func TestIssueEditSendsOnlyProvidedFieldsAndRawUpdate(t *testing.T) {
 	client := &fakeClient{editResult: IssueMutationResult{OK: true, Key: "DEX-9"}}
 	plugin := testPlugin(client)

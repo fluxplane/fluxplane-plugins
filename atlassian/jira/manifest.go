@@ -8,7 +8,7 @@ import (
 
 const (
 	PluginName        = "jira"
-	PluginVersion     = "0.19.0"
+	PluginVersion     = "0.20.0"
 	PluginDescription = "Jira Cloud issue operations, comments, attachments, transitions, datasources, indexes, and reverse lookups."
 
 	AuthMethodAtlassianCloud = "atlassian_cloud_basic"
@@ -142,7 +142,7 @@ func transitionListSpec() core.OperationSpec {
 }
 
 func transitionRunSpec() core.OperationSpec {
-	return pluginbinding.TypedOperationSpec[IssueTransitionRunInput, IssueTransitionRunResult](OperationTransitionRun, "Run a Jira issue transition, optionally walking available transitions until a target status is reached.", jiraWriteOptions(core.OperationNonIdempotent)...)
+	return pluginbinding.TypedOperationSpec[IssueTransitionRunInput, IssueTransitionRunResult](OperationTransitionRun, "Run a Jira issue transition. Provide exactly one of transition_id, transition_name, or target_status (these are flat top-level keys, not a nested transition object). Run jira.issue.transition.list first to see the available transition IDs and names. With auto_transition, walks intermediate transitions until target_status is reached.", jiraWriteOptions(core.OperationNonIdempotent)...)
 }
 
 func commentAddSpec() core.OperationSpec {
@@ -178,11 +178,11 @@ func attachmentDeleteSpec() core.OperationSpec {
 }
 
 func issueCreateSpec() core.OperationSpec {
-	return pluginbinding.TypedOperationSpec[IssueCreateInput, IssueMutationResult](OperationIssueCreate, "Create a Jira issue from structured fields and Markdown.", jiraFilesystemWriteOptions(core.OperationNonIdempotent)...)
+	return pluginbinding.TypedOperationSpec[IssueCreateInput, IssueMutationResult](OperationIssueCreate, "Create a Jira issue from structured fields and Markdown. Typed fields (summary, parent_key, assignee) are verified against the created issue and any that Jira silently dropped are reported in a warning.", jiraFilesystemWriteOptions(core.OperationNonIdempotent)...)
 }
 
 func issueEditSpec() core.OperationSpec {
-	return pluginbinding.TypedOperationSpec[IssueEditInput, IssueMutationResult](OperationIssueEdit, "Edit a Jira issue from structured fields and Markdown.", jiraFilesystemWriteOptions(core.OperationNonIdempotent)...)
+	return pluginbinding.TypedOperationSpec[IssueEditInput, IssueMutationResult](OperationIssueEdit, "Edit a Jira issue from structured fields and Markdown, including reparenting via parent_key. Typed fields (summary, parent_key, assignee) are verified against the updated issue and any that Jira silently dropped are reported in a warning.", jiraFilesystemWriteOptions(core.OperationNonIdempotent)...)
 }
 
 func issueDeleteSpec() core.OperationSpec {
