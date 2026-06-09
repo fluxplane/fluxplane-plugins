@@ -100,13 +100,6 @@
       "local_path": "openai"
     },
     {
-      "name": "openapi",
-      "description": "Invoke HTTP APIs described by an OpenAPI specification.",
-      "binary": "fluxplane-plugin-openapi",
-      "go_install": "github.com/fluxplane/fluxplane-plugins/openapi/cmd/fluxplane-plugin-openapi@latest",
-      "local_path": "openapi"
-    },
-    {
       "name": "docker",
       "description": "Local Docker Engine inspection for containers, images, networks, volumes, and daemon info.",
       "binary": "fluxplane-plugin-docker",
