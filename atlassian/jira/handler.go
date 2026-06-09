@@ -23,6 +23,7 @@ func NewPluginWithService(service Service) *pluginbinding.Plugin {
 		pluginbinding.RegisterOperation(commentAddSpec(), service.CommentAdd),
 		pluginbinding.RegisterOperation(commentEditSpec(), service.CommentEdit),
 		pluginbinding.RegisterOperation(commentDeleteSpec(), service.CommentDelete),
+		pluginbinding.RegisterOperation(commentListSpec(), service.CommentList),
 		pluginbinding.RegisterOperation(attachmentAddSpec(), service.AttachmentAdd),
 		pluginbinding.RegisterOperation(attachmentListSpec(), service.AttachmentList),
 		pluginbinding.RegisterOperation(attachmentGetSpec(), service.AttachmentGet),

@@ -310,6 +310,82 @@ func TestCommentsConvertMarkdownAndDeleteByID(t *testing.T) {
 	}
 }
 
+func TestCommentListRendersMarkdownAndPaginates(t *testing.T) {
+	commentADF := json.RawMessage(`{"type":"doc","version":1,"content":[{"type":"paragraph","content":[{"type":"text","text":"Hello "},{"type":"text","text":"world","marks":[{"type":"strong"}]}]}]}`)
+	client := &fakeClient{commentList: CommentListResult{
+		Count:    1,
+		Total:    3,
+		StartAt:  0,
+		Comments: []Comment{{ID: "1", rawBody: commentADF}},
+	}}
+	plugin := testPlugin(client)
+
+	out := plugintest.RunOK[CommentListResult](t, plugin, OperationCommentList, map[string]any{
+		"key":      "DEX-9",
+		"limit":    2,
+		"start_at": 0,
+		"order":    "-created",
+	})
+	if out.IssueKey != "DEX-9" || out.Total != 3 || len(out.Comments) != 1 {
+		t.Fatalf("list output = %#v", out)
+	}
+	if out.NextStartAt != 1 {
+		t.Fatalf("next_start_at = %d, want 1", out.NextStartAt)
+	}
+	if out.Comments[0].Body != "Hello **world**" {
+		t.Fatalf("rendered body = %q", out.Comments[0].Body)
+	}
+	if len(out.Comments[0].BodyADF) != 0 {
+		t.Fatalf("default body_format should omit raw ADF: %s", out.Comments[0].BodyADF)
+	}
+	if client.commentKey != "DEX-9" || client.commentListOptions.Limit != 2 || client.commentListOptions.Order != "-created" {
+		t.Fatalf("list options = %q %#v", client.commentKey, client.commentListOptions)
+	}
+}
+
+func TestCommentListBodyFormatADFAndBoth(t *testing.T) {
+	commentADF := json.RawMessage(`{"type":"doc","version":1,"content":[{"type":"paragraph","content":[{"type":"text","text":"raw"}]}]}`)
+	client := &fakeClient{commentList: CommentListResult{Count: 1, Total: 1, Comments: []Comment{{ID: "1", rawBody: commentADF}}}}
+	plugin := testPlugin(client)
+
+	adf := plugintest.RunOK[CommentListResult](t, plugin, OperationCommentList, map[string]any{"key": "DEX-9", "body_format": "adf"})
+	if adf.Comments[0].Body != "" || len(adf.Comments[0].BodyADF) == 0 {
+		t.Fatalf("adf format = %#v", adf.Comments[0])
+	}
+
+	both := plugintest.RunOK[CommentListResult](t, plugin, OperationCommentList, map[string]any{"key": "DEX-9", "body_format": "both"})
+	if both.Comments[0].Body != "raw" || len(both.Comments[0].BodyADF) == 0 {
+		t.Fatalf("both format = %#v", both.Comments[0])
+	}
+}
+
+func TestCommentListRejectsInvalidOrder(t *testing.T) {
+	plugin := testPlugin(&fakeClient{})
+	err := plugintest.RunError(t, plugin, OperationCommentList, map[string]any{"key": "DEX-9", "order": "priority"})
+	if err == nil || err.Code != "bad_input" {
+		t.Fatalf("error = %#v", err)
+	}
+}
+
+func TestIssueShowRendersDescriptionMarkdown(t *testing.T) {
+	descADF := json.RawMessage(`{"type":"doc","version":1,"content":[{"type":"heading","attrs":{"level":2},"content":[{"type":"text","text":"Goal"}]},{"type":"paragraph","content":[{"type":"text","text":"ship it"}]}]}`)
+	client := &fakeClient{issue: Issue{Key: "DEX-7", Fields: IssueFields{Summary: "S", rawDescription: descADF}}}
+	plugin := testPlugin(client)
+
+	out := plugintest.RunOK[pluginbinding.ShowResult[Issue]](t, plugin, OperationIssueShow, map[string]any{"key": "DEX-7"})
+	if out.Record.Fields.Description != "## Goal\n\nship it" {
+		t.Fatalf("rendered description = %q", out.Record.Fields.Description)
+	}
+	if len(out.Record.Fields.DescriptionADF) != 0 {
+		t.Fatalf("default body_format should omit description ADF: %s", out.Record.Fields.DescriptionADF)
+	}
+
+	adf := plugintest.RunOK[pluginbinding.ShowResult[Issue]](t, plugin, OperationIssueShow, map[string]any{"key": "DEX-7", "body_format": "adf"})
+	if adf.Record.Fields.Description != "" || len(adf.Record.Fields.DescriptionADF) == 0 {
+		t.Fatalf("adf format = %#v", adf.Record.Fields)
+	}
+}
+
 func TestIssueDeletePassesDeleteSubtasks(t *testing.T) {
 	client := &fakeClient{deleteResult: IssueMutationResult{OK: true, Key: "DEX-9"}}
 	plugin := testPlugin(client)
@@ -543,6 +619,8 @@ type fakeClient struct {
 	editRequest            IssueEditRequest
 	transitionRequests     []IssueTransitionRequest
 	commentRequest         CommentRequest
+	commentList            CommentListResult
+	commentListOptions     CommentListOptions
 }
 
 func (c *fakeClient) CurrentUser(context.Context) (User, error) {
@@ -618,6 +696,17 @@ func (c *fakeClient) DeleteComment(_ context.Context, key, commentID string) (Co
 	c.commentKey = key
 	c.deletedCommentID = commentID
 	return c.commentDeleteResult, nil
+}
+
+func (c *fakeClient) ListComments(_ context.Context, key string, opts CommentListOptions) (CommentListResult, error) {
+	c.commentKey = key
+	c.commentListOptions = opts
+	result := c.commentList
+	result.IssueKey = key
+	if next := result.StartAt + len(result.Comments); next < result.Total {
+		result.NextStartAt = next
+	}
+	return result, nil
 }
 
 func (c *fakeClient) UploadIssueAttachment(_ context.Context, key string, request AttachmentUploadRequest) (AttachmentUploadResult, error) {

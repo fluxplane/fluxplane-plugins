@@ -8,7 +8,7 @@ import (
 
 const (
 	PluginName        = "jira"
-	PluginVersion     = "0.18.2"
+	PluginVersion     = "0.19.0"
 	PluginDescription = "Jira Cloud issue operations, comments, attachments, transitions, datasources, indexes, and reverse lookups."
 
 	AuthMethodAtlassianCloud = "atlassian_cloud_basic"
@@ -30,6 +30,7 @@ const (
 	OperationCommentAdd       = "jira.issue.comment.add"
 	OperationCommentEdit      = "jira.issue.comment.edit"
 	OperationCommentDelete    = "jira.issue.comment.delete"
+	OperationCommentList      = "jira.issue.comment.list"
 	OperationAttachmentAdd    = "jira.issue.attachment.add"
 	OperationAttachmentList   = "jira.issue.attachment.list"
 	OperationAttachmentGet    = "jira.issue.attachment.get"
@@ -106,6 +107,7 @@ func operationSpecs() []core.OperationSpec {
 		commentAddSpec(),
 		commentEditSpec(),
 		commentDeleteSpec(),
+		commentListSpec(),
 		attachmentAddSpec(),
 		attachmentListSpec(),
 		attachmentGetSpec(),
@@ -153,6 +155,10 @@ func commentEditSpec() core.OperationSpec {
 
 func commentDeleteSpec() core.OperationSpec {
 	return pluginbinding.TypedOperationSpec[CommentDeleteInput, CommentMutationResult](OperationCommentDelete, "Delete a Jira issue comment.", jiraWriteOptions(core.OperationNonIdempotent)...)
+}
+
+func commentListSpec() core.OperationSpec {
+	return jiraReadOperation[CommentListInput, CommentListResult](OperationCommentList, "List comments on a Jira issue as Markdown, with raw ADF available via body_format.")
 }
 
 func attachmentAddSpec() core.OperationSpec {

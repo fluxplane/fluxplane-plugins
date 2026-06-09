@@ -58,6 +58,16 @@ type JiraTargetInput struct {
 	EndpointRef string `json:"endpoint_ref,omitempty" jsonschema:"description=Registered Jira endpoint ref resolved by the host."`
 }
 
+// BodyFormatInput lets callers choose how rich-text bodies are returned. The
+// default keeps agents on readable Markdown instead of raw ADF.
+type BodyFormatInput struct {
+	BodyFormat string `json:"body_format,omitempty" jsonschema:"description=Rich text body format for issue descriptions and comments. markdown (default) renders readable Markdown; adf returns the raw Atlassian Document Format; both returns each,enum=markdown,enum=adf,enum=both"`
+}
+
+func (b BodyFormatInput) format() bodyFormat {
+	return parseBodyFormat(b.BodyFormat)
+}
+
 type AuthTestInput struct {
 	JiraTargetInput
 }
@@ -77,6 +87,7 @@ type AuthTestResult struct {
 
 type IssueSearchInput struct {
 	pluginbinding.DatasourceSearchInput
+	BodyFormatInput
 	JQL     string   `json:"jql,omitempty" jsonschema:"description=Jira JQL query"`
 	Project string   `json:"project,omitempty" jsonschema:"description=Project key filter"`
 	Status  string   `json:"status,omitempty" jsonschema:"description=Status filter"`
@@ -86,6 +97,7 @@ type IssueSearchInput struct {
 
 type IssueShowInput struct {
 	JiraTargetInput
+	BodyFormatInput
 	Key string `json:"key,omitempty" jsonschema:"description=Issue key"`
 	ID  string `json:"id,omitempty" jsonschema:"description=Alias for key"`
 }
@@ -176,6 +188,16 @@ type CommentDeleteInput struct {
 	CommentID string `json:"comment_id,omitempty" jsonschema:"required,description=Jira comment ID."`
 }
 
+type CommentListInput struct {
+	JiraTargetInput
+	BodyFormatInput
+	Key     string `json:"key,omitempty" jsonschema:"required,description=Issue key."`
+	ID      string `json:"id,omitempty" jsonschema:"description=Alias for key."`
+	Limit   int    `json:"limit,omitempty" jsonschema:"description=Maximum comments to return. Defaults to 20 and caps at 100."`
+	StartAt int    `json:"start_at,omitempty" jsonschema:"description=Zero-based index of the first comment to return for pagination."`
+	Order   string `json:"order,omitempty" jsonschema:"description=Sort order by creation time. created is oldest first (default); -created is newest first,enum=created,enum=-created"`
+}
+
 type AttachmentAddInput struct {
 	JiraTargetInput
 	Key          string `json:"key,omitempty" jsonschema:"required,description=Issue key."`
@@ -242,6 +264,10 @@ func (s Service) IssueSearch(ctx pluginbinding.Context, input IssueSearchInput) 
 	if err != nil {
 		return IssueSearchResult{}, pluginbinding.Errorf("jira", "%s", err)
 	}
+	format := input.format()
+	for i := range issues {
+		issues[i].render(format)
+	}
 	return pluginbinding.NewListResult(issues), nil
 }
 
@@ -258,6 +284,7 @@ func (s Service) IssueShow(ctx pluginbinding.Context, input IssueShowInput) (plu
 	if err != nil {
 		return pluginbinding.ShowResult[Issue]{}, pluginbinding.Errorf("jira", "%s", err)
 	}
+	issue.render(input.format())
 	return pluginbinding.NewShowResult(issue, map[string]any{"key": key}), nil
 }
 
@@ -337,6 +364,7 @@ func (s Service) TransitionRun(ctx pluginbinding.Context, input IssueTransitionR
 			return IssueTransitionRunResult{}, pluginbinding.Errorf("jira", "%s", err)
 		}
 		if strings.TrimSpace(issue.Key) != "" {
+			issue.render(bodyFormatMarkdown)
 			result.Issue = &issue
 		}
 		return result, nil
@@ -363,6 +391,7 @@ func (s Service) TransitionRun(ctx pluginbinding.Context, input IssueTransitionR
 		result.AppliedTransitions = append(result.AppliedTransitions, transition)
 		result.Steps++
 		if mutation.Issue != nil {
+			mutation.Issue.render(bodyFormatMarkdown)
 			result.Issue = mutation.Issue
 			result.CurrentStatus = mutation.Issue.Fields.Status
 		}
@@ -398,6 +427,7 @@ func (s Service) IssueCreate(ctx pluginbinding.Context, input IssueCreateInput) 
 	if err != nil {
 		return IssueMutationResult{}, pluginbinding.Errorf("jira", "%s", err)
 	}
+	result.Issue.render(bodyFormatMarkdown)
 	if strings.TrimSpace(input.DescriptionMarkdown) != "" && strings.TrimSpace(result.Key) != "" {
 		rewritten, uploadErr := uploadMarkdownBlobImages(ctx, client, result.Key, input.DescriptionMarkdown)
 		if uploadErr == nil && rewritten != input.DescriptionMarkdown {
@@ -411,6 +441,7 @@ func (s Service) IssueCreate(ctx pluginbinding.Context, input IssueCreateInput) 
 				result.Warning = fmt.Sprintf("issue %s created, but updating description with uploaded images failed: %s", result.Key, editErr)
 				return result, nil
 			}
+			updated.Issue.render(bodyFormatMarkdown)
 			result.Issue = updated.Issue
 		} else if uploadErr != nil {
 			result.Warning = fmt.Sprintf("issue %s created, but uploading inline images failed: %s", result.Key, uploadErr)
@@ -441,6 +472,7 @@ func (s Service) CommentAdd(ctx pluginbinding.Context, input CommentAddInput) (C
 	if err != nil {
 		return CommentResult{}, pluginbinding.Errorf("jira", "%s", err)
 	}
+	result.Comment.render(bodyFormatMarkdown)
 	return result, nil
 }
 
@@ -469,6 +501,31 @@ func (s Service) CommentEdit(ctx pluginbinding.Context, input CommentEditInput) 
 	result, err := client.EditComment(context.Background(), key, commentID, request)
 	if err != nil {
 		return CommentResult{}, pluginbinding.Errorf("jira", "%s", err)
+	}
+	result.Comment.render(bodyFormatMarkdown)
+	return result, nil
+}
+
+func (s Service) CommentList(ctx pluginbinding.Context, input CommentListInput) (CommentListResult, error) {
+	client, _, err := s.client(ctx, input)
+	if err != nil {
+		return CommentListResult{}, pluginbinding.Errorf("secret", "%s", err)
+	}
+	key := strings.TrimSpace(pluginbinding.FirstString(pluginbinding.InputMap(input), "key", "id"))
+	if key == "" {
+		return CommentListResult{}, pluginbinding.Fail("bad_input", "issue key is required")
+	}
+	order := strings.TrimSpace(input.Order)
+	if order != "" && order != "created" && order != "-created" {
+		return CommentListResult{}, pluginbinding.Fail("bad_input", "order must be created or -created")
+	}
+	result, err := client.ListComments(context.Background(), key, CommentListOptions{Limit: input.Limit, StartAt: input.StartAt, Order: order})
+	if err != nil {
+		return CommentListResult{}, pluginbinding.Errorf("jira", "%s", err)
+	}
+	format := input.format()
+	for i := range result.Comments {
+		result.Comments[i].render(format)
 	}
 	return result, nil
 }
@@ -600,6 +657,7 @@ func (s Service) IssueEdit(ctx pluginbinding.Context, input IssueEditInput) (Iss
 	if err != nil {
 		return IssueMutationResult{}, pluginbinding.Errorf("jira", "%s", err)
 	}
+	result.Issue.render(bodyFormatMarkdown)
 	return result, nil
 }
 

@@ -6,7 +6,62 @@ import (
 	"strings"
 
 	"github.com/fluxplane/fluxplane-plugin/pluginbinding"
+	"github.com/fluxplane/fluxplane-plugins/atlassian/internal/atlassian"
 )
+
+// bodyFormat selects how rich-text bodies (issue descriptions, comments) are
+// rendered for callers. The default keeps agents away from raw ADF.
+type bodyFormat string
+
+const (
+	bodyFormatMarkdown bodyFormat = "markdown"
+	bodyFormatADF      bodyFormat = "adf"
+	bodyFormatBoth     bodyFormat = "both"
+)
+
+func parseBodyFormat(value string) bodyFormat {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case string(bodyFormatADF):
+		return bodyFormatADF
+	case string(bodyFormatBoth):
+		return bodyFormatBoth
+	default:
+		return bodyFormatMarkdown
+	}
+}
+
+func nonEmptyRaw(raw json.RawMessage) json.RawMessage {
+	if trimmed := strings.TrimSpace(string(raw)); trimmed == "" || trimmed == "null" {
+		return nil
+	}
+	return raw
+}
+
+// captureADF interprets a rich-text JSON value that may be either an ADF
+// document (object/array, as Jira sends) or an already-rendered Markdown string
+// (our own output form, so the type round-trips). Exactly one return is set.
+func captureADF(raw json.RawMessage) (rendered string, adf json.RawMessage) {
+	raw = nonEmptyRaw(raw)
+	if len(raw) == 0 {
+		return "", nil
+	}
+	if raw[0] == '"' {
+		var s string
+		if err := json.Unmarshal(raw, &s); err == nil {
+			return s, nil
+		}
+	}
+	return "", raw
+}
+
+// renderedMarkdown renders ADF to Markdown, falling back to an already-rendered
+// string when no raw ADF is present (e.g. a round-tripped value).
+func renderedMarkdown(existing string, raw json.RawMessage) string {
+	if len(nonEmptyRaw(raw)) > 0 {
+		return atlassian.ADFToMarkdown(raw)
+	}
+	return existing
+}
 
 type User struct {
 	AccountID    string `json:"accountId,omitempty"`
@@ -35,20 +90,64 @@ type Issue struct {
 }
 
 type IssueFields struct {
-	Summary     string          `json:"summary,omitempty"`
-	Description json.RawMessage `json:"description,omitempty"`
-	Attachments []Attachment    `json:"attachment,omitempty"`
-	Status      NamedValue      `json:"status,omitempty"`
-	Assignee    *User           `json:"assignee,omitempty"`
-	Reporter    *User           `json:"reporter,omitempty"`
-	Creator     *User           `json:"creator,omitempty"`
-	Project     Project         `json:"project,omitempty"`
-	IssueType   NamedValue      `json:"issuetype,omitempty"`
-	Priority    NamedValue      `json:"priority,omitempty"`
-	Labels      []string        `json:"labels,omitempty"`
-	Updated     string          `json:"updated,omitempty"`
-	Created     string          `json:"created,omitempty"`
-	Raw         interface{}     `json:"-"`
+	Summary string `json:"summary,omitempty"`
+	// Description is the issue description rendered to Markdown by default so
+	// callers never handle raw ADF. DescriptionADF carries the raw Atlassian
+	// Document Format and is only populated when body_format is adf or both.
+	Description    string          `json:"description,omitempty"`
+	DescriptionADF json.RawMessage `json:"description_adf,omitempty"`
+	Attachments    []Attachment    `json:"attachment,omitempty"`
+	Status         NamedValue      `json:"status,omitempty"`
+	Assignee       *User           `json:"assignee,omitempty"`
+	Reporter       *User           `json:"reporter,omitempty"`
+	Creator        *User           `json:"creator,omitempty"`
+	Project        Project         `json:"project,omitempty"`
+	IssueType      NamedValue      `json:"issuetype,omitempty"`
+	Priority       NamedValue      `json:"priority,omitempty"`
+	Labels         []string        `json:"labels,omitempty"`
+	Updated        string          `json:"updated,omitempty"`
+	Created        string          `json:"created,omitempty"`
+	Raw            interface{}     `json:"-"`
+
+	// rawDescription holds the description ADF as received from Jira until
+	// render decides which representation(s) to expose.
+	rawDescription json.RawMessage
+}
+
+// UnmarshalJSON captures Jira's ADF description object into rawDescription
+// (leaving render to choose the output representation) while still accepting an
+// already-rendered string body so the type round-trips through its own output.
+func (f *IssueFields) UnmarshalJSON(data []byte) error {
+	type wire IssueFields
+	aux := struct {
+		*wire
+		Description json.RawMessage `json:"description"`
+	}{wire: (*wire)(f)}
+	if err := json.Unmarshal(data, &aux); err != nil {
+		return err
+	}
+	f.Description, f.rawDescription = captureADF(aux.Description)
+	return nil
+}
+
+func (f *IssueFields) render(format bodyFormat) {
+	md := renderedMarkdown(f.Description, f.rawDescription)
+	adf := nonEmptyRaw(f.rawDescription)
+	switch format {
+	case bodyFormatADF:
+		f.Description, f.DescriptionADF = "", adf
+	case bodyFormatBoth:
+		f.Description, f.DescriptionADF = md, adf
+	default:
+		f.Description, f.DescriptionADF = md, nil
+	}
+}
+
+func (i *Issue) render(format bodyFormat) {
+	if i == nil {
+		return
+	}
+	i.Fields.render(format)
 }
 
 type Project struct {
@@ -156,13 +255,50 @@ type CommentRequest struct {
 }
 
 type Comment struct {
-	ID           string          `json:"id,omitempty"`
-	Self         string          `json:"self,omitempty"`
-	Body         json.RawMessage `json:"body,omitempty"`
+	ID   string `json:"id,omitempty"`
+	Self string `json:"self,omitempty"`
+	// Body is the comment rendered to Markdown by default so callers never
+	// handle raw ADF. BodyADF carries the raw Atlassian Document Format and is
+	// only populated when body_format is adf or both.
+	Body         string          `json:"body,omitempty"`
+	BodyADF      json.RawMessage `json:"body_adf,omitempty"`
 	Author       *User           `json:"author,omitempty"`
 	UpdateAuthor *User           `json:"updateAuthor,omitempty"`
 	Created      string          `json:"created,omitempty"`
 	Updated      string          `json:"updated,omitempty"`
+
+	// rawBody holds the comment ADF as received from Jira until render decides
+	// which representation(s) to expose.
+	rawBody json.RawMessage
+}
+
+// UnmarshalJSON captures Jira's ADF comment body into rawBody (leaving render
+// to choose the output representation) while still accepting an already-rendered
+// string body so the type round-trips through its own output.
+func (c *Comment) UnmarshalJSON(data []byte) error {
+	type wire Comment
+	aux := struct {
+		*wire
+		Body json.RawMessage `json:"body"`
+	}{wire: (*wire)(c)}
+	if err := json.Unmarshal(data, &aux); err != nil {
+		return err
+	}
+	c.Body, c.rawBody = captureADF(aux.Body)
+	return nil
+}
+
+func (c *Comment) render(format bodyFormat) {
+	md := renderedMarkdown(c.Body, c.rawBody)
+	adf := nonEmptyRaw(c.rawBody)
+	switch format {
+	case bodyFormatADF:
+		c.Body, c.BodyADF = "", adf
+	case bodyFormatBoth:
+		c.Body, c.BodyADF = md, adf
+	default:
+		c.Body, c.BodyADF = md, nil
+	}
 }
 
 type CommentResult struct {
@@ -175,6 +311,29 @@ type CommentMutationResult struct {
 	OK        bool   `json:"ok"`
 	IssueKey  string `json:"issue_key,omitempty"`
 	CommentID string `json:"comment_id,omitempty"`
+}
+
+// CommentListOptions controls a paginated comment fetch.
+type CommentListOptions struct {
+	Limit   int
+	StartAt int
+	Order   string
+}
+
+type CommentListResult struct {
+	IssueKey    string    `json:"issue_key,omitempty"`
+	Count       int       `json:"count"`
+	Total       int       `json:"total"`
+	StartAt     int       `json:"start_at"`
+	NextStartAt int       `json:"next_start_at,omitempty"`
+	Comments    []Comment `json:"comments"`
+}
+
+type commentListResponse struct {
+	StartAt    int       `json:"startAt"`
+	MaxResults int       `json:"maxResults"`
+	Total      int       `json:"total"`
+	Comments   []Comment `json:"comments"`
 }
 
 type Attachment struct {

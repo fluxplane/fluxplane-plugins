@@ -26,6 +26,7 @@ type Client interface {
 	AddComment(context.Context, string, CommentRequest) (CommentResult, error)
 	EditComment(context.Context, string, string, CommentRequest) (CommentResult, error)
 	DeleteComment(context.Context, string, string) (CommentMutationResult, error)
+	ListComments(context.Context, string, CommentListOptions) (CommentListResult, error)
 	UploadIssueAttachment(context.Context, string, AttachmentUploadRequest) (AttachmentUploadResult, error)
 	GetAttachment(context.Context, Attachment) (AttachmentGetResult, error)
 	DeleteAttachment(context.Context, string) (AttachmentDeleteResult, error)
@@ -214,6 +215,33 @@ func (c liveClient) DeleteComment(ctx context.Context, key, commentID string) (C
 		return CommentMutationResult{}, err
 	}
 	return CommentMutationResult{OK: true, IssueKey: key, CommentID: commentID}, nil
+}
+
+func (c liveClient) ListComments(ctx context.Context, key string, opts CommentListOptions) (CommentListResult, error) {
+	key = strings.TrimSpace(key)
+	query := url.Values{}
+	query.Set("maxResults", strconv.Itoa(clamp(opts.Limit, 20, 100)))
+	if opts.StartAt > 0 {
+		query.Set("startAt", strconv.Itoa(opts.StartAt))
+	}
+	if order := strings.TrimSpace(opts.Order); order != "" {
+		query.Set("orderBy", order)
+	}
+	var page commentListResponse
+	if err := c.getJSON(ctx, "/rest/api/3/issue/"+url.PathEscape(key)+"/comment", query, &page); err != nil {
+		return CommentListResult{}, err
+	}
+	result := CommentListResult{
+		IssueKey: key,
+		Count:    len(page.Comments),
+		Total:    page.Total,
+		StartAt:  page.StartAt,
+		Comments: page.Comments,
+	}
+	if next := page.StartAt + len(page.Comments); next < page.Total {
+		result.NextStartAt = next
+	}
+	return result, nil
 }
 
 func (c liveClient) UploadIssueAttachment(ctx context.Context, key string, request AttachmentUploadRequest) (AttachmentUploadResult, error) {
