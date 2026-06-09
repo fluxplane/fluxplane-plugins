@@ -84,14 +84,72 @@ type Issue struct {
 	IID            int64    `json:"iid"`
 	ProjectID      int64    `json:"project_id"`
 	Title          string   `json:"title,omitempty"`
+	Description    string   `json:"description,omitempty"`
 	State          string   `json:"state,omitempty"`
 	WebURL         string   `json:"web_url,omitempty"`
 	AuthorUsername string   `json:"author_username,omitempty"`
+	Assignees      []string `json:"assignees,omitempty"`
 	Labels         []string `json:"labels,omitempty"`
 	Reference      string   `json:"reference,omitempty"`
+	UserNotesCount int64    `json:"user_notes_count,omitempty"`
 	CreatedAt      string   `json:"created_at,omitempty"`
 	UpdatedAt      string   `json:"updated_at,omitempty"`
 	ClosedAt       string   `json:"closed_at,omitempty"`
+}
+
+// Note is a GitLab issue comment. Body is GitLab-flavored Markdown (already
+// agent-friendly — no conversion needed).
+type Note struct {
+	ID             int64  `json:"id"`
+	Body           string `json:"body,omitempty"`
+	AuthorUsername string `json:"author_username,omitempty"`
+	System         bool   `json:"system,omitempty"`
+	Internal       bool   `json:"internal,omitempty"`
+	CreatedAt      string `json:"created_at,omitempty"`
+	UpdatedAt      string `json:"updated_at,omitempty"`
+}
+
+type IssueCreateOptions struct {
+	Project      string
+	Title        string
+	Description  string
+	Labels       []string
+	AssigneeIDs  []int64
+	MilestoneID  int64
+	Confidential *bool
+}
+
+type IssueUpdateOptions struct {
+	Project      string
+	IID          int64
+	Title        string
+	Description  string
+	Labels       []string
+	AddLabels    []string
+	RemoveLabels []string
+	StateEvent   string
+	AssigneeIDs  []int64
+}
+
+type IssueNoteListOptions struct {
+	Project string
+	IID     int64
+	Limit   int
+	Sort    string
+	OrderBy string
+}
+
+type IssueNoteCreateOptions struct {
+	Project string
+	IID     int64
+	Body    string
+}
+
+type IssueNoteListResult struct {
+	Project string `json:"project,omitempty"`
+	IID     int64  `json:"iid,omitempty"`
+	Count   int    `json:"count"`
+	Notes   []Note `json:"notes"`
 }
 
 type IssueRecord struct {

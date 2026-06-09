@@ -755,6 +755,11 @@ type fakeClient struct {
 	projectID            any
 	issueProject         any
 	issueIID             int64
+	issueCreateOptions   IssueCreateOptions
+	issueUpdateOptions   IssueUpdateOptions
+	issueNotes           []Note
+	createdNote          Note
+	noteCreateOptions    IssueNoteCreateOptions
 	mrProject            any
 	mrIID                int64
 	mrCreateProject      any
@@ -812,6 +817,32 @@ func (c *fakeClient) GetIssue(project any, iid int64) (Issue, error) {
 	c.issueProject = project
 	c.issueIID = iid
 	return c.issue, nil
+}
+
+func (c *fakeClient) CreateIssue(project any, options IssueCreateOptions) (Issue, error) {
+	c.issueProject = project
+	c.issueCreateOptions = options
+	return c.issue, nil
+}
+
+func (c *fakeClient) UpdateIssue(project any, iid int64, options IssueUpdateOptions) (Issue, error) {
+	c.issueProject = project
+	c.issueIID = iid
+	c.issueUpdateOptions = options
+	return c.issue, nil
+}
+
+func (c *fakeClient) ListIssueNotes(project any, iid int64, _ IssueNoteListOptions) ([]Note, error) {
+	c.issueProject = project
+	c.issueIID = iid
+	return c.issueNotes, nil
+}
+
+func (c *fakeClient) CreateIssueNote(project any, iid int64, options IssueNoteCreateOptions) (Note, error) {
+	c.issueProject = project
+	c.issueIID = iid
+	c.noteCreateOptions = options
+	return c.createdNote, nil
 }
 
 func (c *fakeClient) ListMergeRequests(options MergeRequestListOptions) ([]MergeRequest, error) {
@@ -938,4 +969,48 @@ func (c *fakeClient) CreateSnippet(options SnippetCreateOptions) (Snippet, error
 func (c *fakeClient) DeleteSnippet(id int64) error {
 	c.snippetDeleted = id
 	return nil
+}
+
+func TestServiceIssueOperations(t *testing.T) {
+	client := &fakeClient{
+		issue:       Issue{IID: 42, ProjectID: 7, Title: "Bug", Description: "**broken**", State: "opened", WebURL: "https://gl/group/app/-/issues/42"},
+		issues:      []Issue{{IID: 42, Title: "Bug", State: "opened"}},
+		issueNotes:  []Note{{ID: 1, Body: "first", AuthorUsername: "ada"}},
+		createdNote: Note{ID: 9, Body: "Confirmed", AuthorUsername: "bot"},
+	}
+	plugin := testPlugin(client)
+
+	// list
+	list := plugintest.RunOK[pluginbinding.ListResult[Issue]](t, plugin, OperationIssueList, map[string]any{"project": "group/app", "state": "opened"})
+	if list.Count != 1 || client.issueListOptions.State != "opened" {
+		t.Fatalf("issue list = %#v opts=%#v", list, client.issueListOptions)
+	}
+
+	// show by ref PROJECT#IID, returns Markdown description
+	show := plugintest.RunOK[pluginbinding.ShowResult[Issue]](t, plugin, OperationIssueShow, map[string]any{"ref": "group/app#42"})
+	if client.issueProject != "group/app" || client.issueIID != 42 || show.Record.Description != "**broken**" {
+		t.Fatalf("issue show = %#v (project=%v iid=%d)", show.Record, client.issueProject, client.issueIID)
+	}
+
+	// create
+	created := plugintest.RunOK[Issue](t, plugin, OperationIssueCreate, map[string]any{"project": "group/app", "title": "New", "description": "body", "labels": []string{"bug"}})
+	if created.IID != 42 || client.issueCreateOptions.Title != "New" || len(client.issueCreateOptions.Labels) != 1 {
+		t.Fatalf("issue create opts = %#v", client.issueCreateOptions)
+	}
+
+	// update / close via state_event
+	plugintest.RunOK[Issue](t, plugin, OperationIssueUpdate, map[string]any{"ref": "group/app#42", "state_event": "close"})
+	if client.issueUpdateOptions.StateEvent != "close" || client.issueIID != 42 {
+		t.Fatalf("issue update opts = %#v", client.issueUpdateOptions)
+	}
+
+	// note list + create
+	notes := plugintest.RunOK[IssueNoteListResult](t, plugin, OperationIssueNoteList, map[string]any{"ref": "group/app#42"})
+	if notes.Count != 1 || notes.Notes[0].Body != "first" {
+		t.Fatalf("note list = %#v", notes)
+	}
+	note := plugintest.RunOK[Note](t, plugin, OperationIssueNoteCreate, map[string]any{"ref": "group/app#42", "body": "Confirmed"})
+	if note.ID != 9 || client.noteCreateOptions.Body != "Confirmed" {
+		t.Fatalf("note create = %#v opts=%#v", note, client.noteCreateOptions)
+	}
 }

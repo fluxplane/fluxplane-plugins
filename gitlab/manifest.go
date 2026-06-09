@@ -1,6 +1,8 @@
 package gitlab
 
 import (
+	"encoding/json"
+
 	core "github.com/fluxplane/fluxplane-plugin/manifest"
 	"github.com/fluxplane/fluxplane-plugin/pluginbinding"
 	"github.com/fluxplane/fluxplane-plugin/protocol"
@@ -8,7 +10,7 @@ import (
 
 const (
 	PluginName        = "gitlab"
-	PluginVersion     = "0.18.2"
+	PluginVersion     = "0.19.0"
 	PluginDescription = "GitLab operations, datasources, indexes, and reverse lookups."
 
 	AuthMethodPersonalAccessToken = "personal_access_token"
@@ -49,6 +51,12 @@ const (
 	OperationPipelineCancel     = "gitlab.pipeline.cancel"
 	OperationSnippetCreate      = "gitlab.snippet.create"
 	OperationSnippetDelete      = "gitlab.snippet.delete"
+	OperationIssueList          = "gitlab.issue.list"
+	OperationIssueShow          = "gitlab.issue.show"
+	OperationIssueCreate        = "gitlab.issue.create"
+	OperationIssueUpdate        = "gitlab.issue.update"
+	OperationIssueNoteList      = "gitlab.issue.note.list"
+	OperationIssueNoteCreate    = "gitlab.issue.note.create"
 
 	DatasourceProjects      = "gitlab.projects"
 	DatasourceUsers         = "gitlab.users"
@@ -149,7 +157,68 @@ func operationSpecs() []core.OperationSpec {
 		pipelineCancelSpec(),
 		snippetCreateSpec(),
 		snippetDeleteSpec(),
+		issueListSpec(),
+		issueShowSpec(),
+		issueCreateSpec(),
+		issueUpdateSpec(),
+		issueNoteListSpec(),
+		issueNoteCreateSpec(),
 	}
+}
+
+func issueListSpec() core.OperationSpec {
+	return gitlabCompactReadOperation[IssueListInput, pluginbinding.ListResult[Issue]](OperationIssueList, "List GitLab issues in a project (or across accessible projects).")
+}
+
+func issueShowSpec() core.OperationSpec {
+	return gitlabReadOperation[IssueShowInput, pluginbinding.ShowResult[Issue]](OperationIssueShow, "Show one GitLab issue, including its Markdown description.")
+}
+
+func issueCreateSpec() core.OperationSpec {
+	return withInputExamples(
+		gitlabWriteOperation[IssueCreateInput, Issue](OperationIssueCreate, "Create a GitLab issue. Description is GitLab-flavored Markdown.", core.OperationNonIdempotent),
+		map[string]any{"project": "group/app", "title": "Investigate flaky deploy", "description": "Steps:\n\n1. Trigger pipeline\n2. Observe retry", "labels": []string{"bug"}},
+	)
+}
+
+func issueUpdateSpec() core.OperationSpec {
+	return withInputExamples(
+		gitlabWriteOperation[IssueUpdateInput, Issue](OperationIssueUpdate, "Update a GitLab issue (title/description/labels/assignees) or transition it via state_event (close/reopen).", core.OperationNonIdempotent),
+		map[string]any{"ref": "group/app#42", "state_event": "close", "add_labels": []string{"done"}},
+	)
+}
+
+func issueNoteListSpec() core.OperationSpec {
+	return gitlabReadOperation[IssueNoteListInput, IssueNoteListResult](OperationIssueNoteList, "List comments (notes) on a GitLab issue. Bodies are Markdown.")
+}
+
+func issueNoteCreateSpec() core.OperationSpec {
+	return withInputExamples(
+		gitlabWriteOperation[IssueNoteCreateInput, Note](OperationIssueNoteCreate, "Add a comment (note) to a GitLab issue. Body is Markdown.", core.OperationNonIdempotent),
+		map[string]any{"ref": "group/app#42", "body": "Confirmed — root cause is in `worker.go`."},
+	)
+}
+
+// withInputExamples injects JSON Schema examples into an operation's input
+// schema so the CLI shows a runnable example and treats the op as having
+// conditional input during local --dry-run validation.
+func withInputExamples(spec core.OperationSpec, examples ...map[string]any) core.OperationSpec {
+	if len(examples) == 0 || len(spec.Input) == 0 {
+		return spec
+	}
+	var schema map[string]any
+	if err := json.Unmarshal(spec.Input, &schema); err != nil {
+		return spec
+	}
+	arr := make([]any, 0, len(examples))
+	for _, example := range examples {
+		arr = append(arr, example)
+	}
+	schema["examples"] = arr
+	if raw, err := json.Marshal(schema); err == nil {
+		spec.Input = raw
+	}
+	return spec
 }
 
 func authTestSpec() core.OperationSpec {

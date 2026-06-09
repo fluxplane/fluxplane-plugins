@@ -18,6 +18,10 @@ type Client interface {
 	ListGroups(GroupListOptions) ([]Group, error)
 	ListIssues(IssueListOptions) ([]Issue, error)
 	GetIssue(any, int64) (Issue, error)
+	CreateIssue(any, IssueCreateOptions) (Issue, error)
+	UpdateIssue(any, int64, IssueUpdateOptions) (Issue, error)
+	ListIssueNotes(any, int64, IssueNoteListOptions) ([]Note, error)
+	CreateIssueNote(any, int64, IssueNoteCreateOptions) (Note, error)
 	ListMergeRequests(MergeRequestListOptions) ([]MergeRequest, error)
 	GetMergeRequest(any, int64) (MergeRequest, error)
 	CreateMergeRequest(any, MergeRequestCreateOptions) (MergeRequest, error)
@@ -995,20 +999,136 @@ func issueFromAPI(issue *gitlabapi.Issue) Issue {
 			reference = issue.References.Short
 		}
 	}
+	assignees := make([]string, 0, len(issue.Assignees))
+	for _, a := range issue.Assignees {
+		if a != nil && a.Username != "" {
+			assignees = append(assignees, a.Username)
+		}
+	}
 	return Issue{
 		ID:             issue.ID,
 		IID:            issue.IID,
 		ProjectID:      issue.ProjectID,
 		Title:          issue.Title,
+		Description:    issue.Description,
 		State:          issue.State,
 		WebURL:         issue.WebURL,
 		AuthorUsername: author,
+		Assignees:      assignees,
 		Labels:         []string(issue.Labels),
 		Reference:      reference,
+		UserNotesCount: issue.UserNotesCount,
 		CreatedAt:      formatTime(issue.CreatedAt),
 		UpdatedAt:      formatTime(issue.UpdatedAt),
 		ClosedAt:       formatTime(issue.ClosedAt),
 	}
+}
+
+func noteFromAPI(note *gitlabapi.Note) Note {
+	if note == nil {
+		return Note{}
+	}
+	return Note{
+		ID:             note.ID,
+		Body:           note.Body,
+		AuthorUsername: note.Author.Username,
+		System:         note.System,
+		Internal:       note.Internal,
+		CreatedAt:      formatTime(note.CreatedAt),
+		UpdatedAt:      formatTime(note.UpdatedAt),
+	}
+}
+
+func (c liveClient) CreateIssue(project any, opts IssueCreateOptions) (Issue, error) {
+	o := &gitlabapi.CreateIssueOptions{}
+	if opts.Title != "" {
+		o.Title = gitlabapi.Ptr(opts.Title)
+	}
+	if opts.Description != "" {
+		o.Description = gitlabapi.Ptr(opts.Description)
+	}
+	if len(opts.Labels) > 0 {
+		labels := gitlabapi.LabelOptions(opts.Labels)
+		o.Labels = &labels
+	}
+	if len(opts.AssigneeIDs) > 0 {
+		ids := append([]int64(nil), opts.AssigneeIDs...)
+		o.AssigneeIDs = &ids
+	}
+	if opts.MilestoneID > 0 {
+		o.MilestoneID = gitlabapi.Ptr(opts.MilestoneID)
+	}
+	if opts.Confidential != nil {
+		o.Confidential = opts.Confidential
+	}
+	issue, _, err := c.client.Issues.CreateIssue(project, o)
+	if err != nil {
+		return Issue{}, err
+	}
+	return issueFromAPI(issue), nil
+}
+
+func (c liveClient) UpdateIssue(project any, iid int64, opts IssueUpdateOptions) (Issue, error) {
+	o := &gitlabapi.UpdateIssueOptions{}
+	if opts.Title != "" {
+		o.Title = gitlabapi.Ptr(opts.Title)
+	}
+	if opts.Description != "" {
+		o.Description = gitlabapi.Ptr(opts.Description)
+	}
+	if len(opts.Labels) > 0 {
+		labels := gitlabapi.LabelOptions(opts.Labels)
+		o.Labels = &labels
+	}
+	if len(opts.AddLabels) > 0 {
+		labels := gitlabapi.LabelOptions(opts.AddLabels)
+		o.AddLabels = &labels
+	}
+	if len(opts.RemoveLabels) > 0 {
+		labels := gitlabapi.LabelOptions(opts.RemoveLabels)
+		o.RemoveLabels = &labels
+	}
+	if opts.StateEvent != "" {
+		o.StateEvent = gitlabapi.Ptr(opts.StateEvent)
+	}
+	if len(opts.AssigneeIDs) > 0 {
+		ids := append([]int64(nil), opts.AssigneeIDs...)
+		o.AssigneeIDs = &ids
+	}
+	issue, _, err := c.client.Issues.UpdateIssue(project, iid, o)
+	if err != nil {
+		return Issue{}, err
+	}
+	return issueFromAPI(issue), nil
+}
+
+func (c liveClient) ListIssueNotes(project any, iid int64, opts IssueNoteListOptions) ([]Note, error) {
+	o := &gitlabapi.ListIssueNotesOptions{}
+	o.PerPage = int64(clampProjectPageSize(opts.Limit, 20))
+	o.Page = 1
+	if strings.TrimSpace(opts.Sort) != "" {
+		o.Sort = gitlabapi.Ptr(strings.TrimSpace(opts.Sort))
+	}
+	if strings.TrimSpace(opts.OrderBy) != "" {
+		o.OrderBy = gitlabapi.Ptr(strings.TrimSpace(opts.OrderBy))
+	}
+	notes, _, err := c.client.Notes.ListIssueNotes(project, iid, o)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]Note, 0, len(notes))
+	for _, note := range notes {
+		out = append(out, noteFromAPI(note))
+	}
+	return out, nil
+}
+
+func (c liveClient) CreateIssueNote(project any, iid int64, opts IssueNoteCreateOptions) (Note, error) {
+	note, _, err := c.client.Notes.CreateIssueNote(project, iid, &gitlabapi.CreateIssueNoteOptions{Body: gitlabapi.Ptr(opts.Body)})
+	if err != nil {
+		return Note{}, err
+	}
+	return noteFromAPI(note), nil
 }
 
 func mergeRequestFromAPI(mr *gitlabapi.MergeRequest) MergeRequest {
