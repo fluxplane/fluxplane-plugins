@@ -71,23 +71,7 @@ func (s Service) Query(ctx pluginbinding.Context, input QueryInput) (QueryOutput
 	if input.MaxRows < 0 {
 		return QueryOutput{}, pluginbinding.Fail("bad_input", "max_rows must be non-negative")
 	}
-	payload, err := json.Marshal(input)
-	if err != nil {
-		return QueryOutput{}, err
-	}
-	resp, err := ctx.Host.CapabilityCall(pluginbinding.ProviderCallRequest{
-		Provider: PluginName,
-		Action:   "query",
-		Payload:  payload,
-	})
-	if err != nil {
-		return QueryOutput{}, pluginbinding.Errorf("sql", "%s", err)
-	}
-	var out QueryOutput
-	if err := json.Unmarshal(resp.Result, &out); err != nil {
-		return QueryOutput{}, pluginbinding.Errorf("sql", "decode host SQL result: %s", err)
-	}
-	return out, nil
+	return runSQLQuery(ctx, input)
 }
 
 func (s Service) QueryRows(ctx pluginbinding.Context, input QueryInput) (QueryRowsResult, error) {

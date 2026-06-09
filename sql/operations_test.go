@@ -1,13 +1,15 @@
 package sql
 
 import (
-	"encoding/json"
+	stdsql "database/sql"
+	"path/filepath"
 	"testing"
 
 	fpdatasource "github.com/fluxplane/fluxplane-datasource"
 	core "github.com/fluxplane/fluxplane-plugin/manifest"
 	"github.com/fluxplane/fluxplane-plugin/pluginbinding"
 	"github.com/fluxplane/fluxplane-plugin/pluginbinding/plugintest"
+	_ "modernc.org/sqlite"
 )
 
 func TestQueryRejectsWrites(t *testing.T) {
@@ -70,17 +72,15 @@ func TestManifestQuality(t *testing.T) {
 	plugintest.AssertManifestQuality(t, Manifest())
 }
 
-func TestQueryUsesHostSQLProvider(t *testing.T) {
-	host := sqlTestHost{t: t}
+func TestQueryRunsAgainstResolvedEndpoint(t *testing.T) {
+	host := sqlTestHost{t: t, url: newSQLiteUsersDB(t)}
 	plugin := NewPluginWithService(Service{})
 	out := plugintest.RunOK[QueryOutput](t, plugin, OperationQuery, QueryInput{
 		EndpointRef: "warehouse",
-		Driver:      "postgres",
-		Database:    "app",
 		Query:       "select id, name from users order by id",
 		MaxRows:     10,
 	}, plugintest.WithHost(host))
-	if out.EndpointRef != "warehouse" || out.Driver != "postgres" || out.RowCount != 2 {
+	if out.Driver != "sqlite" || out.RowCount != 2 {
 		t.Fatalf("out = %#v", out)
 	}
 	if out.Rows[0]["name"] != "Ada" || out.Rows[1]["name"] != "Linus" {
@@ -89,22 +89,47 @@ func TestQueryUsesHostSQLProvider(t *testing.T) {
 }
 
 func TestQueryRowsBuildsDatasourceRecords(t *testing.T) {
-	host := sqlTestHost{t: t}
+	host := sqlTestHost{t: t, url: newSQLiteUsersDB(t)}
 	plugin := NewPluginWithService(Service{})
 	records := plugintest.DatasourceSearchOK[QueryRowsResult](t, plugin, QueryInput{
 		EndpointRef: "warehouse",
 		Query:       "select id, name from users order by id",
 		MaxRows:     10,
 	}, plugintest.WithHost(host))
-	if records.Count != 2 || records.Records[0].Row["name"] != "Ada" || records.Records[0].Driver != "postgres" {
+	if records.Count != 2 || records.Records[0].Row["name"] != "Ada" || records.Records[0].Driver != "sqlite" {
 		t.Fatalf("records = %#v", records)
 	}
+}
+
+// newSQLiteUsersDB creates a temporary sqlite database with a users table and
+// returns its endpoint URL. SQLite is file-backed, so it exercises runSQLQuery's
+// target resolution, read-only transaction, and row scanning without a network
+// dial (the dialer path is covered by docker/kubernetes dogfooding).
+func newSQLiteUsersDB(t *testing.T) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "users.db")
+	db, err := stdsql.Open("sqlite", path)
+	if err != nil {
+		t.Fatalf("open sqlite: %v", err)
+	}
+	defer db.Close()
+	stmts := []string{
+		"create table users (id integer primary key, name text)",
+		"insert into users (id, name) values (1, 'Ada'), (2, 'Linus')",
+	}
+	for _, stmt := range stmts {
+		if _, err := db.Exec(stmt); err != nil {
+			t.Fatalf("seed sqlite (%s): %v", stmt, err)
+		}
+	}
+	return "sqlite://" + path
 }
 
 type sqlTestHost struct {
 	pluginbinding.HostClient
 
-	t *testing.T
+	t   *testing.T
+	url string
 }
 
 func (h sqlTestHost) Secret(string) (pluginbinding.SecretMaterial, error) {
@@ -124,7 +149,7 @@ func (h sqlTestHost) Get(pluginbinding.DatasourceGetInput) (pluginbinding.Dataso
 }
 
 func (h sqlTestHost) ResolveEndpoint(string) (core.EndpointRef, error) {
-	return core.EndpointRef{}, nil
+	return core.EndpointRef{URL: h.url}, nil
 }
 
 func (h sqlTestHost) HTTP(pluginbinding.HTTPRequest) (pluginbinding.HTTPResponse, error) {
@@ -145,35 +170,6 @@ func (h sqlTestHost) BlobInfo(pluginbinding.BlobInfoRequest) (pluginbinding.Blob
 
 func (h sqlTestHost) EnvLookup(string) (pluginbinding.EnvLookupResponse, error) {
 	return pluginbinding.EnvLookupResponse{}, nil
-}
-
-func (h sqlTestHost) CapabilityCall(input pluginbinding.ProviderCallRequest) (pluginbinding.ProviderCallResponse, error) {
-	if input.Provider != PluginName || input.Action != "query" {
-		h.t.Fatalf("provider call = %#v", input)
-	}
-	var queryInput QueryInput
-	if err := json.Unmarshal(input.Payload, &queryInput); err != nil {
-		h.t.Fatal(err)
-	}
-	if queryInput.EndpointRef != "warehouse" || queryInput.Query == "" {
-		h.t.Fatalf("query input = %#v", queryInput)
-	}
-	raw, err := json.Marshal(QueryOutput{
-		EndpointRef: "warehouse",
-		EndpointURL: "postgres://app:xxxxx@db.example.com/app",
-		Driver:      "postgres",
-		Database:    "app",
-		Columns:     []string{"id", "name"},
-		Rows: []map[string]any{
-			{"id": float64(1), "name": "Ada"},
-			{"id": float64(2), "name": "Linus"},
-		},
-		RowCount: 2,
-	})
-	if err != nil {
-		return pluginbinding.ProviderCallResponse{}, err
-	}
-	return pluginbinding.ProviderCallResponse{Result: raw}, nil
 }
 
 var _ pluginbinding.HostClient = sqlTestHost{}
