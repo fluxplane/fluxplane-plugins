@@ -82,6 +82,7 @@ type PodExecResult struct {
 	Name            string   `json:"name"`
 	Container       string   `json:"container,omitempty"`
 	Command         []string `json:"command"`
+	Transport       string   `json:"transport,omitempty"` // host-spdy (through host conn.dial) | websocket (direct)
 	ExitCode        int      `json:"exit_code"`
 	Stdout          string   `json:"stdout,omitempty"`
 	Stderr          string   `json:"stderr,omitempty"`

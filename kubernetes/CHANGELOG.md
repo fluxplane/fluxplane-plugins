@@ -1,5 +1,20 @@
 # Changelog
 
+## v0.5.0
+
+### Changed
+- **`kubernetes.pod.exec` streams through the host conn.dial capability**
+  (closes #2). With a conn-dialing host the exec upgrade runs over a SPDY
+  executor whose `UpgradeTransport` dials through the host
+  (`NewSPDYExecutorForTransports` — public client-go API, no vendored
+  protocol code; client-go's websocket executor cannot take a custom dialer).
+  TLS still terminates in-plugin with the kubeconfig CA; auth wrappers apply
+  exactly as in client-go's own path — only the socket crosses the host
+  boundary. Hosts without the capability keep the previous direct
+  websocket-with-SPDY-fallback behavior.
+- `PodExecResult` gained a `transport` field (`host-spdy` | `websocket`) so
+  the active path is observable. Manifest version 0.21.0.
+
 ## v0.4.0
 
 ### Added

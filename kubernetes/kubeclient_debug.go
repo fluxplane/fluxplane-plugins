@@ -14,7 +14,6 @@ import (
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/tools/remotecommand"
 	clientgoexec "k8s.io/client-go/util/exec"
-	"k8s.io/streaming/pkg/httpstream"
 )
 
 func HostKubeEvents(ctx pluginbinding.Context, input EventListInput) ([]corev1.Event, error) {
@@ -59,14 +58,10 @@ func HostKubeNodes(ctx pluginbinding.Context, input NodeListInput) ([]corev1.Nod
 }
 
 // HostKubePodExec runs a one-shot command in a pod container over the exec
-// subresource (WebSocket with SPDY fallback, as kubectl does) and returns
-// bounded stdout/stderr plus the command's exit code.
-//
-// Unlike the clientset API calls, the exec upgrade stream dials directly:
-// client-go's SPDY and websocket round trippers build their own dialers and
-// ignore rest.Config.Dial, so the host conn.dial capability cannot carry this
-// stream without reimplementing the round tripper (same limitation that makes
-// port-forward run as a helper subprocess via the host process capability).
+// subresource and returns bounded stdout/stderr plus the command's exit code.
+// With a conn-dialing host the upgrade stream runs through the host conn
+// capability (host-dialed SPDY executor, see podExecExecutor); otherwise it
+// falls back to the direct websocket-with-SPDY-fallback path kubectl uses.
 func HostKubePodExec(ctx pluginbinding.Context, input PodExecInput) (PodExecResult, error) {
 	contextName, err := resolveKubeContext(ctx, input.EndpointRef, input.URL, input.Context)
 	if err != nil {
@@ -100,15 +95,7 @@ func HostKubePodExec(ctx pluginbinding.Context, input PodExecInput) (PodExecResu
 			Stdout:    true,
 			Stderr:    true,
 		}, scheme.ParameterCodec)
-	websocketExecutor, err := remotecommand.NewWebSocketExecutor(restConfig, "GET", request.URL().String())
-	if err != nil {
-		return PodExecResult{}, err
-	}
-	spdyExecutor, err := remotecommand.NewSPDYExecutor(restConfig, "POST", request.URL())
-	if err != nil {
-		return PodExecResult{}, err
-	}
-	executor, err := remotecommand.NewFallbackExecutor(websocketExecutor, spdyExecutor, httpstream.IsUpgradeFailure)
+	executor, transport, err := podExecExecutor(ctx, restConfig, request.URL())
 	if err != nil {
 		return PodExecResult{}, err
 	}
@@ -124,6 +111,7 @@ func HostKubePodExec(ctx pluginbinding.Context, input PodExecInput) (PodExecResu
 		Name:            name,
 		Container:       container,
 		Command:         input.Command,
+		Transport:       transport,
 		Stdout:          stdout.String(),
 		Stderr:          stderr.String(),
 		StdoutTruncated: stdout.Truncated(),
