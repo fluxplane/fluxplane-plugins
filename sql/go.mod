@@ -38,7 +38,7 @@ require (
 require (
 	github.com/bahlo/generic-list-go v0.2.0 // indirect
 	github.com/buger/jsonparser v1.2.0 // indirect
-	github.com/fluxplane/fluxplane-plugin v0.3.0
+	github.com/fluxplane/fluxplane-plugin v0.9.0
 	github.com/invopop/jsonschema v0.14.0 // indirect
 	github.com/pb33f/ordered-map/v2 v2.3.1 // indirect
 	go.yaml.in/yaml/v4 v4.0.0-rc.4 // indirect

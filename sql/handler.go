@@ -12,6 +12,10 @@ func NewPlugin() *pluginbinding.Plugin {
 func NewPluginWithService(service Service) *pluginbinding.Plugin {
 	return pluginbinding.Define(manifestSpec(),
 		pluginbinding.RegisterOperation(querySpec(), service.Query),
+		pluginbinding.RegisterOperation(databaseListSpec(), service.DatabaseList),
+		pluginbinding.RegisterOperation(tableListSpec(), service.TableList),
+		pluginbinding.RegisterOperation(tableShowSpec(), service.TableShow),
+		pluginbinding.RegisterOperation(indexListSpec(), service.IndexList),
 		pluginbinding.RegisterDatasourceSearch(queryRowsDatasourceSpec(), service.QueryRows),
 	)
 }

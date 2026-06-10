@@ -35,10 +35,6 @@ type sqlTarget struct {
 // driver still speaks the wire protocol over the host-provided stream), and runs
 // the query. SQLite is file-backed and needs no dialer.
 func runSQLQuery(ctx pluginbinding.Context, input QueryInput) (QueryOutput, error) {
-	timeout, err := parseDurationDefault(input.Timeout, 10*time.Second)
-	if err != nil {
-		return QueryOutput{}, pluginbinding.Errorf("bad_input", "%s", err)
-	}
 	maxRows := input.MaxRows
 	if maxRows <= 0 {
 		maxRows = 100
@@ -46,56 +42,84 @@ func runSQLQuery(ctx pluginbinding.Context, input QueryInput) (QueryOutput, erro
 	if maxRows > 1000 {
 		maxRows = 1000
 	}
-	target, err := resolveSQLTarget(ctx, input)
+	out := QueryOutput{EndpointRef: input.EndpointRef}
+	target, duration, err := withReadOnlySQL(ctx, input.EndpointRef, input.Driver, input.Database, input.Timeout, func(queryCtx context.Context, tx *stdsql.Tx, _ sqlTarget) error {
+		rows, columns, truncated, err := queryAll(queryCtx, tx, maxRows, strings.TrimSpace(input.Query))
+		if err != nil {
+			return err
+		}
+		out.Columns = columns
+		out.Rows = rows
+		out.RowCount = len(rows)
+		out.Truncated = truncated
+		return nil
+	})
 	if err != nil {
 		return QueryOutput{}, err
 	}
+	out.EndpointURL = target.SafeURL
+	out.Driver = sqlFirstNonEmpty(target.Dialect, target.Driver)
+	out.Database = target.Database
+	out.DurationMS = duration
+	return out, nil
+}
+
+// withReadOnlySQL resolves the endpoint, opens the host-dialed connection, and
+// runs fn inside a read-only transaction bounded by the resolved timeout. It
+// returns the resolved target and the elapsed milliseconds of fn.
+func withReadOnlySQL(ctx pluginbinding.Context, endpointRef, driver, database, timeoutValue string, fn func(queryCtx context.Context, tx *stdsql.Tx, target sqlTarget) error) (sqlTarget, int64, error) {
+	timeout, err := parseDurationDefault(timeoutValue, 10*time.Second)
+	if err != nil {
+		return sqlTarget{}, 0, pluginbinding.Errorf("bad_input", "%s", err)
+	}
+	target, err := resolveSQLTarget(ctx, endpointRef, driver, database)
+	if err != nil {
+		return sqlTarget{}, 0, err
+	}
 	db, err := openSQLDB(ctx, target)
 	if err != nil {
-		return QueryOutput{}, pluginbinding.Errorf("sql", "%s", err)
+		return sqlTarget{}, 0, pluginbinding.Errorf("sql", "%s", err)
 	}
 	defer func() { _ = db.Close() }()
-
 	queryCtx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 	tx, err := db.BeginTx(queryCtx, &stdsql.TxOptions{ReadOnly: true})
 	if err != nil {
-		return QueryOutput{}, pluginbinding.Errorf("sql", "%s", err)
+		return sqlTarget{}, 0, pluginbinding.Errorf("sql", "%s", err)
 	}
 	defer func() { _ = tx.Rollback() }()
 	start := time.Now()
-	rows, err := tx.QueryContext(queryCtx, strings.TrimSpace(input.Query))
-	if err != nil {
-		return QueryOutput{}, pluginbinding.Errorf("sql", "%s", err)
+	if err := fn(queryCtx, tx, target); err != nil {
+		return target, 0, err
 	}
-	resultRows, columns, truncated, err := scanSQLRows(rows, maxRows)
+	return target, time.Since(start).Milliseconds(), nil
+}
+
+// queryAll runs one bounded query inside the transaction and scans every row
+// into column-keyed maps ([]byte values become strings).
+func queryAll(queryCtx context.Context, tx *stdsql.Tx, maxRows int, query string, args ...any) ([]map[string]any, []string, bool, error) {
+	rows, err := tx.QueryContext(queryCtx, query, args...)
+	if err != nil {
+		return nil, nil, false, pluginbinding.Errorf("sql", "%s", err)
+	}
+	out, columns, truncated, err := scanSQLRows(rows, maxRows)
 	if closeErr := rows.Close(); err == nil && closeErr != nil {
 		err = closeErr
 	}
 	if err != nil {
-		return QueryOutput{}, pluginbinding.Errorf("sql", "%s", err)
+		return nil, nil, false, pluginbinding.Errorf("sql", "%s", err)
 	}
-	return QueryOutput{
-		EndpointRef: input.EndpointRef,
-		EndpointURL: target.SafeURL,
-		Driver:      sqlFirstNonEmpty(target.Dialect, target.Driver),
-		Database:    target.Database,
-		Columns:     columns,
-		Rows:        resultRows,
-		RowCount:    len(resultRows),
-		Truncated:   truncated,
-		DurationMS:  time.Since(start).Milliseconds(),
-	}, nil
+	return out, columns, truncated, nil
 }
 
 // resolveSQLTarget turns the endpoint ref (resolved by the host to a URL) plus
 // any input overrides into a concrete driver + DSN. Address resolution comes
 // from the registered endpoint, never the environment.
-func resolveSQLTarget(ctx pluginbinding.Context, input QueryInput) (sqlTarget, error) {
+func resolveSQLTarget(ctx pluginbinding.Context, endpointRef, driver, database string) (sqlTarget, error) {
 	if ctx.Host == nil {
 		return sqlTarget{}, pluginbinding.Fail("host_unavailable", "host client is unavailable")
 	}
-	endpoint, err := ctx.Host.ResolveEndpoint(strings.TrimSpace(input.EndpointRef))
+	endpoint, err := ctx.Host.ResolveEndpoint(strings.TrimSpace(endpointRef))
 	if err != nil {
 		return sqlTarget{}, pluginbinding.Errorf("sql", "resolve endpoint: %s", err)
 	}
@@ -103,7 +127,7 @@ func resolveSQLTarget(ctx pluginbinding.Context, input QueryInput) (sqlTarget, e
 	if rawURL == "" {
 		return sqlTarget{}, pluginbinding.Fail("bad_input", "endpoint has no url")
 	}
-	return sqlTargetFromURL(input.Driver, rawURL, input.Database)
+	return sqlTargetFromURL(driver, rawURL, database)
 }
 
 // openSQLDB opens a database/sql handle whose underlying connection is dialed via
