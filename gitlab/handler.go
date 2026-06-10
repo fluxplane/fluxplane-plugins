@@ -10,7 +10,7 @@ func NewPlugin() *pluginbinding.Plugin {
 }
 
 func NewPluginWithService(service Service) *pluginbinding.Plugin {
-	return pluginbinding.Define(manifestSpec(),
+	options := []pluginbinding.PluginOption{
 		pluginbinding.WithAuthTestOperation(OperationAuthTest),
 		pluginbinding.WithIndexBuildOperation(OperationIndexBuild),
 		pluginbinding.WithHostOwnedIndexStatus("GitLab"),
@@ -71,7 +71,9 @@ func NewPluginWithService(service Service) *pluginbinding.Plugin {
 		pluginbinding.RegisterDatasourceGet(gitlabMergeRequestsDatasourceGetSpec(), service.MergeRequestDatasourceGet),
 		pluginbinding.RegisterDatasourceBatchGet(gitlabMergeRequestsDatasourceSpec(), service.DatasourceBatchGet),
 		pluginbinding.RegisterDatasourceLookup(gitlabMergeRequestsLookupSpec(), service.Lookup),
-	)
+	}
+	options = append(options, registerReviewOperations(service)...)
+	return pluginbinding.Define(manifestSpec(), options...)
 }
 
 func Handle(req protocol.Request) protocol.Response {

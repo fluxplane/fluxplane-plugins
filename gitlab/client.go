@@ -43,6 +43,20 @@ type Client interface {
 	CancelPipeline(any, int64) (Pipeline, error)
 	CreateSnippet(SnippetCreateOptions) (Snippet, error)
 	DeleteSnippet(int64) error
+	// Review workflow (issue #3).
+	UpdateMergeRequest(project any, iid int64, input MergeRequestUpdateOptions) (MergeRequest, error)
+	ListMergeRequestDiffs(project any, iid int64, limit int) ([]FileDiff, bool, error)
+	GetMergeRequestDiffVersion(project any, iid int64) (DiffRefs, error)
+	CompareRefs(project any, from, to string, straight bool) ([]CompareCommit, []FileDiff, string, error)
+	ListMergeRequestDiscussions(project any, iid int64, limit int) ([]DiscussionInfo, bool, error)
+	CreateMergeRequestNote(project any, iid int64, body string) (Note, error)
+	CreateMergeRequestDiscussion(project any, iid int64, body string, position *PositionInput) (DiscussionInfo, error)
+	AddMergeRequestDiscussionNote(project any, iid int64, discussionID, body string) (Note, error)
+	ResolveMergeRequestDiscussion(project any, iid int64, discussionID string, resolved bool) (DiscussionInfo, error)
+	ListRepositoryTree(project any, input TreeListOptions) ([]TreeEntry, bool, error)
+	GetRepositoryFile(project any, path, ref string) (RepoFileRaw, error)
+	GetRepositoryArchive(project any, format, sha, path string) ([]byte, error)
+	CreateProject(ProjectCreateOptions) (Project, error)
 }
 
 type ClientFactory func(pluginbinding.Context) (Client, error)

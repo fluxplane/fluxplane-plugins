@@ -10,7 +10,7 @@ import (
 
 const (
 	PluginName        = "gitlab"
-	PluginVersion     = "0.19.0"
+	PluginVersion     = "0.20.0"
 	PluginDescription = "GitLab operations, datasources, indexes, and reverse lookups."
 
 	AuthMethodPersonalAccessToken = "personal_access_token"
@@ -57,6 +57,21 @@ const (
 	OperationIssueUpdate        = "gitlab.issue.update"
 	OperationIssueNoteList      = "gitlab.issue.note.list"
 	OperationIssueNoteCreate    = "gitlab.issue.note.create"
+
+	// Review workflow (issue #3).
+	OperationMRChanges           = "gitlab.mr.changes"
+	OperationMRDiffLines         = "gitlab.mr.diff.lines"
+	OperationCompare             = "gitlab.compare"
+	OperationMRDiscussionList    = "gitlab.mr.discussion.list"
+	OperationMRNoteCreate        = "gitlab.mr.note.create"
+	OperationMRDiscussionCreate  = "gitlab.mr.discussion.create"
+	OperationMRDiscussionReply   = "gitlab.mr.discussion.reply"
+	OperationMRDiscussionResolve = "gitlab.mr.discussion.resolve"
+	OperationMRUpdate            = "gitlab.mr.update"
+	OperationRepositoryTree      = "gitlab.repository.tree"
+	OperationRepositoryFileShow  = "gitlab.repository.file.show"
+	OperationRepositoryArchive   = "gitlab.repository.archive"
+	OperationProjectCreate       = "gitlab.project.create"
 
 	DatasourceProjects      = "gitlab.projects"
 	DatasourceUsers         = "gitlab.users"
@@ -131,7 +146,7 @@ func manifestSpec() pluginbinding.ManifestSpec {
 }
 
 func operationSpecs() []core.OperationSpec {
-	return []core.OperationSpec{
+	return append([]core.OperationSpec{
 		authTestSpec(),
 		indexBuildSpec(),
 		projectListSpec(),
@@ -163,7 +178,7 @@ func operationSpecs() []core.OperationSpec {
 		issueUpdateSpec(),
 		issueNoteListSpec(),
 		issueNoteCreateSpec(),
-	}
+	}, reviewOperationSpecs()...)
 }
 
 func issueListSpec() core.OperationSpec {
