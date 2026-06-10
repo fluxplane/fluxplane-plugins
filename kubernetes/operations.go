@@ -33,6 +33,12 @@ type Service struct {
 	ForwardStart func(context.Context, PortForwardStartInput) (PortForwardResult, error)
 	ForwardStop  func(context.Context, PortForwardStopInput) (PortForwardStopResult, error)
 	Secrets      func(context.Context, EndpointDiscoverInput) ([]corev1.Secret, error)
+
+	Events            func(context.Context, EventListInput) ([]corev1.Event, error)
+	Nodes             func(context.Context, NodeListInput) ([]corev1.Node, error)
+	Exec              func(context.Context, PodExecInput) (PodExecResult, error)
+	ScaleDeployment   func(context.Context, DeploymentScaleInput) (DeploymentScaleResult, error)
+	RestartDeployment func(context.Context, DeploymentRestartInput) (DeploymentRestartResult, error)
 }
 
 func NewService() Service {

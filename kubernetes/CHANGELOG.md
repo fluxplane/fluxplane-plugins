@@ -1,5 +1,26 @@
 # Changelog
 
+## v0.3.0
+
+### Added
+- **`kubernetes.event.list`** — list events (newest first) filterable by
+  namespace, involved object name/kind, and `warnings_only`; handles both the
+  classic `lastTimestamp` and the modern `eventTime`/series fields. The first
+  stop when debugging scheduling, image, or crash issues.
+- **`kubernetes.pod.exec`** — run a one-shot command in a pod container
+  (WebSocket with SPDY fallback, as kubectl does) returning bounded
+  stdout/stderr (1 MiB per stream, truncation flagged), the real exit code,
+  and duration. No TTY/stdin; timeout default 30s, max 300s.
+- **`kubernetes.node.list`** — node readiness, roles, abnormal conditions
+  (pressure, unschedulable), kubelet version, internal IP, and capacity.
+- **`kubernetes.deployment.scale`** — scale via the scale subresource,
+  reporting previous and new replica counts.
+- **`kubernetes.deployment.restart`** — rolling restart (kubectl rollout
+  restart) by bumping the pod-template restart annotation.
+- Runnable JSON Schema `examples` on `event.list`, `pod.exec`,
+  `deployment.scale`, and `deployment.restart`. Bumped the plugin manifest
+  to 0.19.0.
+
 ## v0.2.0
 
 ### Changed

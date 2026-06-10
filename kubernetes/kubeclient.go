@@ -17,6 +17,7 @@ import (
 	networkingv1 "k8s.io/api/networking/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 )
@@ -286,6 +287,14 @@ func kubeClientFromEndpointInput(ctx pluginbinding.Context, input EndpointDiscov
 }
 
 func kubeClientForContext(ctx pluginbinding.Context, contextName string) (kubernetes.Interface, error) {
+	restConfig, err := kubeRestConfigForContext(ctx, contextName)
+	if err != nil {
+		return nil, err
+	}
+	return kubernetes.NewForConfig(restConfig)
+}
+
+func kubeRestConfigForContext(ctx pluginbinding.Context, contextName string) (*rest.Config, error) {
 	loadingRules := clientcmd.NewDefaultClientConfigLoadingRules()
 	overrides := &clientcmd.ConfigOverrides{}
 	if contextName = strings.TrimSpace(contextName); contextName != "" {
@@ -301,7 +310,7 @@ func kubeClientForContext(ctx pluginbinding.Context, contextName string) (kubern
 	if dial := hostDial(ctx); dial != nil {
 		restConfig.Dial = dial
 	}
-	return kubernetes.NewForConfig(restConfig)
+	return restConfig, nil
 }
 
 // hostDial returns a dialer backed by the host conn capability, or nil when the

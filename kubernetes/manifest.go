@@ -1,31 +1,62 @@
 package kubernetes
 
 import (
+	"encoding/json"
+
 	core "github.com/fluxplane/fluxplane-plugin/manifest"
 	"github.com/fluxplane/fluxplane-plugin/pluginbinding"
 	"github.com/fluxplane/fluxplane-plugin/protocol"
 )
 
+// withInputExamples injects JSON Schema `examples` into an operation's input
+// schema. The fluxplane-plugin CLI surfaces the first example as the runnable
+// invocation in `operation describe` and treats an example-bearing op as having
+// conditional (one-of) input during local `--dry-run` validation. Kept local to
+// the kubernetes plugin rather than promoted to the SDK.
+func withInputExamples(spec core.OperationSpec, examples ...map[string]any) core.OperationSpec {
+	if len(examples) == 0 || len(spec.Input) == 0 {
+		return spec
+	}
+	var schema map[string]any
+	if err := json.Unmarshal(spec.Input, &schema); err != nil {
+		return spec
+	}
+	arr := make([]any, 0, len(examples))
+	for _, example := range examples {
+		arr = append(arr, example)
+	}
+	schema["examples"] = arr
+	if raw, err := json.Marshal(schema); err == nil {
+		spec.Input = raw
+	}
+	return spec
+}
+
 const (
 	PluginName        = "kubernetes"
-	PluginVersion     = "0.18.2"
-	PluginDescription = "Kubernetes cluster discovery and operations using kubeconfig."
+	PluginVersion     = "0.19.0"
+	PluginDescription = "Kubernetes cluster discovery, inventory, debugging (logs, events, exec), and deployment operations using kubeconfig."
 
-	OperationClusterList      = "kubernetes.cluster.list"
-	OperationClusterTest      = "kubernetes.cluster.test"
-	OperationEndpointDiscover = "kubernetes.endpoint.discover"
-	OperationNamespaceList    = "kubernetes.namespace.list"
-	OperationServiceList      = "kubernetes.service.list"
-	OperationServiceShow      = "kubernetes.service.show"
-	OperationPodList          = "kubernetes.pod.list"
-	OperationPodShow          = "kubernetes.pod.show"
-	OperationPodLogs          = "kubernetes.pod.logs"
-	OperationPortForwardStart = "kubernetes.portforward.start"
-	OperationPortForwardStop  = "kubernetes.portforward.stop"
-	OperationDeploymentList   = "kubernetes.deployment.list"
-	OperationDeploymentShow   = "kubernetes.deployment.show"
-	OperationContainerList    = "kubernetes.container.list"
-	OperationContainerShow    = "kubernetes.container.show"
+	OperationClusterList       = "kubernetes.cluster.list"
+	OperationClusterTest       = "kubernetes.cluster.test"
+	OperationEndpointDiscover  = "kubernetes.endpoint.discover"
+	OperationNamespaceList     = "kubernetes.namespace.list"
+	OperationServiceList       = "kubernetes.service.list"
+	OperationServiceShow       = "kubernetes.service.show"
+	OperationPodList           = "kubernetes.pod.list"
+	OperationPodShow           = "kubernetes.pod.show"
+	OperationPodLogs           = "kubernetes.pod.logs"
+	OperationPortForwardStart  = "kubernetes.portforward.start"
+	OperationPortForwardStop   = "kubernetes.portforward.stop"
+	OperationDeploymentList    = "kubernetes.deployment.list"
+	OperationDeploymentShow    = "kubernetes.deployment.show"
+	OperationContainerList     = "kubernetes.container.list"
+	OperationContainerShow     = "kubernetes.container.show"
+	OperationEventList         = "kubernetes.event.list"
+	OperationNodeList          = "kubernetes.node.list"
+	OperationPodExec           = "kubernetes.pod.exec"
+	OperationDeploymentScale   = "kubernetes.deployment.scale"
+	OperationDeploymentRestart = "kubernetes.deployment.restart"
 
 	EndpointClusterDiscovered = "kubernetes.discovered_endpoints"
 	DatasourceInventory       = "kubernetes.inventory"
@@ -62,8 +93,13 @@ func manifestSpec() pluginbinding.ManifestSpec {
 			portForwardStopSpec(),
 			deploymentListSpec(),
 			deploymentShowSpec(),
+			deploymentScaleSpec(),
+			deploymentRestartSpec(),
 			containerListSpec(),
 			containerShowSpec(),
+			eventListSpec(),
+			nodeListSpec(),
+			podExecSpec(),
 		},
 		Datasources: []core.DatasourceSpec{
 			inventoryDatasourceSpec(),
@@ -200,6 +236,67 @@ func containerShowSpec() core.OperationSpec {
 		OperationContainerShow,
 		"Show one Kubernetes container derived from a pod.",
 		kubernetesReadOptions(core.OperationIdempotent)...,
+	)
+}
+
+func eventListSpec() core.OperationSpec {
+	return withInputExamples(
+		pluginbinding.TypedOperationSpec[EventListInput, EventListResult](
+			OperationEventList,
+			"List Kubernetes events (newest first), filterable by namespace, involved object name/kind, and Warning type — the first stop when debugging scheduling, image, or crash issues.",
+			kubernetesReadOptions(core.OperationIdempotent)...,
+		),
+		map[string]any{"namespace": "default", "name": "my-pod-abc123", "kind": "Pod", "limit": 20},
+	)
+}
+
+func nodeListSpec() core.OperationSpec {
+	return pluginbinding.TypedOperationSpec[NodeListInput, NodeListResult](
+		OperationNodeList,
+		"List Kubernetes nodes with readiness, roles, abnormal conditions, kubelet version, and capacity.",
+		kubernetesReadOptions(core.OperationIdempotent)...,
+	)
+}
+
+func podExecSpec() core.OperationSpec {
+	return withInputExamples(
+		pluginbinding.TypedOperationSpec[PodExecInput, PodExecResult](
+			OperationPodExec,
+			"Run a one-shot command in a pod container and return bounded stdout/stderr with the exit code. No TTY or stdin; output is capped at 1 MiB per stream.",
+			pluginbinding.Effects(core.OperationEffectProcess),
+			pluginbinding.Access(core.OperationAccessProvider),
+			pluginbinding.Risk(core.OperationRiskHigh),
+			pluginbinding.Idempotency(core.OperationNonIdempotent),
+		),
+		map[string]any{"namespace": "default", "name": "my-pod-abc123", "container": "app", "command": []string{"sh", "-c", "ls -la /tmp"}, "timeout_seconds": 30},
+	)
+}
+
+func deploymentScaleSpec() core.OperationSpec {
+	return withInputExamples(
+		pluginbinding.TypedOperationSpec[DeploymentScaleInput, DeploymentScaleResult](
+			OperationDeploymentScale,
+			"Scale a Kubernetes deployment to a desired replica count via the scale subresource.",
+			pluginbinding.Effects(core.OperationEffectWrite),
+			pluginbinding.Access(core.OperationAccessProvider),
+			pluginbinding.Risk(core.OperationRiskHigh),
+			pluginbinding.Idempotency(core.OperationIdempotent),
+		),
+		map[string]any{"namespace": "default", "name": "my-app", "replicas": 3},
+	)
+}
+
+func deploymentRestartSpec() core.OperationSpec {
+	return withInputExamples(
+		pluginbinding.TypedOperationSpec[DeploymentRestartInput, DeploymentRestartResult](
+			OperationDeploymentRestart,
+			"Rolling-restart a Kubernetes deployment (kubectl rollout restart) by bumping the pod-template restart annotation.",
+			pluginbinding.Effects(core.OperationEffectWrite),
+			pluginbinding.Access(core.OperationAccessProvider),
+			pluginbinding.Risk(core.OperationRiskHigh),
+			pluginbinding.Idempotency(core.OperationNonIdempotent),
+		),
+		map[string]any{"namespace": "default", "name": "my-app"},
 	)
 }
 

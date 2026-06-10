@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/fluxplane/fluxplane-plugin/pluginbinding/plugintest"
 	"github.com/fluxplane/fluxplane-plugin/protocol"
@@ -509,4 +510,130 @@ func containsString(values []string, want string) bool {
 		}
 	}
 	return false
+}
+
+func TestEventListSortsFiltersAndLimits(t *testing.T) {
+	plugin := NewPluginWithService(Service{
+		Events: func(_ context.Context, input EventListInput) ([]corev1.Event, error) {
+			if input.Name != "my-pod" || input.Kind != "Pod" {
+				t.Fatalf("event input = %#v", input)
+			}
+			return []corev1.Event{
+				{
+					Type: corev1.EventTypeNormal, Reason: "Scheduled", Message: "assigned",
+					LastTimestamp:  metav1.NewTime(mustParseTime(t, "2026-06-09T10:00:00Z")),
+					FirstTimestamp: metav1.NewTime(mustParseTime(t, "2026-06-09T10:00:00Z")),
+					InvolvedObject: corev1.ObjectReference{Kind: "Pod", Name: "my-pod", Namespace: "default"},
+				},
+				{
+					Type: corev1.EventTypeWarning, Reason: "BackOff", Message: "restarting failed container",
+					Count:          7,
+					LastTimestamp:  metav1.NewTime(mustParseTime(t, "2026-06-09T11:00:00Z")),
+					FirstTimestamp: metav1.NewTime(mustParseTime(t, "2026-06-09T10:30:00Z")),
+					InvolvedObject: corev1.ObjectReference{Kind: "Pod", Name: "my-pod", Namespace: "default"},
+				},
+			}, nil
+		},
+	})
+
+	out := plugintest.RunOK[EventListResult](t, plugin, OperationEventList, map[string]any{"namespace": "default", "name": "my-pod", "kind": "Pod"})
+	if out.Count != 2 || out.Events[0].Reason != "BackOff" {
+		t.Fatalf("events should be newest first: %#v", out)
+	}
+
+	warnings := plugintest.RunOK[EventListResult](t, plugin, OperationEventList, map[string]any{"name": "my-pod", "kind": "Pod", "warnings_only": true})
+	if warnings.Count != 1 || warnings.Events[0].Type != corev1.EventTypeWarning || warnings.Events[0].Count != 7 {
+		t.Fatalf("warnings = %#v", warnings)
+	}
+}
+
+func TestNodeListSummarizesStatus(t *testing.T) {
+	plugin := NewPluginWithService(Service{
+		Nodes: func(_ context.Context, _ NodeListInput) ([]corev1.Node, error) {
+			return []corev1.Node{{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:   "worker-1",
+					Labels: map[string]string{"node-role.kubernetes.io/worker": "true"},
+				},
+				Spec: corev1.NodeSpec{Unschedulable: true},
+				Status: corev1.NodeStatus{
+					NodeInfo:  corev1.NodeSystemInfo{KubeletVersion: "v1.32.0", Architecture: "amd64"},
+					Addresses: []corev1.NodeAddress{{Type: corev1.NodeInternalIP, Address: "10.0.0.5"}},
+					Conditions: []corev1.NodeCondition{
+						{Type: corev1.NodeReady, Status: corev1.ConditionTrue},
+						{Type: corev1.NodeMemoryPressure, Status: corev1.ConditionTrue},
+					},
+				},
+			}}, nil
+		},
+	})
+
+	out := plugintest.RunOK[NodeListResult](t, plugin, OperationNodeList, map[string]any{})
+	if out.Count != 1 {
+		t.Fatalf("nodes = %#v", out)
+	}
+	node := out.Nodes[0]
+	if !node.Ready || node.Status != "Ready,SchedulingDisabled" || node.InternalIP != "10.0.0.5" {
+		t.Fatalf("node = %#v", node)
+	}
+	if !containsString(node.Problems, "MemoryPressure") || !containsString(node.Problems, "Unschedulable") || !containsString(node.Roles, "worker") {
+		t.Fatalf("node problems/roles = %#v", node)
+	}
+}
+
+func TestPodExecValidatesAndForwards(t *testing.T) {
+	var captured PodExecInput
+	plugin := NewPluginWithService(Service{
+		Exec: func(_ context.Context, input PodExecInput) (PodExecResult, error) {
+			captured = input
+			return PodExecResult{Namespace: input.Namespace, Name: input.Name, Command: input.Command, ExitCode: 0, Stdout: "ok\n"}, nil
+		},
+	})
+
+	out := plugintest.RunOK[PodExecResult](t, plugin, OperationPodExec, map[string]any{
+		"namespace": "default", "name": "my-pod", "container": "app", "command": []string{"sh", "-c", "echo ok"},
+	})
+	if out.Stdout != "ok\n" || out.ExitCode != 0 || captured.Container != "app" {
+		t.Fatalf("exec = %#v captured = %#v", out, captured)
+	}
+
+	if err := plugintest.RunError(t, plugin, OperationPodExec, map[string]any{"namespace": "default", "name": "my-pod"}); err.Code != "bad_input" {
+		t.Fatalf("exec without command should fail with bad_input: %#v", err)
+	}
+}
+
+func TestDeploymentScaleAndRestart(t *testing.T) {
+	plugin := NewPluginWithService(Service{
+		ScaleDeployment: func(_ context.Context, input DeploymentScaleInput) (DeploymentScaleResult, error) {
+			return DeploymentScaleResult{OK: true, Namespace: input.Namespace, Name: input.Name, PreviousReplicas: 2, Replicas: *input.Replicas}, nil
+		},
+		RestartDeployment: func(_ context.Context, input DeploymentRestartInput) (DeploymentRestartResult, error) {
+			return DeploymentRestartResult{OK: true, Namespace: input.Namespace, Name: input.Name, RestartedAt: "2026-06-09T12:00:00Z"}, nil
+		},
+	})
+
+	scaled := plugintest.RunOK[DeploymentScaleResult](t, plugin, OperationDeploymentScale, map[string]any{"namespace": "default", "name": "my-app", "replicas": 3})
+	if !scaled.OK || scaled.PreviousReplicas != 2 || scaled.Replicas != 3 {
+		t.Fatalf("scale = %#v", scaled)
+	}
+	if err := plugintest.RunError(t, plugin, OperationDeploymentScale, map[string]any{"namespace": "default", "name": "my-app"}); err.Code != "bad_input" {
+		t.Fatalf("scale without replicas should fail with bad_input: %#v", err)
+	}
+
+	restarted := plugintest.RunOK[DeploymentRestartResult](t, plugin, OperationDeploymentRestart, map[string]any{"namespace": "default", "name": "my-app"})
+	if !restarted.OK || restarted.RestartedAt == "" {
+		t.Fatalf("restart = %#v", restarted)
+	}
+	if err := plugintest.RunError(t, plugin, OperationDeploymentRestart, map[string]any{"name": "my-app"}); err.Code != "bad_input" {
+		t.Fatalf("restart without namespace should fail with bad_input: %#v", err)
+	}
+}
+
+func mustParseTime(t *testing.T, value string) time.Time {
+	t.Helper()
+	parsed, err := time.Parse(time.RFC3339, value)
+	if err != nil {
+		t.Fatalf("parse time %q: %v", value, err)
+	}
+	return parsed
 }
