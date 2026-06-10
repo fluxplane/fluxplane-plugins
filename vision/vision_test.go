@@ -1,6 +1,7 @@
 package vision
 
 import (
+	"encoding/json"
 	"testing"
 
 	core "github.com/fluxplane/fluxplane-plugin/manifest"
@@ -85,5 +86,18 @@ func TestModelForProviderPrefersProviderSpecificOverride(t *testing.T) {
 	}
 	if got := ModelForProvider(input, provider); got != "anthropic/claude-sonnet-latest" {
 		t.Fatalf("model = %q", got)
+	}
+}
+
+func TestProviderOperationSpecCarriesInputExample(t *testing.T) {
+	spec := ProviderOperationSpec(ProviderSpec{Name: "example", Operation: "example.analyze"})
+	var schema struct {
+		Examples []map[string]any `json:"examples"`
+	}
+	if err := json.Unmarshal(spec.Input, &schema); err != nil {
+		t.Fatalf("decode input schema: %v", err)
+	}
+	if len(schema.Examples) == 0 || schema.Examples[0]["prompt"] == "" {
+		t.Fatalf("examples = %#v, want a runnable analyze example", schema.Examples)
 	}
 }

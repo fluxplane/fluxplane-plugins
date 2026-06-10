@@ -1,6 +1,7 @@
 package websearch
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/url"
 	"strings"
@@ -126,7 +127,7 @@ func DefineProvider(spec ProviderSpec, search SearchHandler, options ...pluginbi
 }
 
 func ProviderOperationSpec(spec ProviderSpec) core.OperationSpec {
-	return pluginbinding.TypedOperationSpec[SearchInput, SearchOutput](
+	return withInputExamples(pluginbinding.TypedOperationSpec[SearchInput, SearchOutput](
 		spec.Operation,
 		firstNonEmpty(spec.OperationDescription, "Search the web with "+spec.Name+"."),
 		append([]pluginbinding.OperationSpecOption{
@@ -137,7 +138,30 @@ func ProviderOperationSpec(spec ProviderSpec) core.OperationSpec {
 			pluginbinding.Risk(core.OperationRiskLow),
 			pluginbinding.Idempotency(core.OperationIdempotent),
 		}, secretPurposeOptions(spec.SecretPurposes)...)...,
-	)
+	), map[string]any{"query": "fluxplane durable agent runtime", "max": 5})
+}
+
+// withInputExamples injects JSON Schema `examples` into an operation's input
+// schema. The fluxplane-plugin CLI surfaces the first example as the runnable
+// invocation in `operation describe`. Kept local to the websearch provider
+// library rather than promoted to the SDK.
+func withInputExamples(spec core.OperationSpec, examples ...map[string]any) core.OperationSpec {
+	if len(examples) == 0 || len(spec.Input) == 0 {
+		return spec
+	}
+	var schema map[string]any
+	if err := json.Unmarshal(spec.Input, &schema); err != nil {
+		return spec
+	}
+	arr := make([]any, 0, len(examples))
+	for _, example := range examples {
+		arr = append(arr, example)
+	}
+	schema["examples"] = arr
+	if raw, err := json.Marshal(schema); err == nil {
+		spec.Input = raw
+	}
+	return spec
 }
 
 func ProviderDatasourceSpec(spec ProviderSpec) core.DatasourceSpec {

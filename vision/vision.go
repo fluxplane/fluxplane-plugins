@@ -2,6 +2,7 @@ package vision
 
 import (
 	"encoding/base64"
+	"encoding/json"
 	"mime"
 	"path/filepath"
 	"strings"
@@ -119,11 +120,37 @@ func ProviderOperationSpec(spec ProviderSpec) core.OperationSpec {
 	if len(spec.SecretPurposes) > 0 {
 		options = append(options, pluginbinding.SecretPurposes(spec.SecretPurposes...))
 	}
-	return pluginbinding.TypedOperationSpec[AnalyzeInput, AnalyzeOutput](
+	return withInputExamples(pluginbinding.TypedOperationSpec[AnalyzeInput, AnalyzeOutput](
 		spec.Operation,
 		firstNonEmpty(spec.OperationDescription, "Analyze images with "+spec.Name+"."),
 		options...,
-	)
+	), map[string]any{
+		"prompt": "Describe this screenshot and transcribe any error text.",
+		"images": []map[string]any{{"url": "https://example.com/screenshot.png"}},
+	})
+}
+
+// withInputExamples injects JSON Schema `examples` into an operation's input
+// schema. The fluxplane-plugin CLI surfaces the first example as the runnable
+// invocation in `operation describe`. Kept local to the vision provider
+// library rather than promoted to the SDK.
+func withInputExamples(spec core.OperationSpec, examples ...map[string]any) core.OperationSpec {
+	if len(examples) == 0 || len(spec.Input) == 0 {
+		return spec
+	}
+	var schema map[string]any
+	if err := json.Unmarshal(spec.Input, &schema); err != nil {
+		return spec
+	}
+	arr := make([]any, 0, len(examples))
+	for _, example := range examples {
+		arr = append(arr, example)
+	}
+	schema["examples"] = arr
+	if raw, err := json.Marshal(schema); err == nil {
+		spec.Input = raw
+	}
+	return spec
 }
 
 func ProviderFromManifest(entry core.PluginEntry, manifest core.PluginManifest) (Provider, bool) {

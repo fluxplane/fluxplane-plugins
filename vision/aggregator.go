@@ -13,7 +13,7 @@ import (
 
 const (
 	PluginName            = "vision"
-	PluginVersion         = "0.18.2"
+	PluginVersion         = "0.19.0"
 	PluginDescription     = "Generic image understanding aggregator over vision provider plugins."
 	OperationAnalyze      = "vision.analyze"
 	OperationProviderList = "vision.provider.list"
@@ -276,11 +276,20 @@ func firstAnalyzeError(output AnalyzeOutput, fallback string) string {
 	return fallback
 }
 
-func ProviderAnalyzeFromOperationOutput(provider Provider, raw json.RawMessage) (ProviderAnalyzeResponse, error) {
+// DecodeAnalyzeOutput decodes a provider operation's raw result payload into
+// the typed analyze output. Callers holding a protocol envelope decode here,
+// then map with ProviderAnalyzeFromOperationOutput.
+func DecodeAnalyzeOutput(raw []byte) (AnalyzeOutput, error) {
 	var output AnalyzeOutput
 	if err := json.Unmarshal(raw, &output); err != nil {
-		return ProviderAnalyzeResponse{}, err
+		return AnalyzeOutput{}, err
 	}
+	return output, nil
+}
+
+// ProviderAnalyzeFromOperationOutput maps a provider's typed analyze output to
+// its single result, defaulting the provider name.
+func ProviderAnalyzeFromOperationOutput(provider Provider, output AnalyzeOutput) (ProviderAnalyzeResponse, error) {
 	if len(output.Results) == 0 {
 		return ProviderAnalyzeResponse{Errors: output.Errors}, fmt.Errorf("%s", firstAnalyzeError(output, "provider returned no results"))
 	}

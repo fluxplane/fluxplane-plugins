@@ -1,6 +1,7 @@
 package websearch
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/fluxplane/fluxplane-plugin/pluginbinding"
@@ -48,5 +49,18 @@ func TestRecordsDropsUnsafeURLs(t *testing.T) {
 	}})
 	if len(records) != 1 || records[0].URL != "https://example.com" {
 		t.Fatalf("records = %#v", records)
+	}
+}
+
+func TestProviderOperationSpecCarriesInputExample(t *testing.T) {
+	spec := ProviderOperationSpec(ProviderSpec{Name: "example", Operation: "example.search"})
+	var schema struct {
+		Examples []map[string]any `json:"examples"`
+	}
+	if err := json.Unmarshal(spec.Input, &schema); err != nil {
+		t.Fatalf("decode input schema: %v", err)
+	}
+	if len(schema.Examples) == 0 || schema.Examples[0]["query"] == "" {
+		t.Fatalf("examples = %#v, want a runnable query example", schema.Examples)
 	}
 }

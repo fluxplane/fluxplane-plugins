@@ -14,7 +14,7 @@ import (
 
 const (
 	PluginName            = "websearch"
-	PluginVersion         = "0.18.2"
+	PluginVersion         = "0.19.0"
 	PluginDescription     = "Generic web search aggregator over provider plugins."
 	OperationSearch       = "websearch.search"
 	OperationProviderList = "websearch.provider.list"
@@ -333,11 +333,20 @@ func MetadataString(metadata map[string]any, key string) string {
 	return ""
 }
 
-func ProviderSearchFromOperationOutput(provider Provider, query string, raw json.RawMessage) (ProviderSearchResponse, error) {
+// DecodeSearchOutput decodes a provider operation's raw result payload into
+// the typed search output. Callers holding a protocol envelope decode here,
+// then map with ProviderSearchFromOperationOutput.
+func DecodeSearchOutput(raw []byte) (SearchOutput, error) {
 	var output SearchOutput
 	if err := json.Unmarshal(raw, &output); err != nil {
-		return ProviderSearchResponse{}, err
+		return SearchOutput{}, err
 	}
+	return output, nil
+}
+
+// ProviderSearchFromOperationOutput maps a provider's typed search output to
+// its single result set, defaulting the provider name and query.
+func ProviderSearchFromOperationOutput(provider Provider, query string, output SearchOutput) (ProviderSearchResponse, error) {
 	if len(output.Results) == 0 {
 		return ProviderSearchResponse{Errors: output.Errors}, fmt.Errorf("%s", firstSearchError(output, "provider returned no results"))
 	}
