@@ -10,7 +10,10 @@
 - **`kubernetes.pod.exec`** — run a one-shot command in a pod container
   (WebSocket with SPDY fallback, as kubectl does) returning bounded
   stdout/stderr (1 MiB per stream, truncation flagged), the real exit code,
-  and duration. No TTY/stdin; timeout default 30s, max 300s.
+  and duration. No TTY/stdin; timeout default 30s, max 300s. Note: unlike the
+  clientset API calls (which are routed through host `conn.dial`), the exec
+  upgrade stream dials directly — client-go's SPDY/websocket round trippers
+  ignore `rest.Config.Dial`.
 - **`kubernetes.node.list`** — node readiness, roles, abnormal conditions
   (pressure, unschedulable), kubelet version, internal IP, and capacity.
 - **`kubernetes.deployment.scale`** — scale via the scale subresource,

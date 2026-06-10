@@ -61,6 +61,12 @@ func HostKubeNodes(ctx pluginbinding.Context, input NodeListInput) ([]corev1.Nod
 // HostKubePodExec runs a one-shot command in a pod container over the exec
 // subresource (WebSocket with SPDY fallback, as kubectl does) and returns
 // bounded stdout/stderr plus the command's exit code.
+//
+// Unlike the clientset API calls, the exec upgrade stream dials directly:
+// client-go's SPDY and websocket round trippers build their own dialers and
+// ignore rest.Config.Dial, so the host conn.dial capability cannot carry this
+// stream without reimplementing the round tripper (same limitation that makes
+// port-forward run as a helper subprocess via the host process capability).
 func HostKubePodExec(ctx pluginbinding.Context, input PodExecInput) (PodExecResult, error) {
 	contextName, err := resolveKubeContext(ctx, input.EndpointRef, input.URL, input.Context)
 	if err != nil {
