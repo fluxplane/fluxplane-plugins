@@ -34,7 +34,7 @@ func withInputExamples(spec core.OperationSpec, examples ...map[string]any) core
 
 const (
 	PluginName        = "kubernetes"
-	PluginVersion     = "0.19.0"
+	PluginVersion     = "0.20.0"
 	PluginDescription = "Kubernetes cluster discovery, inventory, debugging (logs, events, exec), and deployment operations using kubeconfig."
 
 	OperationClusterList       = "kubernetes.cluster.list"
@@ -48,6 +48,7 @@ const (
 	OperationPodLogs           = "kubernetes.pod.logs"
 	OperationPortForwardStart  = "kubernetes.portforward.start"
 	OperationPortForwardStop   = "kubernetes.portforward.stop"
+	OperationPortForwardList   = "kubernetes.portforward.list"
 	OperationDeploymentList    = "kubernetes.deployment.list"
 	OperationDeploymentShow    = "kubernetes.deployment.show"
 	OperationContainerList     = "kubernetes.container.list"
@@ -91,6 +92,7 @@ func manifestSpec() pluginbinding.ManifestSpec {
 			podLogsSpec(),
 			portForwardStartSpec(),
 			portForwardStopSpec(),
+			portForwardListSpec(),
 			deploymentListSpec(),
 			deploymentShowSpec(),
 			deploymentScaleSpec(),
@@ -186,24 +188,38 @@ func podLogsSpec() core.OperationSpec {
 }
 
 func portForwardStartSpec() core.OperationSpec {
-	return pluginbinding.TypedOperationSpec[PortForwardStartInput, PortForwardResult](
-		OperationPortForwardStart,
-		"Start a managed Kubernetes port-forward for a service, pod, or deployment.",
-		pluginbinding.Effects(core.OperationEffectWrite),
-		pluginbinding.Access(core.OperationAccessProvider),
-		pluginbinding.Risk(core.OperationRiskMedium),
-		pluginbinding.Idempotency(core.OperationNonIdempotent),
+	return withInputExamples(
+		pluginbinding.TypedOperationSpec[PortForwardStartInput, PortForwardResult](
+			OperationPortForwardStart,
+			"Start a managed Kubernetes port-forward for a service, pod, or deployment. List with kubernetes.portforward.list; stop with kubernetes.portforward.stop.",
+			pluginbinding.Effects(core.OperationEffectWrite),
+			pluginbinding.Access(core.OperationAccessProvider),
+			pluginbinding.Risk(core.OperationRiskMedium),
+			pluginbinding.Idempotency(core.OperationNonIdempotent),
+		),
+		map[string]any{"context": "my-cluster", "namespace": "monitoring", "resource": "service/homer-webapp", "remote_port": 80, "local_port": 19080},
 	)
 }
 
 func portForwardStopSpec() core.OperationSpec {
-	return pluginbinding.TypedOperationSpec[PortForwardStopInput, PortForwardStopResult](
-		OperationPortForwardStop,
-		"Stop a managed Kubernetes port-forward by ID or process group.",
-		pluginbinding.Effects(core.OperationEffectWrite),
-		pluginbinding.Access(core.OperationAccessProvider),
-		pluginbinding.Risk(core.OperationRiskMedium),
-		pluginbinding.Idempotency(core.OperationIdempotent),
+	return withInputExamples(
+		pluginbinding.TypedOperationSpec[PortForwardStopInput, PortForwardStopResult](
+			OperationPortForwardStop,
+			"Stop a managed Kubernetes port-forward by ID or process group.",
+			pluginbinding.Effects(core.OperationEffectWrite),
+			pluginbinding.Access(core.OperationAccessProvider),
+			pluginbinding.Risk(core.OperationRiskMedium),
+			pluginbinding.Idempotency(core.OperationIdempotent),
+		),
+		map[string]any{"id": "portforward-monitoring-service-homer-webapp-19080-80"},
+	)
+}
+
+func portForwardListSpec() core.OperationSpec {
+	return pluginbinding.TypedOperationSpec[PortForwardListInput, PortForwardListResult](
+		OperationPortForwardList,
+		"List managed Kubernetes port-forwards with liveness, local URL, and target metadata.",
+		kubernetesReadOptions(core.OperationIdempotent)...,
 	)
 }
 

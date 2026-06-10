@@ -270,6 +270,50 @@ func HostKubePortForwardStop(ctx pluginbinding.Context, input PortForwardStopInp
 	return PortForwardStopResult{ID: stopped.ID, Stopped: stopped.Stopped, Signal: stopped.Signal, Error: stopped.Error}, nil
 }
 
+// HostKubePortForwardList returns the managed port-forwards from the host
+// process store (group kubernetes.portforward), each probed for liveness so a
+// dead forward is recognizable, optionally filtered by namespace/context.
+func HostKubePortForwardList(ctx pluginbinding.Context, input PortForwardListInput) (PortForwardListResult, error) {
+	lister, ok := ctx.Host.(pluginbinding.ProcessLister)
+	if !ok || ctx.Host == nil {
+		return PortForwardListResult{}, fmt.Errorf("host does not support the process.list capability required by portforward.list (upgrade fluxplane-plugin)")
+	}
+	listed, err := lister.ProcessList(pluginbinding.ProcessListRequest{Group: "kubernetes.portforward"})
+	if err != nil {
+		return PortForwardListResult{}, err
+	}
+	namespace := strings.TrimSpace(input.Namespace)
+	contextName := strings.TrimSpace(input.Context)
+	out := PortForwardListResult{Forwards: []PortForwardRecord{}}
+	for _, process := range listed.Processes {
+		meta := process.Metadata
+		if namespace != "" && meta["namespace"] != namespace {
+			continue
+		}
+		if contextName != "" && meta["context"] != contextName {
+			continue
+		}
+		record := PortForwardRecord{
+			ID:        process.ID,
+			Context:   meta["context"],
+			Namespace: meta["namespace"],
+			Resource:  meta["resource"],
+			PID:       process.PID,
+			Alive:     process.Alive,
+			StartedAt: process.StartedAt,
+			LogPath:   process.LogPath,
+		}
+		record.LocalPort, _ = strconv.Atoi(meta["local_port"])
+		record.RemotePort, _ = strconv.Atoi(meta["remote_port"])
+		if record.LocalPort > 0 {
+			record.LocalURL = "http://127.0.0.1:" + strconv.Itoa(record.LocalPort)
+		}
+		out.Forwards = append(out.Forwards, record)
+	}
+	out.Count = len(out.Forwards)
+	return out, nil
+}
+
 func kubeClientFromInventory(ctx pluginbinding.Context, input InventoryInput) (kubernetes.Interface, error) {
 	contextName, err := resolveKubeContext(ctx, input.EndpointRef, input.URL, input.Context)
 	if err != nil {

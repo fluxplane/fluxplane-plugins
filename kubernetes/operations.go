@@ -32,6 +32,7 @@ type Service struct {
 	Logs         func(context.Context, PodLogsInput) (PodLogsResult, error)
 	ForwardStart func(context.Context, PortForwardStartInput) (PortForwardResult, error)
 	ForwardStop  func(context.Context, PortForwardStopInput) (PortForwardStopResult, error)
+	ForwardList  func(context.Context, PortForwardListInput) (PortForwardListResult, error)
 	Secrets      func(context.Context, EndpointDiscoverInput) ([]corev1.Secret, error)
 
 	Events            func(context.Context, EventListInput) ([]corev1.Event, error)
@@ -222,6 +223,32 @@ type PortForwardStopInput struct {
 	PID          int    `json:"pid,omitempty" jsonschema:"description=Process ID to terminate when process_group is unavailable."`
 }
 
+type PortForwardListInput struct {
+	Namespace string `json:"namespace,omitempty" jsonschema:"description=Filter by namespace."`
+	Context   string `json:"context,omitempty" jsonschema:"description=Filter by kubeconfig context."`
+}
+
+// PortForwardRecord is one managed port-forward from the host process store,
+// with a liveness probe so a dead forward is recognizable.
+type PortForwardRecord struct {
+	ID         string    `json:"id"`
+	Context    string    `json:"context,omitempty"`
+	Namespace  string    `json:"namespace,omitempty"`
+	Resource   string    `json:"resource,omitempty"`
+	LocalPort  int       `json:"local_port,omitempty"`
+	RemotePort int       `json:"remote_port,omitempty"`
+	LocalURL   string    `json:"local_url,omitempty"`
+	PID        int       `json:"pid,omitempty"`
+	Alive      bool      `json:"alive"`
+	StartedAt  time.Time `json:"started_at,omitempty"`
+	LogPath    string    `json:"log_path,omitempty"`
+}
+
+type PortForwardListResult struct {
+	Forwards []PortForwardRecord `json:"forwards"`
+	Count    int                 `json:"count"`
+}
+
 type PortForwardStopResult struct {
 	ID      string `json:"id,omitempty"`
 	Stopped bool   `json:"stopped"`
@@ -409,6 +436,14 @@ func (s Service) PortForwardStop(ctx pluginbinding.Context, input PortForwardSto
 	result, err := s.portForwardStop(ctx)(context.Background(), input)
 	if err != nil {
 		return PortForwardStopResult{}, pluginbinding.Errorf("kubernetes", "%s", err)
+	}
+	return result, nil
+}
+
+func (s Service) PortForwardList(ctx pluginbinding.Context, input PortForwardListInput) (PortForwardListResult, error) {
+	result, err := s.portForwardList(ctx)(context.Background(), input)
+	if err != nil {
+		return PortForwardListResult{}, pluginbinding.Errorf("kubernetes", "%s", err)
 	}
 	return result, nil
 }
@@ -605,6 +640,15 @@ func (s Service) portForwardStop(ctx pluginbinding.Context) func(context.Context
 	}
 	return func(_ context.Context, input PortForwardStopInput) (PortForwardStopResult, error) {
 		return HostKubePortForwardStop(ctx, input)
+	}
+}
+
+func (s Service) portForwardList(ctx pluginbinding.Context) func(context.Context, PortForwardListInput) (PortForwardListResult, error) {
+	if s.ForwardList != nil {
+		return s.ForwardList
+	}
+	return func(_ context.Context, input PortForwardListInput) (PortForwardListResult, error) {
+		return HostKubePortForwardList(ctx, input)
 	}
 }
 

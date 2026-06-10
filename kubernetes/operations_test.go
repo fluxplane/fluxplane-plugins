@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/fluxplane/fluxplane-plugin/pluginbinding"
 	"github.com/fluxplane/fluxplane-plugin/pluginbinding/plugintest"
 	"github.com/fluxplane/fluxplane-plugin/protocol"
 	appsv1 "k8s.io/api/apps/v1"
@@ -340,6 +341,72 @@ func TestPortForwardOperationsUseInjectedLifecycle(t *testing.T) {
 	stop := plugintest.RunOK[PortForwardStopResult](t, plugin, OperationPortForwardStop, map[string]any{"id": "kpf-test"})
 	if !stop.Stopped {
 		t.Fatalf("stop = %#v", stop)
+	}
+}
+
+func TestPortForwardListUsesInjectedLifecycleAndFilters(t *testing.T) {
+	plugin := NewPluginWithService(Service{
+		ForwardList: func(_ context.Context, input PortForwardListInput) (PortForwardListResult, error) {
+			if input.Namespace != "monitoring" {
+				t.Fatalf("list input = %#v", input)
+			}
+			return PortForwardListResult{Forwards: []PortForwardRecord{{
+				ID: "kpf-test", Context: "dev", Namespace: "monitoring", Resource: "service/loki",
+				LocalPort: 49152, RemotePort: 3100, LocalURL: "http://127.0.0.1:49152", PID: 123, Alive: true,
+			}}, Count: 1}, nil
+		},
+	})
+	listed := plugintest.RunOK[PortForwardListResult](t, plugin, OperationPortForwardList, map[string]any{"namespace": "monitoring"})
+	if listed.Count != 1 || listed.Forwards[0].ID != "kpf-test" || !listed.Forwards[0].Alive {
+		t.Fatalf("list = %#v", listed)
+	}
+}
+
+// fakeProcessListerHost provides the optional ProcessLister capability for the
+// HostKubePortForwardList mapping/filter test.
+type fakeProcessListerHost struct {
+	pluginbinding.HostClient
+	processes []pluginbinding.ProcessRecord
+}
+
+func (h *fakeProcessListerHost) ProcessList(input pluginbinding.ProcessListRequest) (pluginbinding.ProcessListResponse, error) {
+	if input.Group != "kubernetes.portforward" {
+		return pluginbinding.ProcessListResponse{}, nil
+	}
+	return pluginbinding.ProcessListResponse{Processes: h.processes, Count: len(h.processes)}, nil
+}
+
+func TestHostKubePortForwardListMapsProcessRecords(t *testing.T) {
+	host := &fakeProcessListerHost{processes: []pluginbinding.ProcessRecord{
+		{
+			ID: "kpf-1", PID: 11, Alive: true, LogPath: "/tmp/kpf-1.log",
+			Metadata: map[string]string{"context": "dev", "namespace": "latest", "resource": "service/homer-webapp", "local_port": "19080", "remote_port": "80"},
+		},
+		{
+			ID: "kpf-2", PID: 12, Alive: false,
+			Metadata: map[string]string{"context": "prod", "namespace": "eu", "resource": "service/loki", "local_port": "3100", "remote_port": "3100"},
+		},
+	}}
+	ctx := pluginbinding.Context{Host: host}
+
+	all, err := HostKubePortForwardList(ctx, PortForwardListInput{})
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	if all.Count != 2 {
+		t.Fatalf("all = %#v", all)
+	}
+	record := all.Forwards[0]
+	if record.ID != "kpf-1" || record.LocalPort != 19080 || record.RemotePort != 80 || record.LocalURL != "http://127.0.0.1:19080" || !record.Alive {
+		t.Fatalf("record = %#v", record)
+	}
+
+	filtered, err := HostKubePortForwardList(ctx, PortForwardListInput{Context: "prod"})
+	if err != nil {
+		t.Fatalf("filtered list: %v", err)
+	}
+	if filtered.Count != 1 || filtered.Forwards[0].ID != "kpf-2" || filtered.Forwards[0].Alive {
+		t.Fatalf("filtered = %#v", filtered)
 	}
 }
 

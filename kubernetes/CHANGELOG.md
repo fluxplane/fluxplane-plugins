@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.4.0
+
+### Added
+- **`kubernetes.portforward.list`** — list the managed port-forwards from the
+  host process store with target metadata (context, namespace, resource,
+  ports), the local URL, and a PID liveness probe (`alive`), filterable by
+  namespace/context. Closes the start→list→stop lifecycle: a dead forward is
+  now recognizable instead of silently refusing connections. Requires
+  `fluxplane-plugin` v0.8.0 (new `process.list` host capability).
+- Runnable JSON Schema `examples` on `portforward.start` and
+  `portforward.stop`. Bumped the plugin manifest to 0.20.0.
+
 ## v0.3.0
 
 ### Added

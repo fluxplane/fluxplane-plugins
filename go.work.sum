@@ -135,7 +135,7 @@ github.com/fluxplane/codegate v1.1.0/go.mod h1:+DhsTeUNfbH2BjA861bUz3tYMkkFDztlz
 github.com/fluxplane/fluxplane-browser v0.1.0 h1:ku0kVz4uV76zTXN/lXp+yLXOku0RHsPASiIHJTTfho8=
 github.com/fluxplane/fluxplane-browser v0.1.0/go.mod h1:+OEbViZMUFrL+tdZ+zgoLTHfY15tLJybFLhtMOW+iTw=
 github.com/fluxplane/fluxplane-plugin v0.4.0/go.mod h1:NuFzDYH97iEuAs99qNdXXSHWbDuZQZkC//SwUIPOrRk=
-github.com/fluxplane/fluxplane-plugin v0.7.0/go.mod h1:NuFzDYH97iEuAs99qNdXXSHWbDuZQZkC//SwUIPOrRk=
+github.com/fluxplane/fluxplane-plugin v0.8.0/go.mod h1:NuFzDYH97iEuAs99qNdXXSHWbDuZQZkC//SwUIPOrRk=
 github.com/getkin/kin-openapi v0.138.0 h1:ebfE0JAmF6AqHrNBy1KO3Fs68K9tPs48HalvLPo7Rv4=
 github.com/getkin/kin-openapi v0.138.0/go.mod h1:vUYWaKyMqj7PfTybelXtLuLN9tReS12vxnzMRK+z2GY=
 github.com/go-errors/errors v1.5.1 h1:ZwEMSLRCapFLflTpT7NKaAc7ukJ8ZPEjzlxt8rPN8bk=

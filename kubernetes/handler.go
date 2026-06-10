@@ -22,6 +22,7 @@ func NewPluginWithService(service Service) *pluginbinding.Plugin {
 		pluginbinding.RegisterOperation(podLogsSpec(), service.PodLogs),
 		pluginbinding.RegisterOperation(portForwardStartSpec(), service.PortForwardStart),
 		pluginbinding.RegisterOperation(portForwardStopSpec(), service.PortForwardStop),
+		pluginbinding.RegisterOperation(portForwardListSpec(), service.PortForwardList),
 		pluginbinding.RegisterOperation(deploymentListSpec(), service.DeploymentList),
 		pluginbinding.RegisterOperation(deploymentShowSpec(), service.DeploymentShow),
 		pluginbinding.RegisterOperation(deploymentScaleSpec(), service.DeploymentScale),
