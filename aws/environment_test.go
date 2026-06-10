@@ -19,11 +19,26 @@ func TestManifestDeclaresAWSOperationAndContext(t *testing.T) {
 	if manifest.Name != PluginName {
 		t.Fatalf("name = %q, want %q", manifest.Name, PluginName)
 	}
-	if len(manifest.Operations) != 1 || manifest.Operations[0].Name != OperationInspect {
-		t.Fatalf("operations = %#v, want inspect", manifest.Operations)
+	byName := map[string]int{}
+	for i, op := range manifest.Operations {
+		byName[op.Name] = i
+		if !op.ReadOnly {
+			t.Fatalf("operation %s should be read-only", op.Name)
+		}
 	}
-	if !manifest.Operations[0].ReadOnly || len(manifest.Operations[0].SecretPurposes) != 0 {
-		t.Fatalf("operation = %#v, want read-only without secret purposes", manifest.Operations[0])
+	if len(manifest.Operations) != 11 {
+		t.Fatalf("operations = %d, want 11", len(manifest.Operations))
+	}
+	inspectIdx, ok := byName[OperationInspect]
+	if !ok {
+		t.Fatalf("operations = %v, want inspect", byName)
+	}
+	if len(manifest.Operations[inspectIdx].SecretPurposes) != 0 {
+		t.Fatalf("inspect = %#v, want no secret purposes", manifest.Operations[inspectIdx])
+	}
+	testIdx, ok := byName[OperationTest]
+	if !ok || len(manifest.Operations[testIdx].SecretPurposes) != 3 {
+		t.Fatalf("aws.test should declare the three credential purposes: %#v", manifest.Operations[testIdx])
 	}
 	if len(manifest.Context) != 1 || manifest.Context[0].Name != ContextName {
 		t.Fatalf("context = %#v, want AWS context", manifest.Context)

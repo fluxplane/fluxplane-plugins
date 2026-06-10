@@ -38,7 +38,7 @@
     },
     {
       "name": "aws",
-      "description": "AWS environment configuration and credential presence inspection.",
+      "description": "Read-only AWS operations: STS identity, EC2, EKS, RDS/Aurora, S3, CloudWatch logs (tail + Insights) and metrics, plus environment inspection.",
       "binary": "fluxplane-plugin-aws",
       "go_install": "github.com/fluxplane/fluxplane-plugins/aws/cmd/fluxplane-plugin-aws@latest",
       "local_path": "aws"
