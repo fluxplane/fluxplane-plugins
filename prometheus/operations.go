@@ -44,10 +44,13 @@ type QueryInput struct {
 }
 
 type QueryResult struct {
-	URL        string          `json:"url"`
-	Query      string          `json:"query"`
-	ResultType string          `json:"result_type"`
-	Results    json.RawMessage `json:"results"`
+	URL        string   `json:"url"`
+	Query      string   `json:"query"`
+	ResultType string   `json:"result_type"`
+	Samples    []Sample `json:"samples,omitempty" jsonschema:"description=Vector/scalar/string results: one value per metric."`
+	Series     []Series `json:"series,omitempty" jsonschema:"description=Matrix results: points over time per metric."`
+	Count      int      `json:"count"`
+	Truncated  bool     `json:"truncated,omitempty" jsonschema:"description=True when series or points were dropped to stay within output caps."`
 }
 
 type QueryRangeInput struct {
@@ -55,7 +58,7 @@ type QueryRangeInput struct {
 	Query string `json:"query,omitempty" jsonschema:"required,description=PromQL query"`
 	Start string `json:"start,omitempty" jsonschema:"description=RFC3339, unix timestamp, or duration ago"`
 	End   string `json:"end,omitempty" jsonschema:"description=RFC3339, unix timestamp, or duration ago"`
-	Step  string `json:"step,omitempty" jsonschema:"description=Range step duration"`
+	Step  string `json:"step,omitempty" jsonschema:"description=Range step duration. Choose step so (end-start)/step stays under 500 points per series; excess points are truncated keeping the newest."`
 }
 
 type QueryRangeResult = QueryResult
@@ -78,14 +81,44 @@ type TargetsInput struct {
 }
 
 type TargetsResult struct {
-	URL     string          `json:"url"`
-	State   string          `json:"state,omitempty"`
-	Targets json.RawMessage `json:"targets"`
+	URL          string   `json:"url"`
+	State        string   `json:"state,omitempty"`
+	Targets      []Target `json:"targets"`
+	ActiveCount  int      `json:"active_count"`
+	DroppedCount int      `json:"dropped_count"`
 }
 
 type AlertsResult struct {
-	URL    string          `json:"url"`
-	Alerts json.RawMessage `json:"alerts"`
+	URL    string  `json:"url"`
+	Alerts []Alert `json:"alerts"`
+	Count  int     `json:"count"`
+}
+
+type RulesInput struct {
+	PrometheusTargetInput
+	Type string `json:"type,omitempty" jsonschema:"description=Filter by rule kind: alert or record. Empty returns both."`
+}
+
+type RulesResult struct {
+	URL        string      `json:"url"`
+	Groups     []RuleGroup `json:"groups"`
+	GroupCount int         `json:"group_count"`
+	RuleCount  int         `json:"rule_count"`
+}
+
+type SeriesInput struct {
+	PrometheusTargetInput
+	Match []string `json:"match,omitempty" jsonschema:"required,description=PromQL series selectors, e.g. up{job=\"api\"}."`
+	Start string   `json:"start,omitempty" jsonschema:"description=RFC3339, unix timestamp, or duration ago"`
+	End   string   `json:"end,omitempty" jsonschema:"description=RFC3339, unix timestamp, or duration ago"`
+	Limit int      `json:"limit,omitempty" jsonschema:"description=Maximum series returned. Default 100, max 1000."`
+}
+
+type SeriesResult struct {
+	URL       string              `json:"url"`
+	Series    []map[string]string `json:"series" jsonschema:"description=Matching series label sets."`
+	Count     int                 `json:"count"`
+	Truncated bool                `json:"truncated,omitempty"`
 }
 
 type QueryRecord struct {
@@ -233,7 +266,17 @@ func (s Service) Targets(ctx pluginbinding.Context, input TargetsInput) (Targets
 	if err != nil {
 		return TargetsResult{}, pluginbinding.Errorf("prometheus", "%s", err)
 	}
-	return TargetsResult{URL: target, State: input.State, Targets: data}, nil
+	active, dropped, err := parseTargets(data)
+	if err != nil {
+		return TargetsResult{}, pluginbinding.Errorf("prometheus", "%s", err)
+	}
+	return TargetsResult{
+		URL:          target,
+		State:        input.State,
+		Targets:      append(active, dropped...),
+		ActiveCount:  len(active),
+		DroppedCount: len(dropped),
+	}, nil
 }
 
 func (s Service) Alerts(ctx pluginbinding.Context, input TestInput) (AlertsResult, error) {
@@ -245,7 +288,98 @@ func (s Service) Alerts(ctx pluginbinding.Context, input TestInput) (AlertsResul
 	if err != nil {
 		return AlertsResult{}, pluginbinding.Errorf("prometheus", "%s", err)
 	}
-	return AlertsResult{URL: target, Alerts: data}, nil
+	alerts, err := parseAlerts(data)
+	if err != nil {
+		return AlertsResult{}, pluginbinding.Errorf("prometheus", "%s", err)
+	}
+	return AlertsResult{URL: target, Alerts: alerts, Count: len(alerts)}, nil
+}
+
+// Rules lists alerting and recording rules from /api/v1/rules.
+func (s Service) Rules(ctx pluginbinding.Context, input RulesInput) (RulesResult, error) {
+	target, client, err := s.client(ctx, input.PrometheusTargetInput)
+	if err != nil {
+		return RulesResult{}, pluginbinding.Errorf("bad_input", "%s", err)
+	}
+	values := url.Values{}
+	switch kind := strings.ToLower(strings.TrimSpace(input.Type)); kind {
+	case "":
+	case "alert", "record":
+		values.Set("type", kind)
+	default:
+		return RulesResult{}, pluginbinding.Fail("bad_input", "type must be alert or record")
+	}
+	data, err := client.get(context.Background(), "/api/v1/rules", values)
+	if err != nil {
+		return RulesResult{}, pluginbinding.Errorf("prometheus", "%s", err)
+	}
+	groups, err := parseRuleGroups(data)
+	if err != nil {
+		return RulesResult{}, pluginbinding.Errorf("prometheus", "%s", err)
+	}
+	ruleCount := 0
+	for _, group := range groups {
+		ruleCount += len(group.Rules)
+	}
+	return RulesResult{URL: target, Groups: groups, GroupCount: len(groups), RuleCount: ruleCount}, nil
+}
+
+// SeriesMeta lists series label sets matching the given selectors via
+// /api/v1/series.
+func (s Service) SeriesMeta(ctx pluginbinding.Context, input SeriesInput) (SeriesResult, error) {
+	var match []string
+	for _, selector := range input.Match {
+		if strings.TrimSpace(selector) != "" {
+			match = append(match, strings.TrimSpace(selector))
+		}
+	}
+	if len(match) == 0 {
+		return SeriesResult{}, pluginbinding.Fail("bad_input", "at least one match selector is required")
+	}
+	target, client, err := s.client(ctx, input.PrometheusTargetInput)
+	if err != nil {
+		return SeriesResult{}, pluginbinding.Errorf("bad_input", "%s", err)
+	}
+	limit := input.Limit
+	if limit <= 0 {
+		limit = 100
+	}
+	if limit > 1000 {
+		limit = 1000
+	}
+	now := time.Now()
+	values := url.Values{"match[]": match}
+	if strings.TrimSpace(input.Start) != "" {
+		start, err := parseTimeValue(input.Start, now)
+		if err != nil {
+			return SeriesResult{}, pluginbinding.Errorf("bad_input", "%s", err)
+		}
+		values.Set("start", strconv.FormatInt(start.Unix(), 10))
+	}
+	if strings.TrimSpace(input.End) != "" {
+		end, err := parseTimeValue(input.End, now)
+		if err != nil {
+			return SeriesResult{}, pluginbinding.Errorf("bad_input", "%s", err)
+		}
+		values.Set("end", strconv.FormatInt(end.Unix(), 10))
+	}
+	// Newer Prometheus honors limit server-side; the client-side cap below
+	// covers older versions.
+	values.Set("limit", strconv.Itoa(limit))
+	data, err := client.get(context.Background(), "/api/v1/series", values)
+	if err != nil {
+		return SeriesResult{}, pluginbinding.Errorf("prometheus", "%s", err)
+	}
+	var series []map[string]string
+	if err := json.Unmarshal(data, &series); err != nil {
+		return SeriesResult{}, pluginbinding.Errorf("prometheus", "%s", err)
+	}
+	truncated := false
+	if len(series) > limit {
+		series = series[:limit]
+		truncated = true
+	}
+	return SeriesResult{URL: target, Series: series, Count: len(series), Truncated: truncated}, nil
 }
 
 func (s Service) QueryDatasource(ctx pluginbinding.Context, input QueryInput) (QueryDatasourceResult, error) {
@@ -253,18 +387,20 @@ func (s Service) QueryDatasource(ctx pluginbinding.Context, input QueryInput) (Q
 	if err != nil {
 		return QueryDatasourceResult{}, err
 	}
-	var raw []map[string]any
-	_ = json.Unmarshal(out.Results, &raw)
-	if len(raw) == 0 && len(out.Results) > 0 {
-		var one map[string]any
-		if err := json.Unmarshal(out.Results, &one); err == nil && len(one) > 0 {
-			raw = append(raw, one)
-		}
+	results := make([]map[string]any, 0, out.Count)
+	metrics := make([]map[string]string, 0, out.Count)
+	for _, sample := range out.Samples {
+		results = append(results, map[string]any{"metric": sample.Metric, "value": sample.Value, "timestamp": sample.Timestamp})
+		metrics = append(metrics, sample.Metric)
 	}
-	records := make([]QueryRecord, 0, len(raw))
-	for i, result := range raw {
+	for _, series := range out.Series {
+		results = append(results, map[string]any{"metric": series.Metric, "points": series.Points, "point_count": series.PointCount})
+		metrics = append(metrics, series.Metric)
+	}
+	records := make([]QueryRecord, 0, len(results))
+	for i, result := range results {
 		id := stableID(out.URL, out.Query, strconv.Itoa(i), result)
-		title := firstNonEmpty(metricTitle(result), fmt.Sprintf("result %d", i+1))
+		title := firstNonEmpty(metricTitle(metrics[i]), fmt.Sprintf("result %d", i+1))
 		record := QueryRecord{
 			DatasourceRecord: pluginbinding.NewDatasourceRecord(ctx.DatasourceSource(), EntityQueryResult, id, pluginbinding.RecordTitle(title), pluginbinding.RecordMetadata(map[string]any{"query": out.Query, "result_type": out.ResultType, "result": result, "endpoint_url": out.URL})),
 			Title:            title,
@@ -311,21 +447,26 @@ func (s Service) TargetsDatasource(ctx pluginbinding.Context, input TargetsInput
 	if err != nil {
 		return TargetDatasourceResult{}, err
 	}
-	targets := targetObjects(out.Targets)
-	records := make([]TargetRecord, 0, len(targets))
-	for i, target := range targets {
-		job := stringFromNested(target, "labels", "job")
-		endpoint := firstNonEmpty(stringFromNested(target, "labels", "instance"), stringFromNested(target, "discoveredLabels", "__address__"), stringFromNested(target, "scrapePool"))
-		state := firstNonEmpty(stringFromAny(target["health"]), stringFromAny(target["state"]), out.State)
+	records := make([]TargetRecord, 0, len(out.Targets))
+	for i, target := range out.Targets {
+		job := target.Job
+		endpoint := firstNonEmpty(target.Instance, target.ScrapePool)
+		state := firstNonEmpty(target.Health, out.State)
 		title := firstNonEmpty(job, endpoint, fmt.Sprintf("target %d", i+1))
 		id := stableID(out.URL, title, strconv.Itoa(i), target)
+		detail := map[string]any{
+			"job": job, "instance": target.Instance, "health": target.Health,
+			"scrape_pool": target.ScrapePool, "scrape_url": target.ScrapeURL,
+			"last_scrape": target.LastScrape, "last_error": target.LastError,
+			"labels": target.Labels, "dropped": target.Dropped,
+		}
 		record := TargetRecord{
-			DatasourceRecord: pluginbinding.NewDatasourceRecord(ctx.DatasourceSource(), EntityTarget, id, pluginbinding.RecordTitle(title), pluginbinding.RecordMetadata(map[string]any{"state": state, "job": job, "endpoint": endpoint, "target": target, "endpoint_url": out.URL})),
+			DatasourceRecord: pluginbinding.NewDatasourceRecord(ctx.DatasourceSource(), EntityTarget, id, pluginbinding.RecordTitle(title), pluginbinding.RecordMetadata(map[string]any{"state": state, "job": job, "endpoint": endpoint, "target": detail, "endpoint_url": out.URL})),
 			Title:            title,
 			State:            state,
 			Job:              job,
 			Endpoint:         endpoint,
-			Target:           target,
+			Target:           detail,
 			EndpointURL:      out.URL,
 		}
 		if out.URL != "" {
@@ -341,24 +482,18 @@ func (s Service) AlertsDatasource(ctx pluginbinding.Context, input TestInput) (A
 	if err != nil {
 		return AlertDatasourceResult{}, err
 	}
-	alerts := alertObjects(out.Alerts)
-	records := make([]AlertRecord, 0, len(alerts))
-	for i, alert := range alerts {
-		labels := stringMapFromAny(alert["labels"])
-		annotations := stringMapFromAny(alert["annotations"])
-		name := labels["alertname"]
-		state := stringFromAny(alert["state"])
-		severity := labels["severity"]
-		title := firstNonEmpty(name, annotations["summary"], fmt.Sprintf("alert %d", i+1))
+	records := make([]AlertRecord, 0, len(out.Alerts))
+	for i, alert := range out.Alerts {
+		title := firstNonEmpty(alert.Name, alert.Annotations["summary"], fmt.Sprintf("alert %d", i+1))
 		id := stableID(out.URL, title, strconv.Itoa(i), alert)
 		record := AlertRecord{
-			DatasourceRecord: pluginbinding.NewDatasourceRecord(ctx.DatasourceSource(), EntityAlert, id, pluginbinding.RecordTitle(title), pluginbinding.RecordMetadata(map[string]any{"name": name, "state": state, "severity": severity, "labels": labels, "annotations": annotations, "endpoint_url": out.URL})),
+			DatasourceRecord: pluginbinding.NewDatasourceRecord(ctx.DatasourceSource(), EntityAlert, id, pluginbinding.RecordTitle(title), pluginbinding.RecordMetadata(map[string]any{"name": alert.Name, "state": alert.State, "severity": alert.Severity, "labels": alert.Labels, "annotations": alert.Annotations, "endpoint_url": out.URL})),
 			Title:            title,
-			Name:             name,
-			State:            state,
-			Severity:         severity,
-			Labels:           labels,
-			Annotations:      annotations,
+			Name:             alert.Name,
+			State:            alert.State,
+			Severity:         alert.Severity,
+			Labels:           alert.Labels,
+			Annotations:      alert.Annotations,
 			EndpointURL:      out.URL,
 		}
 		if out.URL != "" {
@@ -381,7 +516,13 @@ func (s Service) query(ctx context.Context, target string, client Client, query,
 	if err := json.Unmarshal(data, &wrapped); err != nil {
 		return QueryResult{}, pluginbinding.Errorf("prometheus", "%s", err)
 	}
-	return QueryResult{URL: target, Query: query, ResultType: wrapped.ResultType, Results: wrapped.Result}, nil
+	samples, series, truncated, err := parsePromQLData(wrapped.ResultType, wrapped.Result)
+	if err != nil {
+		return QueryResult{}, pluginbinding.Errorf("prometheus", "%s", err)
+	}
+	out := QueryResult{URL: target, Query: query, ResultType: wrapped.ResultType, Samples: samples, Series: series, Truncated: truncated}
+	out.Count = len(samples) + len(series)
+	return out, nil
 }
 
 func (s Service) client(ctx pluginbinding.Context, input PrometheusTargetInput) (string, Client, error) {
@@ -416,44 +557,14 @@ func firstNonEmpty(values ...string) string {
 	return ""
 }
 
-func targetObjects(raw json.RawMessage) []map[string]any {
-	var wrapped struct {
-		ActiveTargets  []map[string]any `json:"activeTargets"`
-		DroppedTargets []map[string]any `json:"droppedTargets"`
-	}
-	if err := json.Unmarshal(raw, &wrapped); err == nil {
-		out := append([]map[string]any{}, wrapped.ActiveTargets...)
-		out = append(out, wrapped.DroppedTargets...)
-		if len(out) > 0 {
-			return out
-		}
-	}
-	var direct []map[string]any
-	_ = json.Unmarshal(raw, &direct)
-	return direct
-}
-
-func alertObjects(raw json.RawMessage) []map[string]any {
-	var wrapped struct {
-		Alerts []map[string]any `json:"alerts"`
-	}
-	if err := json.Unmarshal(raw, &wrapped); err == nil && len(wrapped.Alerts) > 0 {
-		return wrapped.Alerts
-	}
-	var direct []map[string]any
-	_ = json.Unmarshal(raw, &direct)
-	return direct
-}
-
-func metricTitle(result map[string]any) string {
-	metric, _ := result["metric"].(map[string]any)
+func metricTitle(metric map[string]string) string {
 	if len(metric) == 0 {
 		return ""
 	}
-	var parts []string
+	parts := make([]string, 0, len(metric))
 	for key, value := range metric {
-		if text := stringFromAny(value); text != "" {
-			parts = append(parts, key+"="+text)
+		if value != "" {
+			parts = append(parts, key+"="+value)
 		}
 	}
 	sort.Strings(parts)
@@ -464,18 +575,6 @@ func stableID(parts ...any) string {
 	data, _ := json.Marshal(parts)
 	sum := sha1.Sum(data)
 	return hex.EncodeToString(sum[:])
-}
-
-func stringFromNested(object map[string]any, path ...string) string {
-	var current any = object
-	for _, key := range path {
-		next, ok := current.(map[string]any)
-		if !ok {
-			return ""
-		}
-		current = next[key]
-	}
-	return stringFromAny(current)
 }
 
 func stringFromAny(value any) string {
@@ -489,18 +588,4 @@ func stringFromAny(value any) string {
 	default:
 		return strings.TrimSpace(fmt.Sprint(typed))
 	}
-}
-
-func stringMapFromAny(value any) map[string]string {
-	out := map[string]string{}
-	raw, ok := value.(map[string]any)
-	if !ok {
-		return out
-	}
-	for key, value := range raw {
-		if text := stringFromAny(value); text != "" {
-			out[key] = text
-		}
-	}
-	return out
 }
