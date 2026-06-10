@@ -114,6 +114,13 @@
       "local_path": "grafana"
     },
     {
+      "name": "homer",
+      "description": "Homer 7 SIP capture: call search, message flows, QoS/MOS metrics, multi-leg analysis, PCAP export, and aliases.",
+      "binary": "fluxplane-plugin-homer",
+      "go_install": "github.com/fluxplane/fluxplane-plugins/homer/cmd/fluxplane-plugin-homer@latest",
+      "local_path": "homer"
+    },
+    {
       "name": "prometheus",
       "description": "Prometheus health checks, PromQL queries, labels, targets, and alerts for configured or discovered endpoints.",
       "binary": "fluxplane-plugin-prometheus",
