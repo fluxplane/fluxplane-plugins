@@ -18,10 +18,10 @@ github.com/fluxplane/fluxplane-evidence v0.1.0 h1:8aRwuGBEUh651VO3g3V+Uu/GwLb8hK
 github.com/fluxplane/fluxplane-evidence v0.1.0/go.mod h1:QEfiJqSaToePh98xpzeZUiV7eqBwVzoYxFkndoCxhmA=
 github.com/fluxplane/fluxplane-operation v0.2.0 h1:7FB8JWZJOKgEiaTPBzzirNVQe2xVpZZ2aTyrGv/SEdA=
 github.com/fluxplane/fluxplane-operation v0.2.0/go.mod h1:6olgIlsHg3GxmoDqB64zme4BDmbsTR+V7pSAK4F0eO0=
-github.com/fluxplane/fluxplane-plugin v0.1.0 h1:OZ1QpUDNdh3cLmnmBZaGVw6rOaGctXF94YM0NUNzWf0=
-github.com/fluxplane/fluxplane-plugin v0.1.0/go.mod h1:NuFzDYH97iEuAs99qNdXXSHWbDuZQZkC//SwUIPOrRk=
-github.com/fluxplane/fluxplane-plugins/vision v0.1.0 h1:mQ8Sc6TwjFHwr7pXmNFCyWUKSb+571pXbai/wt25HrU=
-github.com/fluxplane/fluxplane-plugins/vision v0.1.0/go.mod h1:4mTHRdqWNcOdfZIhkaGxQ4PN3C4FjTyRhePXBikDX0w=
+github.com/fluxplane/fluxplane-plugin v0.9.0 h1:F9zA7vt8yaxo+IWvU/yRDK8L8nUkYjeZJSaLUY1Wo1E=
+github.com/fluxplane/fluxplane-plugin v0.9.0/go.mod h1:NuFzDYH97iEuAs99qNdXXSHWbDuZQZkC//SwUIPOrRk=
+github.com/fluxplane/fluxplane-plugins/vision v0.2.0 h1:/NDpUDogWpCc0ZIsyPY1kpMZDPJosEo+lNC+4XNzOYc=
+github.com/fluxplane/fluxplane-plugins/vision v0.2.0/go.mod h1:6sw8HmFlOVj3sq2nK1t0zIwqBtCzME469uJ5rmk6kpE=
 github.com/fluxplane/fluxplane-policy v0.2.0 h1:q1qxqR5XzjxemRMxu7Y1GmZgMAf+YFm5Vcnbxpjj7RU=
 github.com/fluxplane/fluxplane-policy v0.2.0/go.mod h1:elG/jPzZtX1j7GaFewjpc2tiD8LJMW1lVTxZUPQPDsc=
 github.com/fluxplane/fluxplane-secret v0.2.0 h1:/EzUoR2NysaV7iW70FeROGIcI/HG+SXFR4HD3U8Xqnc=
