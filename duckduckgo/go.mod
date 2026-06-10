@@ -2,7 +2,7 @@ module github.com/fluxplane/fluxplane-plugins/duckduckgo
 
 go 1.26.1
 
-require github.com/fluxplane/fluxplane-plugins/websearch v0.1.0
+require github.com/fluxplane/fluxplane-plugins/websearch v0.2.0
 
 require (
 	github.com/fluxplane/fluxplane-auth v0.5.0 // indirect
