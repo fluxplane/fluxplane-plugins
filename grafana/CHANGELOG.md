@@ -1,0 +1,43 @@
+# Changelog
+
+## v0.2.0
+
+### Changed
+- **Proxy results are parsed, not dumped — `ProxyQueryResult` is gone**
+  (pre-1.0, no compatibility shims). Every datasource-proxied operation now
+  returns a typed, agent-readable result:
+  - `grafana.prometheus.query` / `range` → samples (vector/scalar/string) and
+    series (matrix) in the same shape as the prometheus plugin, values kept as
+    strings (`NaN`/`±Inf` are legal), bounded at 200 series / 500 points per
+    series with `truncated` flags.
+  - `grafana.prometheus.rules` → rule groups with type, query, state, `for`,
+    health, and active alert counts.
+  - `grafana.alerts.active` → typed Alertmanager alerts (name, state,
+    severity, starts/ends, silenced_by, inhibited_by, fingerprint, labels,
+    annotations); severity/namespace filters work on the typed labels.
+  - `grafana.alerts.silences.list/create/delete` → typed silences (id, state,
+    matchers, window, created_by, comment), create returns `silence_id`,
+    delete returns `deleted`.
+  - `grafana.annotation.list/add` → typed annotations with RFC3339 times.
+  - `grafana.datasource.health` → `{status, message, source, error}` instead
+    of a raw payload (alertmanager fallback included).
+  - `grafana.tempo.search` → trace summaries (trace_id, root service/trace,
+    start, duration); `grafana.tempo.trace.get` → span summaries (service,
+    name, timing, status) root-first, capped at 200 spans with `truncated`,
+    plus services list and root duration. Tolerates both `traceID`/`traceId`
+    and `batches`/`resourceSpans` shapes.
+- **`grafana.loki.query`/`recent_logs` dropped the `raw` payload duplicate**
+  and gained a `truncated` flag (full page → more entries likely exist).
+- **`alerts.silences.create` accepts `ends_at` as a duration from now**
+  (e.g. `2h`) — previously durations meant "ago", which always failed the
+  ends-after-starts check.
+- Requires `fluxplane-plugin` v0.7.0. Manifest 0.19.0.
+
+### Added
+- Runnable JSON Schema `examples` on dashboard.list, annotation.list/add,
+  loki.query, loki.recent_logs, prometheus.query/range/rules, alerts.active,
+  alerts.silences.create, and tempo.search.
+
+## v0.1.0
+
+- Initial Grafana plugin.

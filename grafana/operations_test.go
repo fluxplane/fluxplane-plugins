@@ -143,8 +143,12 @@ func TestLokiQueryNormalizesLogEntries(t *testing.T) {
 	host := newGrafanaTestHost(server.URL, "")
 
 	out := plugintest.RunOK[LokiQueryResult](t, plugin, OperationLokiQuery, map[string]any{"endpoint_ref": "grafana-dev", "cluster": "alpha", "query": `{namespace="latest"}`, "limit": 2}, plugintest.WithHost(host))
-	if out.Count != 2 || out.Limit != 2 || out.NormalizedQuery != `{namespace="latest"}` || len(out.Raw) == 0 {
+	if out.Count != 2 || out.Limit != 2 || out.NormalizedQuery != `{namespace="latest"}` {
 		t.Fatalf("result = %#v", out)
+	}
+	// full page -> truncation heuristic flags more entries likely exist
+	if !out.Truncated {
+		t.Fatalf("expected truncated flag on a full page: %#v", out)
 	}
 	if out.Entries[0].Line != "world" || out.Entries[0].Labels["pod"] != "backend-acd-1" {
 		t.Fatalf("entries = %#v", out.Entries)
@@ -169,8 +173,8 @@ func TestDatasourceHealthFallsBackForAlertmanager(t *testing.T) {
 	plugin := NewPluginWithService(NewService())
 	host := newGrafanaTestHost(server.URL, "")
 
-	out := plugintest.RunOK[ProxyQueryResult](t, plugin, OperationDatasourceHealth, map[string]any{"endpoint_ref": "grafana-dev", "uid": "alertmanager-alpha"}, plugintest.WithHost(host))
-	if out.UID != "alertmanager-alpha" || !strings.Contains(string(out.Data), "alertmanager_status") {
+	out := plugintest.RunOK[DatasourceHealthResult](t, plugin, OperationDatasourceHealth, map[string]any{"endpoint_ref": "grafana-dev", "uid": "alertmanager-alpha"}, plugintest.WithHost(host))
+	if out.UID != "alertmanager-alpha" || out.Source != "alertmanager_status" || out.Status != "OK" {
 		t.Fatalf("result = %#v", out)
 	}
 }
@@ -193,8 +197,8 @@ func TestDatasourceHealthReturnsAlertmanagerProxyError(t *testing.T) {
 	plugin := NewPluginWithService(NewService())
 	host := newGrafanaTestHost(server.URL, "")
 
-	out := plugintest.RunOK[ProxyQueryResult](t, plugin, OperationDatasourceHealth, map[string]any{"endpoint_ref": "grafana-dev", "uid": "alertmanager-alpha"}, plugintest.WithHost(host))
-	if out.UID != "alertmanager-alpha" || !strings.Contains(string(out.Data), `"status":"error"`) || !strings.Contains(string(out.Data), "alertmanager_status") {
+	out := plugintest.RunOK[DatasourceHealthResult](t, plugin, OperationDatasourceHealth, map[string]any{"endpoint_ref": "grafana-dev", "uid": "alertmanager-alpha"}, plugintest.WithHost(host))
+	if out.UID != "alertmanager-alpha" || out.Status != "error" || out.Source != "alertmanager_status" || out.Error == "" {
 		t.Fatalf("result = %#v", out)
 	}
 }
@@ -244,6 +248,173 @@ func TestPrometheusRangeRejectsStartAfterEnd(t *testing.T) {
 	}, plugintest.WithHost(host))
 	if err == nil || err.Code != "bad_input" || !strings.Contains(err.Message, "start must be before end") {
 		t.Fatalf("err = %#v", err)
+	}
+}
+
+func TestPrometheusQueryParsesVectorThroughProxy(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/datasources":
+			_, _ = w.Write([]byte(`[{"uid":"prometheus-alpha","name":"Prometheus Alpha","type":"prometheus"}]`))
+		case "/api/datasources/proxy/uid/prometheus-alpha/api/v1/query":
+			_, _ = w.Write([]byte(`{"status":"success","data":{"resultType":"vector","result":[{"metric":{"job":"api"},"value":[1700000000,"NaN"]}]}}`))
+		default:
+			t.Fatalf("path = %s", r.URL.Path)
+		}
+	}))
+	defer server.Close()
+	plugin := NewPluginWithService(NewService())
+	host := newGrafanaTestHost(server.URL, "")
+
+	out := plugintest.RunOK[PromQueryResult](t, plugin, OperationPrometheusQuery, map[string]any{"endpoint_ref": "grafana-dev", "cluster": "alpha", "query": "up"}, plugintest.WithHost(host))
+	if out.ResultType != "vector" || out.Count != 1 || out.Samples[0].Metric["job"] != "api" || out.Samples[0].Value != "NaN" {
+		t.Fatalf("result = %#v", out)
+	}
+}
+
+func TestPrometheusRulesParsesGroupsThroughProxy(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/datasources":
+			_, _ = w.Write([]byte(`[{"uid":"prometheus-alpha","name":"Prometheus Alpha","type":"prometheus"}]`))
+		case "/api/datasources/proxy/uid/prometheus-alpha/api/v1/rules":
+			_, _ = w.Write([]byte(`{"status":"success","data":{"groups":[{"name":"g","interval":60,"rules":[{"name":"HighErrorRate","type":"alerting","query":"x>1","state":"pending","duration":120,"alerts":[{}]}]}]}}`))
+		default:
+			t.Fatalf("path = %s", r.URL.Path)
+		}
+	}))
+	defer server.Close()
+	plugin := NewPluginWithService(NewService())
+	host := newGrafanaTestHost(server.URL, "")
+
+	out := plugintest.RunOK[PromRulesResult](t, plugin, OperationPrometheusRules, map[string]any{"endpoint_ref": "grafana-dev", "cluster": "alpha"}, plugintest.WithHost(host))
+	if out.GroupCount != 1 || out.RuleCount != 1 {
+		t.Fatalf("rules = %#v", out)
+	}
+	rule := out.Groups[0].Rules[0]
+	if rule.State != "pending" || rule.For != "2m0s" || rule.ActiveCount != 1 {
+		t.Fatalf("rule = %#v", rule)
+	}
+}
+
+func TestAlertsActiveParsesAndFiltersTyped(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/datasources":
+			_, _ = w.Write([]byte(`[{"uid":"alertmanager-alpha","name":"AM Alpha","type":"alertmanager"}]`))
+		case "/api/datasources/proxy/uid/alertmanager-alpha/api/v2/alerts":
+			_, _ = w.Write([]byte(`[
+				{"labels":{"alertname":"HighErrorRate","severity":"page","namespace":"core"},"annotations":{"summary":"errors"},"startsAt":"2026-06-10T00:00:00Z","fingerprint":"abc","status":{"state":"active","silencedBy":["s1"]}},
+				{"labels":{"alertname":"DiskFull","severity":"warn","namespace":"infra"},"status":{"state":"active"}}
+			]`))
+		default:
+			t.Fatalf("path = %s", r.URL.Path)
+		}
+	}))
+	defer server.Close()
+	plugin := NewPluginWithService(NewService())
+	host := newGrafanaTestHost(server.URL, "")
+
+	out := plugintest.RunOK[AlertsActiveResult](t, plugin, OperationAlertsActive, map[string]any{"endpoint_ref": "grafana-dev", "cluster": "alpha", "severity": "page"}, plugintest.WithHost(host))
+	if out.Count != 1 || len(out.Alerts) != 1 {
+		t.Fatalf("alerts = %#v", out)
+	}
+	alert := out.Alerts[0]
+	if alert.Name != "HighErrorRate" || alert.State != "active" || alert.SilencedBy[0] != "s1" || alert.Fingerprint != "abc" {
+		t.Fatalf("alert = %#v", alert)
+	}
+}
+
+func TestSilencesListAndCreateTyped(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/api/datasources":
+			_, _ = w.Write([]byte(`[{"uid":"alertmanager-alpha","name":"AM Alpha","type":"alertmanager"}]`))
+		case r.URL.Path == "/api/datasources/proxy/uid/alertmanager-alpha/api/v2/silences" && r.Method == http.MethodGet:
+			_, _ = w.Write([]byte(`[{"id":"sil-1","status":{"state":"active"},"matchers":[{"name":"alertname","value":"HighErrorRate","isRegex":false}],"startsAt":"2026-06-10T00:00:00Z","endsAt":"2026-06-10T02:00:00Z","createdBy":"fluxplane","comment":"deploy"}]`))
+		case r.URL.Path == "/api/datasources/proxy/uid/alertmanager-alpha/api/v2/silences" && r.Method == http.MethodPost:
+			_, _ = w.Write([]byte(`{"silenceID":"sil-2"}`))
+		default:
+			t.Fatalf("path = %s %s", r.Method, r.URL.Path)
+		}
+	}))
+	defer server.Close()
+	plugin := NewPluginWithService(NewService())
+	host := newGrafanaTestHost(server.URL, "")
+
+	listed := plugintest.RunOK[SilencesListResult](t, plugin, OperationAlertSilencesList, map[string]any{"endpoint_ref": "grafana-dev", "cluster": "alpha"}, plugintest.WithHost(host))
+	if listed.Count != 1 || listed.Silences[0].ID != "sil-1" || listed.Silences[0].State != "active" || listed.Silences[0].Matchers[0].Name != "alertname" {
+		t.Fatalf("silences = %#v", listed)
+	}
+	created := plugintest.RunOK[SilenceCreateResult](t, plugin, OperationAlertSilenceCreate, map[string]any{
+		"endpoint_ref": "grafana-dev", "cluster": "alpha",
+		"matchers": []map[string]any{{"name": "alertname", "value": "HighErrorRate"}},
+		"ends_at":  "2h", "comment": "deploy window",
+	}, plugintest.WithHost(host))
+	if created.SilenceID != "sil-2" {
+		t.Fatalf("created = %#v", created)
+	}
+}
+
+func TestAnnotationListAndAddTyped(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/api/annotations" && r.Method == http.MethodGet:
+			_, _ = w.Write([]byte(`[{"id":7,"time":1770000000000,"timeEnd":1770000600000,"text":"Deployed api","tags":["deploy"],"dashboardUID":"dash-1","panelId":3}]`))
+		case r.URL.Path == "/api/annotations" && r.Method == http.MethodPost:
+			_, _ = w.Write([]byte(`{"message":"Annotation added","id":8}`))
+		default:
+			t.Fatalf("path = %s %s", r.Method, r.URL.Path)
+		}
+	}))
+	defer server.Close()
+	plugin := NewPluginWithService(NewService())
+	host := newGrafanaTestHost(server.URL, "")
+
+	listed := plugintest.RunOK[AnnotationListResult](t, plugin, OperationAnnotationList, map[string]any{"endpoint_ref": "grafana-dev", "since": "24h"}, plugintest.WithHost(host))
+	if listed.Count != 1 {
+		t.Fatalf("annotations = %#v", listed)
+	}
+	annotation := listed.Annotations[0]
+	if annotation.ID != 7 || annotation.Text != "Deployed api" || annotation.Time == "" || annotation.TimeEnd == "" || annotation.DashboardUID != "dash-1" {
+		t.Fatalf("annotation = %#v", annotation)
+	}
+	added := plugintest.RunOK[AnnotationAddResult](t, plugin, OperationAnnotationAdd, map[string]any{"endpoint_ref": "grafana-dev", "text": "Deployed api v2"}, plugintest.WithHost(host))
+	if added.ID != 8 || added.Message != "Annotation added" {
+		t.Fatalf("added = %#v", added)
+	}
+}
+
+func TestTempoSearchAndTraceGetSummarize(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/datasources":
+			_, _ = w.Write([]byte(`[{"uid":"tempo","name":"Tempo","type":"tempo"}]`))
+		case "/api/datasources/proxy/uid/tempo/api/search":
+			_, _ = w.Write([]byte(`{"traces":[{"traceID":"abc123","rootServiceName":"api","rootTraceName":"GET /orders","startTimeUnixNano":"1770000000000000000","durationMs":250}]}`))
+		case "/api/datasources/proxy/uid/tempo/api/traces/abc123":
+			_, _ = w.Write([]byte(`{"batches":[{"resource":{"attributes":[{"key":"service.name","value":{"stringValue":"api"}}]},"scopeSpans":[{"spans":[
+				{"spanId":"root1","name":"GET /orders","startTimeUnixNano":"1770000000000000000","endTimeUnixNano":"1770000000250000000","status":{"code":2}},
+				{"spanId":"child1","parentSpanId":"root1","name":"db.query","startTimeUnixNano":"1770000000010000000","endTimeUnixNano":"1770000000110000000","status":{"code":1}}
+			]}]}]}`))
+		default:
+			t.Fatalf("path = %s", r.URL.Path)
+		}
+	}))
+	defer server.Close()
+	plugin := NewPluginWithService(NewService())
+	host := newGrafanaTestHost(server.URL, "")
+
+	search := plugintest.RunOK[TempoSearchResult](t, plugin, OperationTempoSearch, map[string]any{"endpoint_ref": "grafana-dev", "query": `{}`}, plugintest.WithHost(host))
+	if search.Count != 1 || search.Traces[0].TraceID != "abc123" || search.Traces[0].RootServiceName != "api" || search.Traces[0].DurationMS != 250 {
+		t.Fatalf("search = %#v", search)
+	}
+	trace := plugintest.RunOK[TempoTraceResult](t, plugin, OperationTempoTraceGet, map[string]any{"endpoint_ref": "grafana-dev", "trace_id": "abc123"}, plugintest.WithHost(host))
+	if trace.SpanCount != 2 || trace.RootSpan != "GET /orders" || trace.DurationMS != 250 || trace.Services[0] != "api" {
+		t.Fatalf("trace = %#v", trace)
+	}
+	if trace.Spans[0].StatusCode != "error" || trace.Spans[1].StatusCode != "ok" || trace.Spans[1].DurationMS != 100 || trace.Spans[1].ParentSpanID != "root1" {
+		t.Fatalf("spans = %#v", trace.Spans)
 	}
 }
 

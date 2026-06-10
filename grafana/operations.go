@@ -204,14 +204,14 @@ type LogEntry struct {
 }
 
 type LokiQueryResult struct {
-	URL             string          `json:"url"`
-	UID             string          `json:"uid"`
-	Cluster         string          `json:"cluster,omitempty"`
-	NormalizedQuery string          `json:"normalized_query"`
-	Entries         []LogEntry      `json:"entries"`
-	Count           int             `json:"count"`
-	Limit           int             `json:"limit"`
-	Raw             json.RawMessage `json:"raw,omitempty"`
+	URL             string     `json:"url"`
+	UID             string     `json:"uid"`
+	Cluster         string     `json:"cluster,omitempty"`
+	NormalizedQuery string     `json:"normalized_query"`
+	Entries         []LogEntry `json:"entries"`
+	Count           int        `json:"count"`
+	Limit           int        `json:"limit"`
+	Truncated       bool       `json:"truncated,omitempty" jsonschema:"description=True when the page is full; older entries likely exist — narrow the window or raise limit."`
 }
 
 type LokiQueryInput struct {
@@ -270,11 +270,11 @@ type AlertsActiveInput struct {
 }
 
 type AlertsActiveResult struct {
-	URL     string          `json:"url"`
-	UID     string          `json:"uid"`
-	Cluster string          `json:"cluster,omitempty"`
-	Count   int             `json:"count"`
-	Alerts  json.RawMessage `json:"alerts"`
+	URL     string    `json:"url"`
+	UID     string    `json:"uid"`
+	Cluster string    `json:"cluster,omitempty"`
+	Count   int       `json:"count"`
+	Alerts  []AMAlert `json:"alerts"`
 }
 
 type AlertSilencesListInput struct {
@@ -297,7 +297,7 @@ type AlertSilenceCreateInput struct {
 	UID       string                `json:"uid,omitempty" jsonschema:"description=Grafana datasource UID override."`
 	Matchers  []AlertSilenceMatcher `json:"matchers,omitempty" jsonschema:"required,description=Alertmanager matchers."`
 	StartsAt  string                `json:"starts_at,omitempty" jsonschema:"description=Silence start time. Defaults to now."`
-	EndsAt    string                `json:"ends_at,omitempty" jsonschema:"required,description=Silence end time."`
+	EndsAt    string                `json:"ends_at,omitempty" jsonschema:"required,description=Silence end time as RFC3339, unix timestamp, or duration from now (e.g. 2h)."`
 	CreatedBy string                `json:"created_by,omitempty" jsonschema:"description=Silence creator."`
 	Comment   string                `json:"comment,omitempty" jsonschema:"required,description=Silence comment."`
 }
@@ -324,12 +324,131 @@ type TempoTraceGetInput struct {
 	TraceID string `json:"trace_id,omitempty" jsonschema:"required,description=Tempo trace ID."`
 }
 
-type ProxyQueryResult struct {
-	URL     string          `json:"url"`
-	UID     string          `json:"uid"`
-	Cluster string          `json:"cluster,omitempty"`
-	Query   string          `json:"query,omitempty"`
-	Data    json.RawMessage `json:"data"`
+// PromQueryResult is a Prometheus query answered through the Grafana
+// datasource proxy, parsed into the same samples/series shape the prometheus
+// plugin returns.
+type PromQueryResult struct {
+	URL        string   `json:"url"`
+	UID        string   `json:"uid"`
+	Cluster    string   `json:"cluster,omitempty"`
+	Query      string   `json:"query"`
+	ResultType string   `json:"result_type"`
+	Samples    []Sample `json:"samples,omitempty" jsonschema:"description=Vector/scalar/string results: one value per metric."`
+	Series     []Series `json:"series,omitempty" jsonschema:"description=Matrix results: points over time per metric."`
+	Count      int      `json:"count"`
+	Truncated  bool     `json:"truncated,omitempty" jsonschema:"description=True when series or points were dropped to stay within output caps."`
+}
+
+// PromRulesResult is /api/v1/rules through the proxy, parsed into groups.
+type PromRulesResult struct {
+	URL        string      `json:"url"`
+	UID        string      `json:"uid"`
+	Cluster    string      `json:"cluster,omitempty"`
+	Groups     []RuleGroup `json:"groups"`
+	GroupCount int         `json:"group_count"`
+	RuleCount  int         `json:"rule_count"`
+}
+
+// AMAlert is one active Alertmanager alert.
+type AMAlert struct {
+	Name         string            `json:"name,omitempty"`
+	State        string            `json:"state,omitempty" jsonschema:"description=active, suppressed, or unprocessed."`
+	Severity     string            `json:"severity,omitempty"`
+	StartsAt     string            `json:"starts_at,omitempty"`
+	EndsAt       string            `json:"ends_at,omitempty"`
+	SilencedBy   []string          `json:"silenced_by,omitempty"`
+	InhibitedBy  []string          `json:"inhibited_by,omitempty"`
+	Fingerprint  string            `json:"fingerprint,omitempty"`
+	GeneratorURL string            `json:"generator_url,omitempty"`
+	Labels       map[string]string `json:"labels,omitempty"`
+	Annotations  map[string]string `json:"annotations,omitempty"`
+}
+
+// Silence is one Alertmanager silence.
+type Silence struct {
+	ID        string                `json:"id"`
+	State     string                `json:"state,omitempty" jsonschema:"description=active, pending, or expired."`
+	Matchers  []AlertSilenceMatcher `json:"matchers,omitempty"`
+	StartsAt  string                `json:"starts_at,omitempty"`
+	EndsAt    string                `json:"ends_at,omitempty"`
+	CreatedBy string                `json:"created_by,omitempty"`
+	Comment   string                `json:"comment,omitempty"`
+}
+
+type SilencesListResult struct {
+	URL      string    `json:"url"`
+	UID      string    `json:"uid"`
+	Cluster  string    `json:"cluster,omitempty"`
+	Silences []Silence `json:"silences"`
+	Count    int       `json:"count"`
+}
+
+type SilenceCreateResult struct {
+	URL       string `json:"url"`
+	UID       string `json:"uid"`
+	Cluster   string `json:"cluster,omitempty"`
+	SilenceID string `json:"silence_id"`
+}
+
+type SilenceDeleteResult struct {
+	URL       string `json:"url"`
+	UID       string `json:"uid"`
+	Cluster   string `json:"cluster,omitempty"`
+	SilenceID string `json:"silence_id"`
+	Deleted   bool   `json:"deleted"`
+}
+
+// Annotation is one Grafana annotation.
+type Annotation struct {
+	ID           int64    `json:"id,omitempty"`
+	Time         string   `json:"time,omitempty"`
+	TimeEnd      string   `json:"time_end,omitempty"`
+	Text         string   `json:"text,omitempty"`
+	Tags         []string `json:"tags,omitempty"`
+	DashboardUID string   `json:"dashboard_uid,omitempty"`
+	PanelID      int64    `json:"panel_id,omitempty"`
+}
+
+type AnnotationListResult struct {
+	URL         string       `json:"url"`
+	Annotations []Annotation `json:"annotations"`
+	Count       int          `json:"count"`
+}
+
+type AnnotationAddResult struct {
+	URL     string `json:"url"`
+	ID      int64  `json:"id,omitempty"`
+	Message string `json:"message,omitempty"`
+}
+
+// DatasourceHealthResult reports one datasource's health check.
+type DatasourceHealthResult struct {
+	URL     string `json:"url"`
+	UID     string `json:"uid"`
+	Status  string `json:"status,omitempty"`
+	Message string `json:"message,omitempty"`
+	Source  string `json:"source,omitempty" jsonschema:"description=datasource_health or alertmanager_status."`
+	Error   string `json:"error,omitempty"`
+}
+
+type TempoSearchResult struct {
+	URL    string         `json:"url"`
+	UID    string         `json:"uid"`
+	Query  string         `json:"query,omitempty"`
+	Traces []TraceSummary `json:"traces"`
+	Count  int            `json:"count"`
+}
+
+type TempoTraceResult struct {
+	URL        string        `json:"url"`
+	UID        string        `json:"uid"`
+	TraceID    string        `json:"trace_id"`
+	RootSpan   string        `json:"root_span,omitempty"`
+	Services   []string      `json:"services,omitempty"`
+	SpanCount  int           `json:"span_count"`
+	DurationMS int64         `json:"duration_ms,omitempty"`
+	Spans      []SpanSummary `json:"spans"`
+	Truncated  bool          `json:"truncated,omitempty"`
 }
 
 func (s Service) DatasourceList(ctx pluginbinding.Context, input DatasourceListInput) (DatasourceListResult, error) {
@@ -344,59 +463,57 @@ func (s Service) DatasourceList(ctx pluginbinding.Context, input DatasourceListI
 	return datasourceListResult(target.URL, datasources), nil
 }
 
-func (s Service) DatasourceHealth(ctx pluginbinding.Context, input DatasourceHealthInput) (ProxyQueryResult, error) {
+func (s Service) DatasourceHealth(ctx pluginbinding.Context, input DatasourceHealthInput) (DatasourceHealthResult, error) {
 	uid := strings.TrimSpace(input.UID)
 	if uid == "" {
-		return ProxyQueryResult{}, pluginbinding.Fail("bad_input", "uid is required")
+		return DatasourceHealthResult{}, pluginbinding.Fail("bad_input", "uid is required")
 	}
 	target, client, err := s.client(ctx, input.GrafanaTargetInput)
 	if err != nil {
-		return ProxyQueryResult{}, err
+		return DatasourceHealthResult{}, err
 	}
 	raw, err := client.get(context.Background(), "/api/datasources/uid/"+url.PathEscape(uid)+"/health", nil)
 	if err != nil {
 		if fallback, ok := s.datasourceHealthFallback(context.Background(), target, client, uid); ok {
 			return fallback, nil
 		}
-		return ProxyQueryResult{}, pluginbinding.Errorf("grafana", "%s", err)
+		return DatasourceHealthResult{}, pluginbinding.Errorf("grafana", "%s", err)
 	}
-	return ProxyQueryResult{URL: target.URL, UID: uid, Data: raw}, nil
+	var health struct {
+		Status  string `json:"status"`
+		Message string `json:"message"`
+	}
+	if err := json.Unmarshal(raw, &health); err != nil {
+		return DatasourceHealthResult{}, pluginbinding.Errorf("grafana", "%s", err)
+	}
+	return DatasourceHealthResult{URL: target.URL, UID: uid, Status: health.Status, Message: health.Message, Source: "datasource_health"}, nil
 }
 
-func (s Service) datasourceHealthFallback(ctx context.Context, target target, client Client, uid string) (ProxyQueryResult, bool) {
+// datasourceHealthFallback covers datasource types whose Grafana health
+// endpoint is unsupported (alertmanager) by probing the backend through the
+// proxy instead.
+func (s Service) datasourceHealthFallback(ctx context.Context, target target, client Client, uid string) (DatasourceHealthResult, bool) {
 	datasources, err := s.datasources(ctx, client)
 	if err != nil {
-		return ProxyQueryResult{}, false
+		return DatasourceHealthResult{}, false
 	}
 	datasource, ok := datasourceByUID(datasources, uid)
 	if !ok {
-		return ProxyQueryResult{}, false
+		return DatasourceHealthResult{}, false
 	}
 	switch normalizeDatasourceType(datasource.Type) {
 	case "alertmanager":
-		raw, err := client.get(ctx, grafanaProxyPath(uid, "/api/v2/status"), nil)
-		if err != nil {
-			payload, marshalErr := json.Marshal(map[string]any{
-				"status": "error",
-				"source": "alertmanager_status",
-				"error":  err.Error(),
-			})
-			if marshalErr != nil {
-				return ProxyQueryResult{}, false
-			}
-			return ProxyQueryResult{URL: target.URL, UID: uid, Data: payload}, true
+		out := DatasourceHealthResult{URL: target.URL, UID: uid, Source: "alertmanager_status"}
+		if _, err := client.get(ctx, grafanaProxyPath(uid, "/api/v2/status"), nil); err != nil {
+			out.Status = "error"
+			out.Error = err.Error()
+			return out, true
 		}
-		payload, err := json.Marshal(map[string]any{
-			"status":   "OK",
-			"source":   "alertmanager_status",
-			"response": json.RawMessage(raw),
-		})
-		if err != nil {
-			return ProxyQueryResult{}, false
-		}
-		return ProxyQueryResult{URL: target.URL, UID: uid, Data: payload}, true
+		out.Status = "OK"
+		out.Message = "alertmanager status endpoint reachable"
+		return out, true
 	default:
-		return ProxyQueryResult{}, false
+		return DatasourceHealthResult{}, false
 	}
 }
 
@@ -471,39 +588,50 @@ func (s Service) DashboardGet(ctx pluginbinding.Context, input DashboardGetInput
 	return result, nil
 }
 
-func (s Service) AnnotationList(ctx pluginbinding.Context, input AnnotationListInput) (ProxyQueryResult, error) {
+func (s Service) AnnotationList(ctx pluginbinding.Context, input AnnotationListInput) (AnnotationListResult, error) {
 	target, client, err := s.client(ctx, input.GrafanaTargetInput)
 	if err != nil {
-		return ProxyQueryResult{}, err
+		return AnnotationListResult{}, err
 	}
 	values, err := annotationListValues(input)
 	if err != nil {
-		return ProxyQueryResult{}, pluginbinding.Errorf("bad_input", "%s", err)
+		return AnnotationListResult{}, pluginbinding.Errorf("bad_input", "%s", err)
 	}
 	raw, err := client.get(context.Background(), "/api/annotations", values)
 	if err != nil {
-		return ProxyQueryResult{}, pluginbinding.Errorf("grafana", "%s", err)
+		return AnnotationListResult{}, pluginbinding.Errorf("grafana", "%s", err)
 	}
-	return ProxyQueryResult{URL: target.URL, Data: raw}, nil
+	annotations, err := parseAnnotations(raw)
+	if err != nil {
+		return AnnotationListResult{}, pluginbinding.Errorf("grafana", "%s", err)
+	}
+	return AnnotationListResult{URL: target.URL, Annotations: annotations, Count: len(annotations)}, nil
 }
 
-func (s Service) AnnotationAdd(ctx pluginbinding.Context, input AnnotationAddInput) (ProxyQueryResult, error) {
+func (s Service) AnnotationAdd(ctx pluginbinding.Context, input AnnotationAddInput) (AnnotationAddResult, error) {
 	if strings.TrimSpace(input.Text) == "" {
-		return ProxyQueryResult{}, pluginbinding.Fail("bad_input", "text is required")
+		return AnnotationAddResult{}, pluginbinding.Fail("bad_input", "text is required")
 	}
 	target, client, err := s.client(ctx, input.GrafanaTargetInput)
 	if err != nil {
-		return ProxyQueryResult{}, err
+		return AnnotationAddResult{}, err
 	}
 	payload, err := annotationPayload(input)
 	if err != nil {
-		return ProxyQueryResult{}, pluginbinding.Errorf("bad_input", "%s", err)
+		return AnnotationAddResult{}, pluginbinding.Errorf("bad_input", "%s", err)
 	}
 	raw, err := client.postJSON(context.Background(), "/api/annotations", nil, payload)
 	if err != nil {
-		return ProxyQueryResult{}, pluginbinding.Errorf("grafana", "%s", err)
+		return AnnotationAddResult{}, pluginbinding.Errorf("grafana", "%s", err)
 	}
-	return ProxyQueryResult{URL: target.URL, Data: raw}, nil
+	var created struct {
+		ID      int64  `json:"id"`
+		Message string `json:"message"`
+	}
+	if err := json.Unmarshal(raw, &created); err != nil {
+		return AnnotationAddResult{}, pluginbinding.Errorf("grafana", "%s", err)
+	}
+	return AnnotationAddResult{URL: target.URL, ID: created.ID, Message: created.Message}, nil
 }
 
 func (s Service) LokiLabels(ctx pluginbinding.Context, input LokiLabelsInput) (LabelsResult, error) {
@@ -564,63 +692,75 @@ func (s Service) LokiRecentLogs(ctx pluginbinding.Context, input LokiRecentLogsI
 	return s.LokiQuery(ctx, LokiQueryInput{GrafanaTargetInput: input.GrafanaTargetInput, Cluster: input.Cluster, UID: input.UID, Query: query, Since: input.Since, Until: input.Until, Limit: input.Limit})
 }
 
-func (s Service) PrometheusQuery(ctx pluginbinding.Context, input PrometheusQueryInput) (ProxyQueryResult, error) {
+func (s Service) PrometheusQuery(ctx pluginbinding.Context, input PrometheusQueryInput) (PromQueryResult, error) {
 	if strings.TrimSpace(input.Query) == "" {
-		return ProxyQueryResult{}, pluginbinding.Fail("bad_input", "query is required")
+		return PromQueryResult{}, pluginbinding.Fail("bad_input", "query is required")
 	}
 	target, client, uid, err := s.resolveDatasource(ctx, input.GrafanaTargetInput, "prometheus", input.Cluster, input.UID)
 	if err != nil {
-		return ProxyQueryResult{}, err
+		return PromQueryResult{}, err
 	}
 	values := url.Values{"query": {strings.TrimSpace(input.Query)}}
 	if strings.TrimSpace(input.Time) != "" {
 		t, err := parseTimeValue(input.Time, time.Now())
 		if err != nil {
-			return ProxyQueryResult{}, pluginbinding.Errorf("bad_input", "%s", err)
+			return PromQueryResult{}, pluginbinding.Errorf("bad_input", "%s", err)
 		}
 		values.Set("time", strconv.FormatInt(t.Unix(), 10))
 	}
-	return proxyResult(context.Background(), client, target.URL, uid, input.Cluster, input.Query, "/api/v1/query", values)
+	return promProxyResult(context.Background(), client, target.URL, uid, input.Cluster, input.Query, "/api/v1/query", values)
 }
 
-func (s Service) PrometheusRange(ctx pluginbinding.Context, input PrometheusRangeInput) (ProxyQueryResult, error) {
+func (s Service) PrometheusRange(ctx pluginbinding.Context, input PrometheusRangeInput) (PromQueryResult, error) {
 	if strings.TrimSpace(input.Query) == "" {
-		return ProxyQueryResult{}, pluginbinding.Fail("bad_input", "query is required")
+		return PromQueryResult{}, pluginbinding.Fail("bad_input", "query is required")
 	}
 	target, client, uid, err := s.resolveDatasource(ctx, input.GrafanaTargetInput, "prometheus", input.Cluster, input.UID)
 	if err != nil {
-		return ProxyQueryResult{}, err
+		return PromQueryResult{}, err
 	}
 	now := time.Now()
 	end, err := parseTimeValue(firstNonEmpty(input.End, "0s"), now)
 	if err != nil {
-		return ProxyQueryResult{}, pluginbinding.Errorf("bad_input", "%s", err)
+		return PromQueryResult{}, pluginbinding.Errorf("bad_input", "%s", err)
 	}
 	start, err := parseTimeValue(firstNonEmpty(input.Start, "1h"), now)
 	if err != nil {
-		return ProxyQueryResult{}, pluginbinding.Errorf("bad_input", "%s", err)
+		return PromQueryResult{}, pluginbinding.Errorf("bad_input", "%s", err)
 	}
 	if !start.Before(end) {
-		return ProxyQueryResult{}, pluginbinding.Fail("bad_input", "start must be before end")
+		return PromQueryResult{}, pluginbinding.Fail("bad_input", "start must be before end")
 	}
 	step := firstNonEmpty(input.Step, "1m")
 	values := url.Values{"query": {strings.TrimSpace(input.Query)}}
 	values.Set("start", strconv.FormatInt(start.Unix(), 10))
 	values.Set("end", strconv.FormatInt(end.Unix(), 10))
 	values.Set("step", step)
-	return proxyResult(context.Background(), client, target.URL, uid, input.Cluster, input.Query, "/api/v1/query_range", values)
+	return promProxyResult(context.Background(), client, target.URL, uid, input.Cluster, input.Query, "/api/v1/query_range", values)
 }
 
-func (s Service) PrometheusRules(ctx pluginbinding.Context, input PrometheusRulesInput) (ProxyQueryResult, error) {
+func (s Service) PrometheusRules(ctx pluginbinding.Context, input PrometheusRulesInput) (PromRulesResult, error) {
 	target, client, uid, err := s.resolveDatasource(ctx, input.GrafanaTargetInput, "prometheus", input.Cluster, input.UID)
 	if err != nil {
-		return ProxyQueryResult{}, err
+		return PromRulesResult{}, err
 	}
 	values := url.Values{}
 	if strings.TrimSpace(input.Type) != "" {
 		values.Set("type", strings.TrimSpace(input.Type))
 	}
-	return proxyResult(context.Background(), client, target.URL, uid, input.Cluster, "", "/api/v1/rules", values)
+	data, err := proxyData(context.Background(), client, uid, "/api/v1/rules", values)
+	if err != nil {
+		return PromRulesResult{}, err
+	}
+	groups, err := parseRuleGroups(data)
+	if err != nil {
+		return PromRulesResult{}, pluginbinding.Errorf("grafana", "%s", err)
+	}
+	ruleCount := 0
+	for _, group := range groups {
+		ruleCount += len(group.Rules)
+	}
+	return PromRulesResult{URL: target.URL, UID: uid, Cluster: input.Cluster, Groups: groups, GroupCount: len(groups), RuleCount: ruleCount}, nil
 }
 
 func (s Service) AlertsActive(ctx pluginbinding.Context, input AlertsActiveInput) (AlertsActiveResult, error) {
@@ -633,17 +773,18 @@ func (s Service) AlertsActive(ctx pluginbinding.Context, input AlertsActiveInput
 	if err != nil {
 		return AlertsActiveResult{}, pluginbinding.Errorf("grafana", "%s", err)
 	}
-	filtered, count, err := filterAlerts(raw, input.Severity, input.Namespace)
+	alerts, err := parseAMAlerts(raw)
 	if err != nil {
 		return AlertsActiveResult{}, pluginbinding.Errorf("grafana", "%s", err)
 	}
-	return AlertsActiveResult{URL: target.URL, UID: uid, Cluster: input.Cluster, Count: count, Alerts: filtered}, nil
+	alerts = filterAlerts(alerts, input.Severity, input.Namespace)
+	return AlertsActiveResult{URL: target.URL, UID: uid, Cluster: input.Cluster, Count: len(alerts), Alerts: alerts}, nil
 }
 
-func (s Service) AlertSilencesList(ctx pluginbinding.Context, input AlertSilencesListInput) (ProxyQueryResult, error) {
+func (s Service) AlertSilencesList(ctx pluginbinding.Context, input AlertSilencesListInput) (SilencesListResult, error) {
 	target, client, uid, err := s.resolveDatasource(ctx, input.GrafanaTargetInput, "alertmanager", input.Cluster, input.UID)
 	if err != nil {
-		return ProxyQueryResult{}, err
+		return SilencesListResult{}, err
 	}
 	values := url.Values{}
 	for _, filter := range input.Filter {
@@ -651,57 +792,68 @@ func (s Service) AlertSilencesList(ctx pluginbinding.Context, input AlertSilence
 			values.Add("filter", strings.TrimSpace(filter))
 		}
 	}
-	return proxyResult(context.Background(), client, target.URL, uid, input.Cluster, "", "/api/v2/silences", values)
+	raw, err := client.get(context.Background(), grafanaProxyPath(uid, "/api/v2/silences"), values)
+	if err != nil {
+		return SilencesListResult{}, pluginbinding.Errorf("grafana", "%s", err)
+	}
+	silences, err := parseSilences(raw)
+	if err != nil {
+		return SilencesListResult{}, pluginbinding.Errorf("grafana", "%s", err)
+	}
+	return SilencesListResult{URL: target.URL, UID: uid, Cluster: input.Cluster, Silences: silences, Count: len(silences)}, nil
 }
 
-func (s Service) AlertSilenceCreate(ctx pluginbinding.Context, input AlertSilenceCreateInput) (ProxyQueryResult, error) {
+func (s Service) AlertSilenceCreate(ctx pluginbinding.Context, input AlertSilenceCreateInput) (SilenceCreateResult, error) {
 	if len(input.Matchers) == 0 {
-		return ProxyQueryResult{}, pluginbinding.Fail("bad_input", "matchers are required")
+		return SilenceCreateResult{}, pluginbinding.Fail("bad_input", "matchers are required")
 	}
 	if strings.TrimSpace(input.EndsAt) == "" {
-		return ProxyQueryResult{}, pluginbinding.Fail("bad_input", "ends_at is required")
+		return SilenceCreateResult{}, pluginbinding.Fail("bad_input", "ends_at is required")
 	}
 	if strings.TrimSpace(input.Comment) == "" {
-		return ProxyQueryResult{}, pluginbinding.Fail("bad_input", "comment is required")
+		return SilenceCreateResult{}, pluginbinding.Fail("bad_input", "comment is required")
 	}
 	target, client, uid, err := s.resolveDatasource(ctx, input.GrafanaTargetInput, "alertmanager", input.Cluster, input.UID)
 	if err != nil {
-		return ProxyQueryResult{}, err
+		return SilenceCreateResult{}, err
 	}
 	payload, err := silencePayload(input)
 	if err != nil {
-		return ProxyQueryResult{}, pluginbinding.Errorf("bad_input", "%s", err)
+		return SilenceCreateResult{}, pluginbinding.Errorf("bad_input", "%s", err)
 	}
 	raw, err := client.postJSON(context.Background(), grafanaProxyPath(uid, "/api/v2/silences"), nil, payload)
 	if err != nil {
-		return ProxyQueryResult{}, pluginbinding.Errorf("grafana", "%s", err)
+		return SilenceCreateResult{}, pluginbinding.Errorf("grafana", "%s", err)
 	}
-	return ProxyQueryResult{URL: target.URL, UID: uid, Cluster: input.Cluster, Data: raw}, nil
+	var created struct {
+		SilenceID string `json:"silenceID"`
+		ID        string `json:"id"`
+	}
+	if err := json.Unmarshal(raw, &created); err != nil {
+		return SilenceCreateResult{}, pluginbinding.Errorf("grafana", "%s", err)
+	}
+	return SilenceCreateResult{URL: target.URL, UID: uid, Cluster: input.Cluster, SilenceID: firstNonEmpty(created.SilenceID, created.ID)}, nil
 }
 
-func (s Service) AlertSilenceDelete(ctx pluginbinding.Context, input AlertSilenceDeleteInput) (ProxyQueryResult, error) {
+func (s Service) AlertSilenceDelete(ctx pluginbinding.Context, input AlertSilenceDeleteInput) (SilenceDeleteResult, error) {
 	silenceID := strings.TrimSpace(input.SilenceID)
 	if silenceID == "" {
-		return ProxyQueryResult{}, pluginbinding.Fail("bad_input", "silence_id is required")
+		return SilenceDeleteResult{}, pluginbinding.Fail("bad_input", "silence_id is required")
 	}
 	target, client, uid, err := s.resolveDatasource(ctx, input.GrafanaTargetInput, "alertmanager", input.Cluster, input.UID)
 	if err != nil {
-		return ProxyQueryResult{}, err
+		return SilenceDeleteResult{}, err
 	}
-	raw, err := client.delete(context.Background(), grafanaProxyPath(uid, "/api/v2/silence/"+url.PathEscape(silenceID)), nil)
-	if err != nil {
-		return ProxyQueryResult{}, pluginbinding.Errorf("grafana", "%s", err)
+	if _, err := client.delete(context.Background(), grafanaProxyPath(uid, "/api/v2/silence/"+url.PathEscape(silenceID)), nil); err != nil {
+		return SilenceDeleteResult{}, pluginbinding.Errorf("grafana", "%s", err)
 	}
-	if len(raw) == 0 {
-		raw = json.RawMessage(`{"deleted":true}`)
-	}
-	return ProxyQueryResult{URL: target.URL, UID: uid, Cluster: input.Cluster, Data: raw}, nil
+	return SilenceDeleteResult{URL: target.URL, UID: uid, Cluster: input.Cluster, SilenceID: silenceID, Deleted: true}, nil
 }
 
-func (s Service) TempoSearch(ctx pluginbinding.Context, input TempoSearchInput) (ProxyQueryResult, error) {
+func (s Service) TempoSearch(ctx pluginbinding.Context, input TempoSearchInput) (TempoSearchResult, error) {
 	target, client, uid, err := s.resolveDatasource(ctx, input.GrafanaTargetInput, "tempo", "", input.UID)
 	if err != nil {
-		return ProxyQueryResult{}, err
+		return TempoSearchResult{}, err
 	}
 	values := url.Values{}
 	if strings.TrimSpace(input.Query) != "" {
@@ -711,33 +863,53 @@ func (s Service) TempoSearch(ctx pluginbinding.Context, input TempoSearchInput) 
 	if strings.TrimSpace(input.Start) != "" {
 		start, err := parseTimeValue(input.Start, now)
 		if err != nil {
-			return ProxyQueryResult{}, pluginbinding.Errorf("bad_input", "%s", err)
+			return TempoSearchResult{}, pluginbinding.Errorf("bad_input", "%s", err)
 		}
 		values.Set("start", strconv.FormatInt(start.Unix(), 10))
 	}
 	if strings.TrimSpace(input.End) != "" {
 		end, err := parseTimeValue(input.End, now)
 		if err != nil {
-			return ProxyQueryResult{}, pluginbinding.Errorf("bad_input", "%s", err)
+			return TempoSearchResult{}, pluginbinding.Errorf("bad_input", "%s", err)
 		}
 		values.Set("end", strconv.FormatInt(end.Unix(), 10))
 	}
 	if input.Limit > 0 {
 		values.Set("limit", strconv.Itoa(input.Limit))
 	}
-	return proxyResult(context.Background(), client, target.URL, uid, "", input.Query, "/api/search", values)
+	data, err := proxyData(context.Background(), client, uid, "/api/search", values)
+	if err != nil {
+		return TempoSearchResult{}, err
+	}
+	traces, err := parseTempoSearch(data)
+	if err != nil {
+		return TempoSearchResult{}, pluginbinding.Errorf("grafana", "%s", err)
+	}
+	return TempoSearchResult{URL: target.URL, UID: uid, Query: strings.TrimSpace(input.Query), Traces: traces, Count: len(traces)}, nil
 }
 
-func (s Service) TempoTraceGet(ctx pluginbinding.Context, input TempoTraceGetInput) (ProxyQueryResult, error) {
+func (s Service) TempoTraceGet(ctx pluginbinding.Context, input TempoTraceGetInput) (TempoTraceResult, error) {
 	traceID := strings.TrimSpace(input.TraceID)
 	if traceID == "" {
-		return ProxyQueryResult{}, pluginbinding.Fail("bad_input", "trace_id is required")
+		return TempoTraceResult{}, pluginbinding.Fail("bad_input", "trace_id is required")
 	}
 	target, client, uid, err := s.resolveDatasource(ctx, input.GrafanaTargetInput, "tempo", "", input.UID)
 	if err != nil {
-		return ProxyQueryResult{}, err
+		return TempoTraceResult{}, err
 	}
-	return proxyResult(context.Background(), client, target.URL, uid, "", traceID, "/api/traces/"+url.PathEscape(traceID), nil)
+	data, err := proxyData(context.Background(), client, uid, "/api/traces/"+url.PathEscape(traceID), nil)
+	if err != nil {
+		return TempoTraceResult{}, err
+	}
+	spans, services, rootSpan, durationMS, truncated, err := parseTempoTrace(data)
+	if err != nil {
+		return TempoTraceResult{}, pluginbinding.Errorf("grafana", "%s", err)
+	}
+	return TempoTraceResult{
+		URL: target.URL, UID: uid, TraceID: traceID,
+		RootSpan: rootSpan, Services: services, SpanCount: len(spans),
+		DurationMS: durationMS, Spans: spans, Truncated: truncated,
+	}, nil
 }
 
 func (s Service) client(ctx pluginbinding.Context, input GrafanaTargetInput) (target, Client, error) {
@@ -786,16 +958,41 @@ func (s Service) datasources(ctx context.Context, client Client) ([]Datasource, 
 	return datasources, nil
 }
 
-func proxyResult(ctx context.Context, client Client, baseURL, uid, cluster, query, path string, values url.Values) (ProxyQueryResult, error) {
+// proxyData GETs a datasource-proxied path and unwraps the standard
+// {status,data} envelope when present.
+func proxyData(ctx context.Context, client Client, uid, path string, values url.Values) (json.RawMessage, error) {
 	raw, err := client.get(ctx, grafanaProxyPath(uid, path), values)
 	if err != nil {
-		return ProxyQueryResult{}, pluginbinding.Errorf("grafana", "%s", err)
+		return nil, pluginbinding.Errorf("grafana", "%s", err)
 	}
 	data, err := unwrapDatasourceData(raw)
 	if err != nil {
-		return ProxyQueryResult{}, pluginbinding.Errorf("grafana", "%s", err)
+		return nil, pluginbinding.Errorf("grafana", "%s", err)
 	}
-	return ProxyQueryResult{URL: baseURL, UID: uid, Cluster: cluster, Query: strings.TrimSpace(query), Data: data}, nil
+	return data, nil
+}
+
+// promProxyResult runs a proxied Prometheus query and parses the payload into
+// the shared samples/series shape.
+func promProxyResult(ctx context.Context, client Client, baseURL, uid, cluster, query, path string, values url.Values) (PromQueryResult, error) {
+	data, err := proxyData(ctx, client, uid, path, values)
+	if err != nil {
+		return PromQueryResult{}, err
+	}
+	var wrapped struct {
+		ResultType string          `json:"resultType"`
+		Result     json.RawMessage `json:"result"`
+	}
+	if err := json.Unmarshal(data, &wrapped); err != nil {
+		return PromQueryResult{}, pluginbinding.Errorf("grafana", "%s", err)
+	}
+	samples, series, truncated, err := parsePromQLData(wrapped.ResultType, wrapped.Result)
+	if err != nil {
+		return PromQueryResult{}, pluginbinding.Errorf("grafana", "%s", err)
+	}
+	out := PromQueryResult{URL: baseURL, UID: uid, Cluster: cluster, Query: strings.TrimSpace(query), ResultType: wrapped.ResultType, Samples: samples, Series: series, Truncated: truncated}
+	out.Count = len(samples) + len(series)
+	return out, nil
 }
 
 func lokiQueryResult(baseURL, uid, cluster, query string, limit int, raw json.RawMessage) (LokiQueryResult, error) {
@@ -835,7 +1032,7 @@ func lokiQueryResult(baseURL, uid, cluster, query string, limit int, raw json.Ra
 		}
 	}
 	sort.Slice(entries, func(i, j int) bool { return entries[i].Timestamp > entries[j].Timestamp })
-	return LokiQueryResult{URL: baseURL, UID: uid, Cluster: cluster, NormalizedQuery: strings.TrimSpace(query), Entries: entries, Count: len(entries), Limit: limit, Raw: raw}, nil
+	return LokiQueryResult{URL: baseURL, UID: uid, Cluster: cluster, NormalizedQuery: strings.TrimSpace(query), Entries: entries, Count: len(entries), Limit: limit, Truncated: len(entries) >= limit}, nil
 }
 
 func unwrapDatasourceData(raw json.RawMessage) (json.RawMessage, error) {
@@ -1049,9 +1246,16 @@ func silencePayload(input AlertSilenceCreateInput) (map[string]any, error) {
 			return nil, err
 		}
 	}
-	end, err := parseTimeValue(input.EndsAt, now)
-	if err != nil {
-		return nil, err
+	// A duration ends_at means "from now": silences end in the future, unlike
+	// the query-window inputs where a duration means "ago".
+	var end time.Time
+	if d, derr := time.ParseDuration(strings.TrimSpace(input.EndsAt)); derr == nil {
+		end = now.Add(d)
+	} else {
+		end, err = parseTimeValue(input.EndsAt, now)
+		if err != nil {
+			return nil, err
+		}
 	}
 	if !start.Before(end) {
 		return nil, fmt.Errorf("ends_at must be after starts_at")
@@ -1081,40 +1285,134 @@ func silencePayload(input AlertSilenceCreateInput) (map[string]any, error) {
 	}, nil
 }
 
-func filterAlerts(raw json.RawMessage, severity, namespace string) (json.RawMessage, int, error) {
+// parseAMAlerts decodes Alertmanager v2 /api/v2/alerts into typed alerts.
+func parseAMAlerts(raw json.RawMessage) ([]AMAlert, error) {
+	var wire []struct {
+		Labels       map[string]string `json:"labels"`
+		Annotations  map[string]string `json:"annotations"`
+		StartsAt     string            `json:"startsAt"`
+		EndsAt       string            `json:"endsAt"`
+		Fingerprint  string            `json:"fingerprint"`
+		GeneratorURL string            `json:"generatorURL"`
+		Status       struct {
+			State       string   `json:"state"`
+			SilencedBy  []string `json:"silencedBy"`
+			InhibitedBy []string `json:"inhibitedBy"`
+		} `json:"status"`
+	}
+	if err := json.Unmarshal(raw, &wire); err != nil {
+		return nil, fmt.Errorf("decode alertmanager alerts: %w", err)
+	}
+	out := make([]AMAlert, 0, len(wire))
+	for _, alert := range wire {
+		out = append(out, AMAlert{
+			Name:         alert.Labels["alertname"],
+			State:        alert.Status.State,
+			Severity:     alert.Labels["severity"],
+			StartsAt:     alert.StartsAt,
+			EndsAt:       alert.EndsAt,
+			SilencedBy:   alert.Status.SilencedBy,
+			InhibitedBy:  alert.Status.InhibitedBy,
+			Fingerprint:  alert.Fingerprint,
+			GeneratorURL: alert.GeneratorURL,
+			Labels:       alert.Labels,
+			Annotations:  alert.Annotations,
+		})
+	}
+	return out, nil
+}
+
+func filterAlerts(alerts []AMAlert, severity, namespace string) []AMAlert {
 	severity = strings.TrimSpace(severity)
 	namespace = strings.TrimSpace(namespace)
 	if severity == "" && namespace == "" {
-		var values []any
-		if err := json.Unmarshal(raw, &values); err == nil {
-			return raw, len(values), nil
-		}
-		return raw, 0, nil
+		return alerts
 	}
-	var alerts []map[string]any
-	if err := json.Unmarshal(raw, &alerts); err != nil {
-		return nil, 0, err
-	}
-	filtered := make([]map[string]any, 0, len(alerts))
+	filtered := make([]AMAlert, 0, len(alerts))
 	for _, alert := range alerts {
-		if severity != "" && alertLabel(alert, "severity") != severity {
+		if severity != "" && alert.Labels["severity"] != severity {
 			continue
 		}
-		if namespace != "" && alertLabel(alert, "namespace") != namespace {
+		if namespace != "" && alert.Labels["namespace"] != namespace {
 			continue
 		}
 		filtered = append(filtered, alert)
 	}
-	out, err := json.Marshal(filtered)
-	return out, len(filtered), err
+	return filtered
 }
 
-func alertLabel(alert map[string]any, key string) string {
-	labels, ok := alert["labels"].(map[string]any)
-	if !ok {
-		return ""
+// parseSilences decodes Alertmanager v2 /api/v2/silences.
+func parseSilences(raw json.RawMessage) ([]Silence, error) {
+	var wire []struct {
+		ID     string `json:"id"`
+		Status struct {
+			State string `json:"state"`
+		} `json:"status"`
+		Matchers []struct {
+			Name    string `json:"name"`
+			Value   string `json:"value"`
+			IsRegex bool   `json:"isRegex"`
+			IsEqual *bool  `json:"isEqual"`
+		} `json:"matchers"`
+		StartsAt  string `json:"startsAt"`
+		EndsAt    string `json:"endsAt"`
+		CreatedBy string `json:"createdBy"`
+		Comment   string `json:"comment"`
 	}
-	return strings.TrimSpace(fmt.Sprint(labels[key]))
+	if err := json.Unmarshal(raw, &wire); err != nil {
+		return nil, fmt.Errorf("decode silences: %w", err)
+	}
+	out := make([]Silence, 0, len(wire))
+	for _, silence := range wire {
+		matchers := make([]AlertSilenceMatcher, 0, len(silence.Matchers))
+		for _, matcher := range silence.Matchers {
+			matchers = append(matchers, AlertSilenceMatcher{Name: matcher.Name, Value: matcher.Value, IsRegex: matcher.IsRegex, IsEqual: matcher.IsEqual})
+		}
+		out = append(out, Silence{
+			ID:        silence.ID,
+			State:     silence.Status.State,
+			Matchers:  matchers,
+			StartsAt:  silence.StartsAt,
+			EndsAt:    silence.EndsAt,
+			CreatedBy: silence.CreatedBy,
+			Comment:   silence.Comment,
+		})
+	}
+	return out, nil
+}
+
+// parseAnnotations decodes /api/annotations (unix-ms times become RFC3339).
+func parseAnnotations(raw json.RawMessage) ([]Annotation, error) {
+	var wire []struct {
+		ID           int64    `json:"id"`
+		Time         int64    `json:"time"`
+		TimeEnd      int64    `json:"timeEnd"`
+		Text         string   `json:"text"`
+		Tags         []string `json:"tags"`
+		DashboardUID string   `json:"dashboardUID"`
+		PanelID      int64    `json:"panelId"`
+	}
+	if err := json.Unmarshal(raw, &wire); err != nil {
+		return nil, fmt.Errorf("decode annotations: %w", err)
+	}
+	out := make([]Annotation, 0, len(wire))
+	for _, annotation := range wire {
+		item := Annotation{
+			ID:           annotation.ID,
+			Text:         annotation.Text,
+			Tags:         annotation.Tags,
+			DashboardUID: annotation.DashboardUID,
+			PanelID:      annotation.PanelID,
+		}
+		if annotation.Time > 0 {
+			item.Time = time.UnixMilli(annotation.Time).UTC().Format(time.RFC3339)
+		}
+		if annotation.TimeEnd > 0 && annotation.TimeEnd != annotation.Time {
+			item.TimeEnd = time.UnixMilli(annotation.TimeEnd).UTC().Format(time.RFC3339)
+		}
+		out = append(out, item)
+	}
+	return out, nil
 }
 
 func datasourceListResult(baseURL string, datasources []Datasource) DatasourceListResult {

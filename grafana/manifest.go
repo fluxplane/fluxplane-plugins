@@ -1,13 +1,39 @@
 package grafana
 
 import (
+	"encoding/json"
+
 	core "github.com/fluxplane/fluxplane-plugin/manifest"
 	"github.com/fluxplane/fluxplane-plugin/pluginbinding"
 )
 
+// withInputExamples injects JSON Schema `examples` into an operation's input
+// schema. The fluxplane-plugin CLI surfaces the first example as the runnable
+// invocation in `operation describe` and treats an example-bearing op as having
+// conditional (one-of) input during local `--dry-run` validation. Kept local to
+// the grafana plugin rather than promoted to the SDK.
+func withInputExamples(spec core.OperationSpec, examples ...map[string]any) core.OperationSpec {
+	if len(examples) == 0 || len(spec.Input) == 0 {
+		return spec
+	}
+	var schema map[string]any
+	if err := json.Unmarshal(spec.Input, &schema); err != nil {
+		return spec
+	}
+	arr := make([]any, 0, len(examples))
+	for _, example := range examples {
+		arr = append(arr, example)
+	}
+	schema["examples"] = arr
+	if raw, err := json.Marshal(schema); err == nil {
+		spec.Input = raw
+	}
+	return spec
+}
+
 const (
 	PluginName        = "grafana"
-	PluginVersion     = "0.18.2"
+	PluginVersion     = "0.19.0"
 	PluginDescription = "Grafana datasource catalog and proxy operations for Loki, Prometheus, Alertmanager, and Tempo."
 
 	EnvGrafanaAPIToken = "GRAFANA_API_TOKEN"
@@ -89,7 +115,7 @@ func datasourceListSpec() core.OperationSpec {
 }
 
 func datasourceHealthSpec() core.OperationSpec {
-	return pluginbinding.TypedOperationSpec[DatasourceHealthInput, ProxyQueryResult](OperationDatasourceHealth, "Check Grafana datasource health.", readOptions(core.OperationIdempotent)...)
+	return pluginbinding.TypedOperationSpec[DatasourceHealthInput, DatasourceHealthResult](OperationDatasourceHealth, "Check Grafana datasource health.", readOptions(core.OperationIdempotent)...)
 }
 
 func folderListSpec() core.OperationSpec {
@@ -97,7 +123,10 @@ func folderListSpec() core.OperationSpec {
 }
 
 func dashboardListSpec() core.OperationSpec {
-	return pluginbinding.TypedOperationSpec[DashboardListInput, DashboardListResult](OperationDashboardList, "Search Grafana dashboards.", readOptions(core.OperationIdempotent)...)
+	return withInputExamples(
+		pluginbinding.TypedOperationSpec[DashboardListInput, DashboardListResult](OperationDashboardList, "Search Grafana dashboards.", readOptions(core.OperationIdempotent)...),
+		map[string]any{"endpoint_ref": "grafana-main", "query": "api errors", "limit": 20},
+	)
 }
 
 func dashboardGetSpec() core.OperationSpec {
@@ -105,11 +134,17 @@ func dashboardGetSpec() core.OperationSpec {
 }
 
 func annotationListSpec() core.OperationSpec {
-	return pluginbinding.TypedOperationSpec[AnnotationListInput, ProxyQueryResult](OperationAnnotationList, "List Grafana annotations.", readOptions(core.OperationIdempotent)...)
+	return withInputExamples(
+		pluginbinding.TypedOperationSpec[AnnotationListInput, AnnotationListResult](OperationAnnotationList, "List Grafana annotations.", readOptions(core.OperationIdempotent)...),
+		map[string]any{"endpoint_ref": "grafana-main", "since": "24h", "tags": []string{"deploy"}},
+	)
 }
 
 func annotationAddSpec() core.OperationSpec {
-	return pluginbinding.TypedOperationSpec[AnnotationAddInput, ProxyQueryResult](OperationAnnotationAdd, "Create a Grafana annotation.", writeOptions(core.OperationNonIdempotent)...)
+	return withInputExamples(
+		pluginbinding.TypedOperationSpec[AnnotationAddInput, AnnotationAddResult](OperationAnnotationAdd, "Create a Grafana annotation.", writeOptions(core.OperationNonIdempotent)...),
+		map[string]any{"endpoint_ref": "grafana-main", "text": "Deployed api v1.42.0", "tags": []string{"deploy", "api"}},
+	)
 }
 
 func lokiLabelsSpec() core.OperationSpec {
@@ -117,47 +152,71 @@ func lokiLabelsSpec() core.OperationSpec {
 }
 
 func lokiQuerySpec() core.OperationSpec {
-	return pluginbinding.TypedOperationSpec[LokiQueryInput, LokiQueryResult](OperationLokiQuery, "Run a Loki range query through Grafana datasource proxy.", readOptions(core.OperationIdempotent)...)
+	return withInputExamples(
+		pluginbinding.TypedOperationSpec[LokiQueryInput, LokiQueryResult](OperationLokiQuery, "Run a Loki range query through Grafana datasource proxy.", readOptions(core.OperationIdempotent)...),
+		map[string]any{"endpoint_ref": "grafana-main", "cluster": "prod", "query": `{namespace="core"} |= "error"`, "since": "30m", "limit": 200},
+	)
 }
 
 func lokiRecentLogsSpec() core.OperationSpec {
-	return pluginbinding.TypedOperationSpec[LokiRecentLogsInput, LokiQueryResult](OperationLokiRecentLogs, "Query recent Loki logs by cluster, app, and namespace.", readOptions(core.OperationIdempotent)...)
+	return withInputExamples(
+		pluginbinding.TypedOperationSpec[LokiRecentLogsInput, LokiQueryResult](OperationLokiRecentLogs, "Query recent Loki logs by cluster, app, and namespace.", readOptions(core.OperationIdempotent)...),
+		map[string]any{"endpoint_ref": "grafana-main", "cluster": "prod", "app": "api", "namespace": "core", "contains": "timeout", "since": "30m"},
+	)
 }
 
 func prometheusQuerySpec() core.OperationSpec {
-	return pluginbinding.TypedOperationSpec[PrometheusQueryInput, ProxyQueryResult](OperationPrometheusQuery, "Run an instant Prometheus query through Grafana datasource proxy.", readOptions(core.OperationIdempotent)...)
+	return withInputExamples(
+		pluginbinding.TypedOperationSpec[PrometheusQueryInput, PromQueryResult](OperationPrometheusQuery, "Run an instant Prometheus query through Grafana datasource proxy. Results are parsed into samples.", readOptions(core.OperationIdempotent)...),
+		map[string]any{"endpoint_ref": "grafana-main", "cluster": "prod", "query": "sum by (job) (rate(http_requests_total[5m]))"},
+	)
 }
 
 func prometheusRangeSpec() core.OperationSpec {
-	return pluginbinding.TypedOperationSpec[PrometheusRangeInput, ProxyQueryResult](OperationPrometheusRange, "Run a Prometheus range query through Grafana datasource proxy.", readOptions(core.OperationIdempotent)...)
+	return withInputExamples(
+		pluginbinding.TypedOperationSpec[PrometheusRangeInput, PromQueryResult](OperationPrometheusRange, "Run a Prometheus range query through Grafana datasource proxy. Results are parsed into series of timestamped points.", readOptions(core.OperationIdempotent)...),
+		map[string]any{"endpoint_ref": "grafana-main", "cluster": "prod", "query": "rate(http_requests_total[5m])", "start": "1h", "end": "0s", "step": "1m"},
+	)
 }
 
 func prometheusRulesSpec() core.OperationSpec {
-	return pluginbinding.TypedOperationSpec[PrometheusRulesInput, ProxyQueryResult](OperationPrometheusRules, "List Prometheus alerting and recording rules through Grafana datasource proxy.", readOptions(core.OperationIdempotent)...)
+	return withInputExamples(
+		pluginbinding.TypedOperationSpec[PrometheusRulesInput, PromRulesResult](OperationPrometheusRules, "List Prometheus alerting and recording rules through Grafana datasource proxy.", readOptions(core.OperationIdempotent)...),
+		map[string]any{"endpoint_ref": "grafana-main", "cluster": "prod", "type": "alert"},
+	)
 }
 
 func alertsActiveSpec() core.OperationSpec {
-	return pluginbinding.TypedOperationSpec[AlertsActiveInput, AlertsActiveResult](OperationAlertsActive, "List active Alertmanager alerts through Grafana datasource proxy.", readOptions(core.OperationIdempotent)...)
+	return withInputExamples(
+		pluginbinding.TypedOperationSpec[AlertsActiveInput, AlertsActiveResult](OperationAlertsActive, "List active Alertmanager alerts through Grafana datasource proxy.", readOptions(core.OperationIdempotent)...),
+		map[string]any{"endpoint_ref": "grafana-main", "cluster": "prod", "severity": "page"},
+	)
 }
 
 func alertSilencesListSpec() core.OperationSpec {
-	return pluginbinding.TypedOperationSpec[AlertSilencesListInput, ProxyQueryResult](OperationAlertSilencesList, "List Alertmanager silences through Grafana datasource proxy.", readOptions(core.OperationIdempotent)...)
+	return pluginbinding.TypedOperationSpec[AlertSilencesListInput, SilencesListResult](OperationAlertSilencesList, "List Alertmanager silences through Grafana datasource proxy.", readOptions(core.OperationIdempotent)...)
 }
 
 func alertSilenceCreateSpec() core.OperationSpec {
-	return pluginbinding.TypedOperationSpec[AlertSilenceCreateInput, ProxyQueryResult](OperationAlertSilenceCreate, "Create an Alertmanager silence through Grafana datasource proxy.", writeOptions(core.OperationNonIdempotent)...)
+	return withInputExamples(
+		pluginbinding.TypedOperationSpec[AlertSilenceCreateInput, SilenceCreateResult](OperationAlertSilenceCreate, "Create an Alertmanager silence through Grafana datasource proxy.", writeOptions(core.OperationNonIdempotent)...),
+		map[string]any{"endpoint_ref": "grafana-main", "cluster": "prod", "matchers": []map[string]any{{"name": "alertname", "value": "HighErrorRate"}}, "ends_at": "2h", "comment": "silencing during deploy"},
+	)
 }
 
 func alertSilenceDeleteSpec() core.OperationSpec {
-	return pluginbinding.TypedOperationSpec[AlertSilenceDeleteInput, ProxyQueryResult](OperationAlertSilenceDelete, "Delete an Alertmanager silence through Grafana datasource proxy.", writeOptions(core.OperationNonIdempotent)...)
+	return pluginbinding.TypedOperationSpec[AlertSilenceDeleteInput, SilenceDeleteResult](OperationAlertSilenceDelete, "Delete an Alertmanager silence through Grafana datasource proxy.", writeOptions(core.OperationNonIdempotent)...)
 }
 
 func tempoSearchSpec() core.OperationSpec {
-	return pluginbinding.TypedOperationSpec[TempoSearchInput, ProxyQueryResult](OperationTempoSearch, "Search Tempo traces through Grafana datasource proxy.", readOptions(core.OperationIdempotent)...)
+	return withInputExamples(
+		pluginbinding.TypedOperationSpec[TempoSearchInput, TempoSearchResult](OperationTempoSearch, "Search Tempo traces through Grafana datasource proxy. Results are trace summaries.", readOptions(core.OperationIdempotent)...),
+		map[string]any{"endpoint_ref": "grafana-main", "query": `{resource.service.name="api"}`, "start": "1h", "limit": 20},
+	)
 }
 
 func tempoTraceGetSpec() core.OperationSpec {
-	return pluginbinding.TypedOperationSpec[TempoTraceGetInput, ProxyQueryResult](OperationTempoTraceGet, "Fetch a Tempo trace by trace ID through Grafana datasource proxy.", readOptions(core.OperationIdempotent)...)
+	return pluginbinding.TypedOperationSpec[TempoTraceGetInput, TempoTraceResult](OperationTempoTraceGet, "Fetch a Tempo trace by trace ID through Grafana datasource proxy, summarized to spans with service, timing, and status.", readOptions(core.OperationIdempotent)...)
 }
 
 func readOptions(idempotency core.OperationIdempotency) []pluginbinding.OperationSpecOption {
