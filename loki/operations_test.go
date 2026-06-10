@@ -40,6 +40,32 @@ func TestQueryUsesLokiAPI(t *testing.T) {
 	if out.URL != "loki-dev" || out.Count != 1 || out.Entries[0].Line != "hello" {
 		t.Fatalf("query output = %#v", out)
 	}
+	if out.Truncated {
+		t.Fatalf("partial page should not be truncated: %#v", out)
+	}
+}
+
+func TestQueryFlagsTruncationAtLimit(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"status": "success",
+			"data": map[string]any{
+				"resultType": "streams",
+				"result": []map[string]any{{
+					"stream": map[string]string{"app": "api"},
+					"values": [][]string{{"1710000000123456000", "a"}, {"1710000001123456000", "b"}},
+				}},
+			},
+		})
+	}))
+	defer server.Close()
+	plugin := NewPluginWithService(NewService())
+	host := newLokiTestHost(server.URL, "")
+
+	out := plugintest.RunOK[QueryResult](t, plugin, OperationQuery, map[string]any{"endpoint_ref": "loki-dev", "query": `{app="api"}`, "limit": 2}, plugintest.WithHost(host))
+	if !out.Truncated || out.Count != 2 {
+		t.Fatalf("full page should flag truncation: %#v", out)
+	}
 }
 
 func TestQueryCapsLimitValidatesDirectionAndSortsForward(t *testing.T) {

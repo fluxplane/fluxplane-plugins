@@ -67,6 +67,7 @@ type QueryResult struct {
 	Entries         []LogEntry `json:"entries"`
 	Count           int        `json:"count"`
 	Limit           int        `json:"limit"`
+	Truncated       bool       `json:"truncated,omitempty" jsonschema:"description=True when the page is full; more entries likely exist — narrow the window or raise limit."`
 }
 
 type LabelsInput struct {
@@ -302,7 +303,9 @@ func (s Service) query(ctx context.Context, target string, client Client, query,
 		}
 		return entries[i].Timestamp > entries[j].Timestamp
 	})
-	return QueryResult{URL: target, NormalizedQuery: query, Entries: entries, Count: len(entries), Limit: limit}, nil
+	// A full page means Loki likely cut the result at limit — flag it so the
+	// caller knows to narrow the window or raise the limit.
+	return QueryResult{URL: target, NormalizedQuery: query, Entries: entries, Count: len(entries), Limit: limit, Truncated: len(entries) >= limit}, nil
 }
 
 func (s Service) client(ctx pluginbinding.Context, input LokiTargetInput) (string, Client, error) {

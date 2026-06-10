@@ -1,14 +1,40 @@
 package loki
 
 import (
+	"encoding/json"
+
 	core "github.com/fluxplane/fluxplane-plugin/manifest"
 	"github.com/fluxplane/fluxplane-plugin/pluginbinding"
 	"github.com/fluxplane/fluxplane-plugin/protocol"
 )
 
+// withInputExamples injects JSON Schema `examples` into an operation's input
+// schema. The fluxplane-plugin CLI surfaces the first example as the runnable
+// invocation in `operation describe` and treats an example-bearing op as having
+// conditional (one-of) input during local `--dry-run` validation. Kept local to
+// the loki plugin rather than promoted to the SDK.
+func withInputExamples(spec core.OperationSpec, examples ...map[string]any) core.OperationSpec {
+	if len(examples) == 0 || len(spec.Input) == 0 {
+		return spec
+	}
+	var schema map[string]any
+	if err := json.Unmarshal(spec.Input, &schema); err != nil {
+		return spec
+	}
+	arr := make([]any, 0, len(examples))
+	for _, example := range examples {
+		arr = append(arr, example)
+	}
+	schema["examples"] = arr
+	if raw, err := json.Marshal(schema); err == nil {
+		spec.Input = raw
+	}
+	return spec
+}
+
 const (
 	PluginName        = "loki"
-	PluginVersion     = "0.18.2"
+	PluginVersion     = "0.19.0"
 	PluginDescription = "Loki endpoint discovery, health checks, LogQL queries, recent logs, and labels."
 
 	EnvLokiTenantID     = "LOKI_TENANT_ID"
@@ -94,15 +120,24 @@ func testSpec() core.OperationSpec {
 }
 
 func querySpec() core.OperationSpec {
-	return pluginbinding.TypedOperationSpec[QueryInput, QueryResult](OperationQuery, "Run a LogQL query.", readOptions(core.OperationIdempotent)...)
+	return withInputExamples(
+		pluginbinding.TypedOperationSpec[QueryInput, QueryResult](OperationQuery, "Run a LogQL query.", readOptions(core.OperationIdempotent)...),
+		map[string]any{"endpoint_ref": "loki-main", "query": `{namespace="core"} |= "error"`, "since": "30m", "limit": 200},
+	)
 }
 
 func labelsSpec() core.OperationSpec {
-	return pluginbinding.TypedOperationSpec[LabelsInput, LabelsResult](OperationLabels, "List Loki label names or values.", readOptions(core.OperationIdempotent)...)
+	return withInputExamples(
+		pluginbinding.TypedOperationSpec[LabelsInput, LabelsResult](OperationLabels, "List Loki label names or values.", readOptions(core.OperationIdempotent)...),
+		map[string]any{"endpoint_ref": "loki-main", "label": "app"},
+	)
 }
 
 func recentLogsSpec() core.OperationSpec {
-	return pluginbinding.TypedOperationSpec[RecentLogsInput, QueryResult](OperationRecentLogs, "Query recent logs by app, pod, container, or text filter.", readOptions(core.OperationIdempotent)...)
+	return withInputExamples(
+		pluginbinding.TypedOperationSpec[RecentLogsInput, QueryResult](OperationRecentLogs, "Query recent logs by app, pod, container, or text filter.", readOptions(core.OperationIdempotent)...),
+		map[string]any{"endpoint_ref": "loki-main", "app": "api", "namespace": "core", "contains": "timeout", "since": "30m"},
+	)
 }
 
 func readOptions(idempotency core.OperationIdempotency) []pluginbinding.OperationSpecOption {
