@@ -1,8 +1,6 @@
 package asterisk
 
 import (
-	"bufio"
-	"context"
 	"fmt"
 	"net"
 	"net/url"
@@ -13,76 +11,23 @@ import (
 	"github.com/fluxplane/fluxplane-plugin/pluginbinding"
 )
 
-// runAMIPing connects to an Asterisk Manager Interface over a stream dialed
-// through the host conn capability, authenticates, and pings — so the plugin
-// speaks the AMI line protocol itself while performing no direct network IO.
-func runAMIPing(ctx pluginbinding.Context, input AMIPingInput) (AMIPingResult, error) {
-	timeout, err := amiDuration(input.Timeout, 10*time.Second)
-	if err != nil {
-		return AMIPingResult{}, pluginbinding.Errorf("bad_input", "%s", err)
+// runAMIPing opens an authenticated AMI session (dialed through the host conn
+// capability) and pings. The session logs in with "Events: off" and matches
+// responses by ActionID, so the unsolicited FullyBooted/SuccessfulAuth events
+// modern Asterisk pushes right after login never masquerade as the pong.
+func runAMIPing(ctx pluginbinding.Context, session *amiSession, sessionErr error, input AMIPingInput, start time.Time) (AMIPingResult, error) {
+	out := AMIPingResult{EndpointRef: input.EndpointRef}
+	if targetURL, err := amiTargetURL(ctx, input.AMITargetInput); err == nil {
+		out.URL = amiRedactURL(targetURL)
 	}
-	targetURL, err := amiTargetURL(ctx, input.AMITargetInput)
-	if err != nil {
-		return AMIPingResult{}, err
+	if sessionErr != nil {
+		out.Error = sessionErr.Error()
+		return out, sessionErr
 	}
-	creds := amiCredentials(ctx, targetURL)
-	out := AMIPingResult{EndpointRef: input.EndpointRef, URL: amiRedactURL(targetURL)}
-	dialer, ok := ctx.Host.(pluginbinding.ConnDialer)
-	if !ok {
-		return out, pluginbinding.Fail("host_unavailable", "host does not support the conn dial capability required by asterisk")
-	}
-	network, address, err := amiDialAddress(targetURL)
-	if err != nil {
-		return out, pluginbinding.Errorf("bad_input", "%s", err)
-	}
-	start := time.Now()
-	conn, err := pluginbinding.DialHostConn(context.Background(), dialer, pluginbinding.ConnDialRequest{
-		Network:   network,
-		Address:   address,
-		TimeoutMS: int(timeout / time.Millisecond),
-	})
-	if err != nil {
-		out.Error = err.Error()
-		return out, pluginbinding.Errorf("asterisk", "%s", err)
-	}
-	defer func() { _ = conn.Close() }()
-	_ = conn.SetDeadline(time.Now().Add(timeout))
-
-	reader := bufio.NewReader(conn)
-	greeting, err := reader.ReadString('\n')
-	if err != nil {
-		out.Error = err.Error()
-		return out, pluginbinding.Errorf("asterisk", "read AMI greeting: %s", err)
-	}
-	out.Greeting = strings.TrimSpace(greeting)
-
-	if err := amiWriteAction(conn, map[string]string{
-		"Action":   "Login",
-		"Username": creds.username,
-		"Secret":   creds.secret,
-		"ActionID": "fp-login",
-	}); err != nil {
-		out.Error = err.Error()
-		return out, pluginbinding.Errorf("asterisk", "%s", err)
-	}
-	login, err := amiReadMessage(reader)
-	if err != nil {
-		out.Error = err.Error()
-		return out, pluginbinding.Errorf("asterisk", "%s", err)
-	}
-	out.Response = login["Response"]
-	out.Message = login["Message"]
-	if !strings.EqualFold(login["Response"], "Success") {
-		out.DurationMS = time.Since(start).Milliseconds()
-		return out, pluginbinding.Errorf("asterisk", "AMI login failed: %s", firstNonEmpty(login["Message"], login["Response"]))
-	}
+	defer session.Close()
+	out.Greeting = session.greeting
 	out.Authenticated = true
-
-	if err := amiWriteAction(conn, map[string]string{"Action": "Ping", "ActionID": "fp-ping"}); err != nil {
-		out.Error = err.Error()
-		return out, pluginbinding.Errorf("asterisk", "%s", err)
-	}
-	pong, err := amiReadMessage(reader)
+	pong, err := session.do(map[string]string{"Action": "Ping"})
 	if err != nil {
 		out.Error = err.Error()
 		return out, pluginbinding.Errorf("asterisk", "%s", err)
@@ -90,7 +35,6 @@ func runAMIPing(ctx pluginbinding.Context, input AMIPingInput) (AMIPingResult, e
 	out.Response = pong["Response"]
 	out.Message = firstNonEmpty(pong["Ping"], pong["Message"])
 	out.Pong = strings.EqualFold(pong["Response"], "Success") && strings.EqualFold(pong["Ping"], "Pong")
-	_ = amiWriteAction(conn, map[string]string{"Action": "Logoff", "ActionID": "fp-logoff"})
 	out.OK = out.Pong
 	out.DurationMS = time.Since(start).Milliseconds()
 	if !out.Pong {
@@ -199,35 +143,4 @@ func amiDuration(value string, fallback time.Duration) (time.Duration, error) {
 		return fallback, nil
 	}
 	return time.ParseDuration(strings.TrimSpace(value))
-}
-
-func amiWriteAction(conn net.Conn, fields map[string]string) error {
-	for _, key := range []string{"Action", "Username", "Secret", "ActionID"} {
-		if value := strings.TrimSpace(fields[key]); value != "" {
-			if _, err := fmt.Fprintf(conn, "%s: %s\r\n", key, value); err != nil {
-				return err
-			}
-		}
-	}
-	_, err := fmt.Fprint(conn, "\r\n")
-	return err
-}
-
-func amiReadMessage(reader *bufio.Reader) (map[string]string, error) {
-	out := map[string]string{}
-	for {
-		line, err := reader.ReadString('\n')
-		if err != nil {
-			return out, err
-		}
-		line = strings.TrimRight(line, "\r\n")
-		if strings.TrimSpace(line) == "" {
-			return out, nil
-		}
-		key, value, ok := strings.Cut(line, ":")
-		if !ok {
-			continue
-		}
-		out[strings.TrimSpace(key)] = strings.TrimSpace(value)
-	}
 }

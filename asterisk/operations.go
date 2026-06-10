@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	core "github.com/fluxplane/fluxplane-plugin/manifest"
 	"github.com/fluxplane/fluxplane-plugin/pluginbinding"
@@ -17,6 +18,8 @@ import (
 
 type Service struct {
 	ProviderCall func(pluginbinding.Context, string, any) (json.RawMessage, error)
+	// DialAMI overrides AMI session dialing (tests); nil uses dialAMISession.
+	DialAMI func(pluginbinding.Context, AMITargetInput, time.Duration) (*amiSession, error)
 }
 
 func NewService() Service {
@@ -99,10 +102,9 @@ type amiCredentialCandidate struct {
 }
 
 func (s Service) AMIPing(ctx pluginbinding.Context, input AMIPingInput) (AMIPingResult, error) {
-	if strings.TrimSpace(input.EndpointRef) == "" && strings.TrimSpace(input.URL) == "" {
-		return AMIPingResult{}, pluginbinding.Fail("bad_input", "endpoint_ref or url is required")
-	}
-	return runAMIPing(ctx, input)
+	start := time.Now()
+	session, err := s.session(ctx, input.AMITargetInput, input.Timeout)
+	return runAMIPing(ctx, session, err, input, start)
 }
 
 func (s Service) EndpointDiscover(ctx pluginbinding.Context, input EndpointDiscoverInput) (EndpointDiscoverResult, error) {
