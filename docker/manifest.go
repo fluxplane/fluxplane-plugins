@@ -1,6 +1,8 @@
 package docker
 
 import (
+	"encoding/json"
+
 	core "github.com/fluxplane/fluxplane-plugin/manifest"
 	"github.com/fluxplane/fluxplane-plugin/pluginbinding"
 	"github.com/fluxplane/fluxplane-plugin/protocol"
@@ -8,7 +10,7 @@ import (
 
 const (
 	PluginName        = "docker"
-	PluginVersion     = "0.18.2"
+	PluginVersion     = "0.19.0"
 	PluginDescription = "Local Docker Engine inspection for containers, images, networks, volumes, and daemon info."
 
 	OperationInfo                = "docker.info"
@@ -133,24 +135,47 @@ func manifestSpec() pluginbinding.ManifestSpec {
 	}
 }
 
+// withInputExamples injects JSON Schema `examples` into an operation's input
+// schema. The fluxplane-plugin CLI surfaces the first example as the runnable
+// invocation in `operation describe`. Kept local to the docker plugin rather
+// than promoted to the SDK.
+func withInputExamples(spec core.OperationSpec, examples ...map[string]any) core.OperationSpec {
+	if len(examples) == 0 || len(spec.Input) == 0 {
+		return spec
+	}
+	var schema map[string]any
+	if err := json.Unmarshal(spec.Input, &schema); err != nil {
+		return spec
+	}
+	arr := make([]any, 0, len(examples))
+	for _, example := range examples {
+		arr = append(arr, example)
+	}
+	schema["examples"] = arr
+	if raw, err := json.Marshal(schema); err == nil {
+		spec.Input = raw
+	}
+	return spec
+}
+
 func infoSpec() core.OperationSpec {
 	return pluginbinding.TypedOperationSpec[InfoInput, DockerInfo](OperationInfo, "Show Docker daemon and server information.", dockerReadOptions()...)
 }
 
 func containerListSpec() core.OperationSpec {
-	return pluginbinding.TypedOperationSpec[ContainerListInput, pluginbinding.ListResult[Container]](OperationContainerList, "List Docker containers.", dockerCompactReadOptions()...)
+	return withInputExamples(pluginbinding.TypedOperationSpec[ContainerListInput, pluginbinding.ListResult[Container]](OperationContainerList, "List Docker containers.", dockerCompactReadOptions()...), map[string]any{"all": true, "limit": 50})
 }
 
 func containerShowSpec() core.OperationSpec {
-	return pluginbinding.TypedOperationSpec[ShowInput, pluginbinding.ShowResult[Container]](OperationContainerShow, "Show one Docker container by ID or name.", dockerReadOptions()...)
+	return withInputExamples(pluginbinding.TypedOperationSpec[ShowInput, pluginbinding.ShowResult[Container]](OperationContainerShow, "Show one Docker container by ID or name.", dockerReadOptions()...), map[string]any{"id": "my-container"})
 }
 
 func containerLogsSpec() core.OperationSpec {
-	return pluginbinding.TypedOperationSpec[ContainerLogsInput, ContainerLogsResult](OperationContainerLogs, "Read recent Docker container logs.", dockerCompactReadOptions()...)
+	return withInputExamples(pluginbinding.TypedOperationSpec[ContainerLogsInput, ContainerLogsResult](OperationContainerLogs, "Read recent Docker container logs.", dockerCompactReadOptions()...), map[string]any{"id": "my-container", "tail": 100, "since": "15m"})
 }
 
 func containerStatsSpec() core.OperationSpec {
-	return pluginbinding.TypedOperationSpec[ContainerStatsInput, ContainerStatsResult](OperationContainerStats, "Show one-shot Docker container resource stats.", dockerReadOptions()...)
+	return withInputExamples(pluginbinding.TypedOperationSpec[ContainerStatsInput, ContainerStatsResult](OperationContainerStats, "Show one-shot Docker container resource stats.", dockerReadOptions()...), map[string]any{"id": "my-container"})
 }
 
 func containerTopSpec() core.OperationSpec {
@@ -158,7 +183,7 @@ func containerTopSpec() core.OperationSpec {
 }
 
 func containerExecSpec() core.OperationSpec {
-	return pluginbinding.TypedOperationSpec[ContainerExecInput, ContainerExecResult](OperationContainerExec, "Execute a command inside a Docker container.", dockerHighRiskWriteOptions(core.OperationNonIdempotent)...)
+	return withInputExamples(pluginbinding.TypedOperationSpec[ContainerExecInput, ContainerExecResult](OperationContainerExec, "Execute a command inside a Docker container.", dockerHighRiskWriteOptions(core.OperationNonIdempotent)...), map[string]any{"id": "my-container", "cmd": []any{"sh", "-c", "ls -la /"}, "timeout_second": 30})
 }
 
 func containerCopyFromSpec() core.OperationSpec {
@@ -174,7 +199,7 @@ func containerCreateSpec() core.OperationSpec {
 }
 
 func containerRunSpec() core.OperationSpec {
-	return pluginbinding.TypedOperationSpec[ContainerCreateInput, ContainerCreateResult](OperationContainerRun, "Create and start a Docker container.", dockerHighRiskWriteOptions(core.OperationNonIdempotent)...)
+	return withInputExamples(pluginbinding.TypedOperationSpec[ContainerCreateInput, ContainerCreateResult](OperationContainerRun, "Create and start a Docker container.", dockerHighRiskWriteOptions(core.OperationNonIdempotent)...), map[string]any{"image": "nginx:alpine", "name": "web", "ports": []any{map[string]any{"container": "80/tcp", "host_port": "8080"}}, "auto_remove": true})
 }
 
 func containerStartSpec() core.OperationSpec {
@@ -202,15 +227,15 @@ func containerPruneSpec() core.OperationSpec {
 }
 
 func imageListSpec() core.OperationSpec {
-	return pluginbinding.TypedOperationSpec[ImageListInput, pluginbinding.ListResult[Image]](OperationImageList, "List local Docker images.", dockerCompactReadOptions()...)
+	return withInputExamples(pluginbinding.TypedOperationSpec[ImageListInput, pluginbinding.ListResult[Image]](OperationImageList, "List local Docker images.", dockerCompactReadOptions()...), map[string]any{"reference": []any{"nginx*"}})
 }
 
 func imageShowSpec() core.OperationSpec {
-	return pluginbinding.TypedOperationSpec[ShowInput, pluginbinding.ShowResult[Image]](OperationImageShow, "Show one Docker image by ID, digest, or reference.", dockerReadOptions()...)
+	return withInputExamples(pluginbinding.TypedOperationSpec[ShowInput, pluginbinding.ShowResult[Image]](OperationImageShow, "Show one Docker image by ID, digest, or reference.", dockerReadOptions()...), map[string]any{"id": "nginx:alpine"})
 }
 
 func imagePullSpec() core.OperationSpec {
-	return pluginbinding.TypedOperationSpec[ImagePullInput, ImagePullResult](OperationImagePull, "Pull a Docker image.", dockerWriteOptions(core.OperationConditional)...)
+	return withInputExamples(pluginbinding.TypedOperationSpec[ImagePullInput, ImagePullResult](OperationImagePull, "Pull a Docker image.", dockerWriteOptions(core.OperationConditional)...), map[string]any{"reference": "nginx:alpine"})
 }
 
 func imageTagSpec() core.OperationSpec {
@@ -270,7 +295,7 @@ func systemPruneSpec() core.OperationSpec {
 }
 
 func eventsSpec() core.OperationSpec {
-	return pluginbinding.TypedOperationSpec[EventsInput, EventsResult](OperationEvents, "Show recent Docker daemon events.", dockerCompactReadOptions()...)
+	return withInputExamples(pluginbinding.TypedOperationSpec[EventsInput, EventsResult](OperationEvents, "Show recent Docker daemon events.", dockerCompactReadOptions()...), map[string]any{"since": "1h", "type": []any{"container"}, "limit": 50})
 }
 
 func volumeListSpec() core.OperationSpec {

@@ -52,9 +52,31 @@ type PushInput struct {
 }
 
 type GitResult struct {
-	Text    string         `json:"text,omitempty"`
-	Summary string         `json:"summary,omitempty"`
-	Data    map[string]any `json:"data,omitempty"`
+	Text    string  `json:"text,omitempty"`
+	Summary string  `json:"summary,omitempty"`
+	Data    GitData `json:"data"`
+}
+
+// GitData is the structured detail accompanying every git operation result.
+// Process fields are always present; the remaining fields are set by the
+// operations they belong to (diff, commit, tag, push).
+type GitData struct {
+	Stdout          string   `json:"stdout"`
+	Stderr          string   `json:"stderr,omitempty"`
+	ExitCode        int      `json:"exit_code"`
+	StdoutTruncated bool     `json:"stdout_truncated,omitempty"`
+	StderrTruncated bool     `json:"stderr_truncated,omitempty"`
+	ProcessTimedOut bool     `json:"process_timed_out,omitempty"`
+	Mode            string   `json:"mode,omitempty"`      // diff: patch | stat | names
+	Truncated       bool     `json:"truncated,omitempty"` // diff text hit max_bytes
+	MaxBytes        int      `json:"max_bytes,omitempty"`
+	Commit          string   `json:"commit,omitempty"`
+	RemainingDirty  []string `json:"remaining_dirty,omitempty"`
+	Tag             string   `json:"tag,omitempty"`
+	Remote          string   `json:"remote,omitempty"`
+	Refspecs        []string `json:"refspecs,omitempty"`
+	Tags            bool     `json:"tags,omitempty"`
+	DryRun          bool     `json:"dry_run,omitempty"`
 }
 
 func Status(ctx pluginbinding.Context, _ StatusInput) (GitResult, error) {
@@ -79,11 +101,11 @@ func Diff(ctx pluginbinding.Context, req DiffInput) (GitResult, error) {
 	run, err := runGit(ctx, args, processLimits{TimeoutMS: 30000, MaxStdout: 256 * 1024})
 	text, truncated := capGitDiffText(strings.TrimSpace(run.Stdout), maxBytes)
 	data := processData(run)
-	data["stdout"] = text
-	data["stderr"] = compactGitErrorText(run.Stderr)
-	data["mode"] = gitDiffMode(req)
-	data["truncated"] = truncated
-	data["max_bytes"] = maxBytes
+	data.Stdout = text
+	data.Stderr = compactGitErrorText(run.Stderr)
+	data.Mode = gitDiffMode(req)
+	data.Truncated = truncated
+	data.MaxBytes = maxBytes
 	if err != nil {
 		return GitResult{}, pluginbinding.Fail("git_diff_failed", gitProcessErrorMessage(err, run.Stderr))
 	}
@@ -139,17 +161,14 @@ func Commit(ctx pluginbinding.Context, req CommitInput) (GitResult, error) {
 	}
 	headRun, err := runGit(ctx, []string{"rev-parse", "HEAD"}, processLimits{TimeoutMS: 30000, MaxStdout: 1024, MaxStderr: 1024})
 	if err != nil {
-		data["rev_parse_stdout"] = headRun.Stdout
-		data["rev_parse_stderr"] = headRun.Stderr
-		data["rev_parse_exit_code"] = headRun.ExitCode
 		return GitResult{}, pluginbinding.Fail("git_commit_rev_parse_failed", err.Error())
 	}
 	commit := strings.TrimSpace(headRun.Stdout)
-	data["commit"] = commit
+	data.Commit = commit
 	text := commitText(commit, commitRun)
 	if req.Stage && !req.All && len(req.Paths) > 0 {
 		if dirty := remainingDirtyFiles(ctx); len(dirty) > 0 {
-			data["remaining_dirty"] = dirty
+			data.RemainingDirty = dirty
 			text += "\n\nUncommitted changes remain in: " + strings.Join(dirty, ", ")
 		}
 	}
@@ -163,7 +182,7 @@ func Tag(ctx pluginbinding.Context, req TagInput) (GitResult, error) {
 	}
 	run, err := runGit(ctx, args, processLimits{TimeoutMS: 30000, MaxStdout: 128 * 1024, MaxStderr: 128 * 1024})
 	data := processData(run)
-	data["tag"] = strings.TrimSpace(req.Name)
+	data.Tag = strings.TrimSpace(req.Name)
 	if err != nil {
 		return GitResult{}, pluginbinding.Fail("git_tag_failed", err.Error())
 	}
@@ -177,10 +196,10 @@ func Push(ctx pluginbinding.Context, req PushInput) (GitResult, error) {
 	}
 	run, err := runGit(ctx, args, processLimits{TimeoutMS: 120000, MaxStdout: 128 * 1024, MaxStderr: 128 * 1024})
 	data := processData(run)
-	data["remote"] = gitPushRemote(req)
-	data["refspecs"] = append([]string(nil), req.Refspecs...)
-	data["tags"] = req.Tags
-	data["dry_run"] = req.DryRun
+	data.Remote = gitPushRemote(req)
+	data.Refspecs = append([]string(nil), req.Refspecs...)
+	data.Tags = req.Tags
+	data.DryRun = req.DryRun
 	if err != nil {
 		return GitResult{}, pluginbinding.Fail("git_push_failed", err.Error())
 	}
@@ -414,14 +433,14 @@ func firstNonEmptyLine(text string) string {
 	return ""
 }
 
-func processData(result pluginbinding.ProcessRunResponse) map[string]any {
-	return map[string]any{
-		"stdout":            result.Stdout,
-		"stderr":            result.Stderr,
-		"exit_code":         result.ExitCode,
-		"stdout_truncated":  result.StdoutTruncated,
-		"stderr_truncated":  result.StderrTruncated,
-		"process_timed_out": result.TimedOut,
+func processData(result pluginbinding.ProcessRunResponse) GitData {
+	return GitData{
+		Stdout:          result.Stdout,
+		Stderr:          result.Stderr,
+		ExitCode:        result.ExitCode,
+		StdoutTruncated: result.StdoutTruncated,
+		StderrTruncated: result.StderrTruncated,
+		ProcessTimedOut: result.TimedOut,
 	}
 }
 
@@ -469,6 +488,6 @@ func remainingDirtyFiles(ctx pluginbinding.Context) []string {
 	return dirty
 }
 
-func gitResult(text string, data map[string]any) GitResult {
+func gitResult(text string, data GitData) GitResult {
 	return GitResult{Text: text, Summary: firstNonEmptyLine(text), Data: data}
 }

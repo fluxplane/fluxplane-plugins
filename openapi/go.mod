@@ -6,7 +6,7 @@ require (
 	github.com/fluxplane/fluxplane-auth v0.5.0
 	github.com/fluxplane/fluxplane-datasource v0.2.0
 	github.com/fluxplane/fluxplane-operation v0.2.0
-	github.com/fluxplane/fluxplane-plugin v0.1.0
+	github.com/fluxplane/fluxplane-plugin v0.9.0
 	github.com/fluxplane/fluxplane-secret v0.2.0
 	github.com/getkin/kin-openapi v0.139.0
 )

@@ -1,5 +1,20 @@
 # Changelog
 
+## v0.3.0
+
+### Changed
+- Runnable JSON Schema `examples` on the ten most-used operations
+  (container list/show/logs/stats/exec/run, image list/show/pull, events).
+- SDK bump to `fluxplane-plugin` v0.9.0; manifest version 0.19.0.
+
+### Notes
+- Invoke-time configuration audit: the daemon address resolves from instance
+  config only (`docker_host`), never from the environment. The only
+  environment reads are inside `docker.context.list`/`docker.context.show`,
+  whose declared purpose is reporting the ambient local Docker CLI context
+  (DOCKER_HOST/DOCKER_CONFIG/DOCKER_CONTEXT); those values never route other
+  operations' connections.
+
 ## v0.2.0
 
 ### Changed

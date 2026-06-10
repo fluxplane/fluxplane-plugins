@@ -4,7 +4,7 @@ go 1.26.1
 
 require (
 	github.com/fluxplane/fluxplane-context v0.1.0
-	github.com/fluxplane/fluxplane-plugin v0.1.0
+	github.com/fluxplane/fluxplane-plugin v0.9.0
 )
 
 require (

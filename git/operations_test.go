@@ -29,10 +29,10 @@ func TestDiffBuildsCompactArgsAndBoundsOutput(t *testing.T) {
 		Paths:    []string{"file.txt"},
 		MaxBytes: 20,
 	}, plugintest.WithHost(host))
-	if !strings.Contains(out.Text, "[git diff truncated") || out.Data["truncated"] != true {
+	if !strings.Contains(out.Text, "[git diff truncated") || !out.Data.Truncated {
 		t.Fatalf("diff output = %#v", out)
 	}
-	if out.Data["mode"] != "stat" || out.Data["max_bytes"] != float64(20) && out.Data["max_bytes"] != 20 {
+	if out.Data.Mode != "stat" || out.Data.MaxBytes != 20 {
 		t.Fatalf("diff data = %#v", out.Data)
 	}
 	host.expectCalls(t, []string{"diff --staged --stat HEAD~1 -- file.txt"})
@@ -81,7 +81,7 @@ func TestCommitStagesCommitsAndReturnsHash(t *testing.T) {
 		Stage:   true,
 		Paths:   []string{"file.go"},
 	}, plugintest.WithHost(host))
-	if out.Data["commit"] != "abc123" || !strings.Contains(out.Text, "Uncommitted changes remain in: other.go, new.go") {
+	if out.Data.Commit != "abc123" || !strings.Contains(out.Text, "Uncommitted changes remain in: other.go, new.go") {
 		t.Fatalf("commit output = %#v", out)
 	}
 	host.expectCalls(t, []string{
@@ -110,7 +110,7 @@ func TestTagBuildsAnnotatedTagAndRejectsUnsafeName(t *testing.T) {
 		Message: "release",
 		Ref:     "HEAD",
 	}, plugintest.WithHost(host))
-	if out.Data["tag"] != "v1.0.0" {
+	if out.Data.Tag != "v1.0.0" {
 		t.Fatalf("tag output = %#v", out)
 	}
 	host.expectCalls(t, []string{"tag -a v1.0.0 -m release HEAD"})
@@ -131,7 +131,7 @@ func TestPushBuildsSafeExplicitPush(t *testing.T) {
 		ForceWithLease: true,
 		DryRun:         true,
 	}, plugintest.WithHost(host))
-	if !strings.Contains(out.Text, "Everything up-to-date") || out.Data["remote"] != "origin" {
+	if !strings.Contains(out.Text, "Everything up-to-date") || out.Data.Remote != "origin" {
 		t.Fatalf("push output = %#v", out)
 	}
 	host.expectCalls(t, []string{"push --dry-run -u --force-with-lease --tags origin main"})
