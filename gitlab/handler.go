@@ -73,6 +73,7 @@ func NewPluginWithService(service Service) *pluginbinding.Plugin {
 		pluginbinding.RegisterDatasourceLookup(gitlabMergeRequestsLookupSpec(), service.Lookup),
 	}
 	options = append(options, registerReviewOperations(service)...)
+	options = append(options, registerCICDOperations(service)...)
 	return pluginbinding.Define(manifestSpec(), options...)
 }
 

@@ -184,6 +184,8 @@ type MergeRequest struct {
 	Draft          bool     `json:"draft,omitempty"`
 	CreatedAt      string   `json:"created_at,omitempty"`
 	UpdatedAt      string   `json:"updated_at,omitempty"`
+	MergedAt       string   `json:"merged_at,omitempty"`
+	MergedBy       string   `json:"merged_by,omitempty"`
 }
 
 type MergeRequestRecord struct {

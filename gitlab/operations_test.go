@@ -716,72 +716,88 @@ func testPlugin(client Client) *pluginbinding.Plugin {
 }
 
 type fakeClient struct {
-	user                 User
-	projects             []Project
-	users                []User
-	groups               []Group
-	issues               []Issue
-	issue                Issue
-	project              Project
-	mergeRequest         MergeRequest
-	mergeRequests        []MergeRequest
-	approval             MergeRequestApproval
-	repositoryTag        RepositoryTag
-	branch               Branch
-	repoFile             RepoFile
-	commit               Commit
-	ciVariable           CIVariable
-	pipeline             Pipeline
-	snippet              Snippet
-	listOptions          ProjectListOptions
-	userListOptions      UserListOptions
-	groupListOptions     GroupListOptions
-	issueListOptions     IssueListOptions
-	mrListOptions        MergeRequestListOptions
-	mrCreateOptions      MergeRequestCreateOptions
-	mrApproveOptions     MergeRequestApproveOptions
-	mrMergeOptions       MergeRequestMergeOptions
-	repositoryTagOptions RepositoryTagCreateOptions
-	branchCreateOptions  BranchCreateOptions
-	repoFileCreate       RepoFileCreateOptions
-	repoFileUpdate       RepoFileUpdateOptions
-	repoFileDelete       RepoFileDeleteOptions
-	commitOptions        CommitCreateOptions
-	ciVariableCreate     CIVariableCreateOptions
-	ciVariableUpdate     CIVariableUpdateOptions
-	ciVariableDelete     CIVariableDeleteOptions
-	pipelineCreate       PipelineCreateOptions
-	snippetCreate        SnippetCreateOptions
-	projectID            any
-	issueProject         any
-	issueIID             int64
-	issueCreateOptions   IssueCreateOptions
-	issueUpdateOptions   IssueUpdateOptions
-	issueNotes           []Note
-	createdNote          Note
-	noteCreateOptions    IssueNoteCreateOptions
-	mrProject            any
-	mrIID                int64
-	mrCreateProject      any
-	mrApproveProject     any
-	mrApproveIID         int64
-	mrMergeProject       any
-	mrMergeIID           int64
-	repositoryTagProject any
-	branchProject        any
-	branchDeleted        string
-	mergedBranchProject  any
-	repoFileProject      any
-	commitProject        any
-	ciVariableProject    any
-	ciVariableUpdateKey  string
-	ciVariableDeleteKey  string
-	pipelineProject      any
-	pipelineRetryID      int64
-	pipelineCancelID     int64
-	pipelineRetryProj    any
-	pipelineCancelProj   any
-	snippetDeleted       int64
+	user                      User
+	projects                  []Project
+	users                     []User
+	groups                    []Group
+	issues                    []Issue
+	pipelines                 []Pipeline
+	jobs                      []JobInfo
+	environments              []EnvironmentInfo
+	deployments               []DeploymentInfo
+	releases                  []ReleaseInfo
+	repositoryTags            []RepositoryTag
+	commits                   []Commit
+	cicdTruncated             bool
+	pipelineListProject       any
+	pipelineListOptions       PipelineListOptions
+	jobListProject            any
+	jobListPipelineID         int64
+	jobListScope              []string
+	deploymentListEnvironment string
+	tagListSearch             string
+	commitListOptions         CommitListOptions
+	issue                     Issue
+	project                   Project
+	mergeRequest              MergeRequest
+	mergeRequests             []MergeRequest
+	approval                  MergeRequestApproval
+	repositoryTag             RepositoryTag
+	branch                    Branch
+	repoFile                  RepoFile
+	commit                    Commit
+	ciVariable                CIVariable
+	pipeline                  Pipeline
+	snippet                   Snippet
+	listOptions               ProjectListOptions
+	userListOptions           UserListOptions
+	groupListOptions          GroupListOptions
+	issueListOptions          IssueListOptions
+	mrListOptions             MergeRequestListOptions
+	mrCreateOptions           MergeRequestCreateOptions
+	mrApproveOptions          MergeRequestApproveOptions
+	mrMergeOptions            MergeRequestMergeOptions
+	repositoryTagOptions      RepositoryTagCreateOptions
+	branchCreateOptions       BranchCreateOptions
+	repoFileCreate            RepoFileCreateOptions
+	repoFileUpdate            RepoFileUpdateOptions
+	repoFileDelete            RepoFileDeleteOptions
+	commitOptions             CommitCreateOptions
+	ciVariableCreate          CIVariableCreateOptions
+	ciVariableUpdate          CIVariableUpdateOptions
+	ciVariableDelete          CIVariableDeleteOptions
+	pipelineCreate            PipelineCreateOptions
+	snippetCreate             SnippetCreateOptions
+	projectID                 any
+	issueProject              any
+	issueIID                  int64
+	issueCreateOptions        IssueCreateOptions
+	issueUpdateOptions        IssueUpdateOptions
+	issueNotes                []Note
+	createdNote               Note
+	noteCreateOptions         IssueNoteCreateOptions
+	mrProject                 any
+	mrIID                     int64
+	mrCreateProject           any
+	mrApproveProject          any
+	mrApproveIID              int64
+	mrMergeProject            any
+	mrMergeIID                int64
+	repositoryTagProject      any
+	branchProject             any
+	branchDeleted             string
+	mergedBranchProject       any
+	repoFileProject           any
+	commitProject             any
+	ciVariableProject         any
+	ciVariableUpdateKey       string
+	ciVariableDeleteKey       string
+	pipelineProject           any
+	pipelineRetryID           int64
+	pipelineCancelID          int64
+	pipelineRetryProj         any
+	pipelineCancelProj        any
+	snippetDeleted            int64
 }
 
 func (c *fakeClient) CurrentUser() (User, error) {
@@ -969,6 +985,125 @@ func (c *fakeClient) CreateSnippet(options SnippetCreateOptions) (Snippet, error
 func (c *fakeClient) DeleteSnippet(id int64) error {
 	c.snippetDeleted = id
 	return nil
+}
+
+func (c *fakeClient) ListProjectPipelines(project any, input PipelineListOptions) ([]Pipeline, bool, error) {
+	c.pipelineListProject = project
+	c.pipelineListOptions = input
+	return c.pipelines, c.cicdTruncated, nil
+}
+
+func (c *fakeClient) ListPipelineJobs(project any, pipelineID int64, scope []string, limit int) ([]JobInfo, bool, error) {
+	c.jobListProject = project
+	c.jobListPipelineID = pipelineID
+	c.jobListScope = scope
+	return c.jobs, c.cicdTruncated, nil
+}
+
+func (c *fakeClient) ListEnvironments(project any, search, states string, limit int) ([]EnvironmentInfo, bool, error) {
+	return c.environments, c.cicdTruncated, nil
+}
+
+func (c *fakeClient) ListProjectDeployments(project any, environment, status string, limit int) ([]DeploymentInfo, bool, error) {
+	c.deploymentListEnvironment = environment
+	return c.deployments, c.cicdTruncated, nil
+}
+
+func (c *fakeClient) ListReleases(project any, limit int) ([]ReleaseInfo, bool, error) {
+	return c.releases, c.cicdTruncated, nil
+}
+
+func (c *fakeClient) ListRepositoryTags(project any, search string, limit int) ([]RepositoryTag, bool, error) {
+	c.tagListSearch = search
+	return c.repositoryTags, c.cicdTruncated, nil
+}
+
+func (c *fakeClient) ListCommits(project any, input CommitListOptions) ([]Commit, bool, error) {
+	c.commitListOptions = input
+	return c.commits, c.cicdTruncated, nil
+}
+
+func TestServiceCICDListOperations(t *testing.T) {
+	client := &fakeClient{
+		pipelines:      []Pipeline{{ID: 9, Status: "failed", Ref: "main"}},
+		jobs:           []JobInfo{{ID: 91, Name: "unit", Stage: "test", Status: "failed", FailureReason: "script_failure"}},
+		environments:   []EnvironmentInfo{{ID: 3, Name: "production", State: "available"}},
+		deployments:    []DeploymentInfo{{ID: 5, Status: "success", Environment: "production"}},
+		releases:       []ReleaseInfo{{TagName: "v1.2.0", Name: "1.2"}},
+		repositoryTags: []RepositoryTag{{Name: "v1.2.0", Target: "abc"}},
+		commits:        []Commit{{ID: "abc", Title: "fix: thing"}},
+		cicdTruncated:  true,
+	}
+	plugin := testPlugin(client)
+
+	pipelines := plugintest.RunOK[pluginbinding.ListResult[Pipeline]](t, plugin, OperationPipelineList, map[string]any{
+		"project": "group/app", "status": "failed", "ref": "main", "limit": 5,
+	})
+	if pipelines.Count != 1 || !pipelines.HasMore || pipelines.Items[0].Status != "failed" {
+		t.Fatalf("pipelines = %#v", pipelines)
+	}
+	if client.pipelineListOptions.Status != "failed" || client.pipelineListOptions.Ref != "main" || client.pipelineListOptions.Limit != 5 {
+		t.Fatalf("pipeline options = %#v", client.pipelineListOptions)
+	}
+
+	jobs := plugintest.RunOK[pluginbinding.ListResult[JobInfo]](t, plugin, OperationJobList, map[string]any{
+		"project": "group/app", "pipeline_id": 9, "scope": []any{"failed"},
+	})
+	if jobs.Count != 1 || jobs.Items[0].FailureReason != "script_failure" {
+		t.Fatalf("jobs = %#v", jobs)
+	}
+	if client.jobListPipelineID != 9 || len(client.jobListScope) != 1 || client.jobListScope[0] != "failed" {
+		t.Fatalf("job options = %d %#v", client.jobListPipelineID, client.jobListScope)
+	}
+
+	environments := plugintest.RunOK[pluginbinding.ListResult[EnvironmentInfo]](t, plugin, OperationEnvironmentList, map[string]any{"project": "group/app"})
+	if environments.Count != 1 || environments.Items[0].Name != "production" {
+		t.Fatalf("environments = %#v", environments)
+	}
+
+	deployments := plugintest.RunOK[pluginbinding.ListResult[DeploymentInfo]](t, plugin, OperationDeploymentList, map[string]any{
+		"project": "group/app", "environment": "production",
+	})
+	if deployments.Count != 1 || client.deploymentListEnvironment != "production" {
+		t.Fatalf("deployments = %#v env=%q", deployments, client.deploymentListEnvironment)
+	}
+
+	releases := plugintest.RunOK[pluginbinding.ListResult[ReleaseInfo]](t, plugin, OperationReleaseList, map[string]any{"project": "group/app"})
+	if releases.Count != 1 || releases.Items[0].TagName != "v1.2.0" {
+		t.Fatalf("releases = %#v", releases)
+	}
+
+	tags := plugintest.RunOK[pluginbinding.ListResult[RepositoryTag]](t, plugin, OperationTagList, map[string]any{"project": "group/app", "search": "v1."})
+	if tags.Count != 1 || client.tagListSearch != "v1." {
+		t.Fatalf("tags = %#v search=%q", tags, client.tagListSearch)
+	}
+
+	commits := plugintest.RunOK[pluginbinding.ListResult[Commit]](t, plugin, OperationCommitList, map[string]any{
+		"project": "group/app", "ref": "main", "file_path": "src/", "limit": 10,
+	})
+	if commits.Count != 1 || commits.Items[0].ID != "abc" {
+		t.Fatalf("commits = %#v", commits)
+	}
+	if client.commitListOptions.Ref != "main" || client.commitListOptions.FilePath != "src/" || client.commitListOptions.Limit != 10 {
+		t.Fatalf("commit options = %#v", client.commitListOptions)
+	}
+
+	// project is required on every CI/CD list read.
+	if err := plugintest.RunError(t, plugin, OperationPipelineList, map[string]any{}); err.Code != "bad_input" {
+		t.Fatalf("missing project = %#v", err)
+	}
+}
+
+func TestRankProjectRecordsPrefersNameMatches(t *testing.T) {
+	records := []ProjectRecord{
+		{Name: "satellite-tools", PathWithNamespace: "group/satellite-tools"}, // description-only match
+		{Name: "monolith-deploy", PathWithNamespace: "group/monolith-deploy"}, // name contains
+		{Name: "monolith", PathWithNamespace: "group/monolith"},               // exact name
+	}
+	rankProjectRecords(records, "monolith")
+	if records[0].Name != "monolith" || records[1].Name != "monolith-deploy" || records[2].Name != "satellite-tools" {
+		t.Fatalf("ranking = %#v", records)
+	}
 }
 
 func TestServiceIssueOperations(t *testing.T) {

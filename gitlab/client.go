@@ -58,6 +58,14 @@ type Client interface {
 	GetRepositoryArchive(project any, format, sha, path string) ([]byte, error)
 	CreateProject(ProjectCreateOptions) (Project, error)
 	SearchBlobs(project any, group any, query, ref string, limit int) ([]BlobMatch, bool, error)
+	// CI/CD + repository reads (issue #5).
+	ListProjectPipelines(project any, input PipelineListOptions) ([]Pipeline, bool, error)
+	ListPipelineJobs(project any, pipelineID int64, scope []string, limit int) ([]JobInfo, bool, error)
+	ListEnvironments(project any, search, states string, limit int) ([]EnvironmentInfo, bool, error)
+	ListProjectDeployments(project any, environment, status string, limit int) ([]DeploymentInfo, bool, error)
+	ListReleases(project any, limit int) ([]ReleaseInfo, bool, error)
+	ListRepositoryTags(project any, search string, limit int) ([]RepositoryTag, bool, error)
+	ListCommits(project any, input CommitListOptions) ([]Commit, bool, error)
 }
 
 type ClientFactory func(pluginbinding.Context) (Client, error)
@@ -1154,6 +1162,10 @@ func mergeRequestFromAPI(mr *gitlabapi.MergeRequest) MergeRequest {
 	if mr.Author != nil {
 		author = mr.Author.Username
 	}
+	mergedBy := ""
+	if mr.MergeUser != nil {
+		mergedBy = mr.MergeUser.Username
+	}
 	reference := mergeRequestReference(mr.References)
 	return MergeRequest{
 		ID:             mr.ID,
@@ -1172,6 +1184,8 @@ func mergeRequestFromAPI(mr *gitlabapi.MergeRequest) MergeRequest {
 		Draft:          mr.Draft,
 		CreatedAt:      formatTime(mr.CreatedAt),
 		UpdatedAt:      formatTime(mr.UpdatedAt),
+		MergedAt:       formatTime(mr.MergedAt),
+		MergedBy:       mergedBy,
 	}
 }
 
@@ -1191,6 +1205,10 @@ func basicMergeRequestFromAPI(mr *gitlabapi.BasicMergeRequest) MergeRequest {
 	if mr.Author != nil {
 		author = mr.Author.Username
 	}
+	mergedBy := ""
+	if mr.MergeUser != nil {
+		mergedBy = mr.MergeUser.Username
+	}
 	reference := mergeRequestReference(mr.References)
 	return MergeRequest{
 		ID:             mr.ID,
@@ -1209,6 +1227,8 @@ func basicMergeRequestFromAPI(mr *gitlabapi.BasicMergeRequest) MergeRequest {
 		Draft:          mr.Draft,
 		CreatedAt:      formatTime(mr.CreatedAt),
 		UpdatedAt:      formatTime(mr.UpdatedAt),
+		MergedAt:       formatTime(mr.MergedAt),
+		MergedBy:       mergedBy,
 	}
 }
 

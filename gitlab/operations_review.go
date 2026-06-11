@@ -662,9 +662,26 @@ func (s Service) RepositoryFileShow(ctx pluginbinding.Context, input RepositoryF
 	if project == "" || path == "" {
 		return RepositoryFileShowResult{}, pluginbinding.Fail("bad_input", "project and path are required")
 	}
-	file, err := client.GetRepositoryFile(projectID(project), path, input.Ref)
+	ref := strings.TrimSpace(input.Ref)
+	if ref == "" {
+		// The files API requires an explicit ref — resolve the project's
+		// default branch so "show me this file" works without naming one. The
+		// effective ref is echoed in the result.
+		resolved, err := client.GetProject(projectID(project))
+		if err != nil {
+			return RepositoryFileShowResult{}, pluginbinding.Errorf("gitlab", "resolve default branch: %s", err)
+		}
+		ref = strings.TrimSpace(resolved.DefaultBranch)
+		if ref == "" {
+			return RepositoryFileShowResult{}, pluginbinding.Fail("bad_input", "project has no default branch — pass ref explicitly")
+		}
+	}
+	file, err := client.GetRepositoryFile(projectID(project), path, ref)
 	if err != nil {
 		return RepositoryFileShowResult{}, pluginbinding.Errorf("gitlab", "%s", err)
+	}
+	if strings.TrimSpace(file.Ref) == "" {
+		file.Ref = ref
 	}
 	out := RepositoryFileShowResult{
 		Project:      project,
@@ -868,6 +885,12 @@ func (s Service) SearchBlobs(ctx pluginbinding.Context, input BlobSearchInput) (
 	}
 	matches, truncated, err := client.SearchBlobs(project, group, query, input.Ref, limit)
 	if err != nil {
+		// Instance-wide blob search needs advanced search (Elasticsearch/
+		// Zoekt); GitLab answers a raw 400 about "scope" — translate it to
+		// the action that works everywhere.
+		if project == nil && group == nil && strings.Contains(strings.ToLower(err.Error()), "scope supported only") {
+			return BlobSearchResult{}, pluginbinding.Fail("bad_input", "this GitLab instance has no advanced search, so instance-wide code search is unavailable — pass project: or group: to scope the search")
+		}
 		return BlobSearchResult{}, pluginbinding.Errorf("gitlab", "%s", err)
 	}
 	out := BlobSearchResult{Query: query, Project: strings.TrimSpace(input.Project), Group: strings.TrimSpace(input.Group), Truncated: truncated}

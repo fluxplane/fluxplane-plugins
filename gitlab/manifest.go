@@ -10,7 +10,7 @@ import (
 
 const (
 	PluginName        = "gitlab"
-	PluginVersion     = "0.21.0"
+	PluginVersion     = "0.22.0"
 	PluginDescription = "GitLab operations, datasources, indexes, and reverse lookups."
 
 	AuthMethodPersonalAccessToken = "personal_access_token"
@@ -73,6 +73,15 @@ const (
 	OperationRepositoryArchive   = "gitlab.repository.archive"
 	OperationProjectCreate       = "gitlab.project.create"
 	OperationSearchBlobs         = "gitlab.search.blobs"
+
+	// CI/CD + repository reads (issue #5).
+	OperationPipelineList    = "gitlab.pipeline.list"
+	OperationJobList         = "gitlab.job.list"
+	OperationEnvironmentList = "gitlab.environment.list"
+	OperationDeploymentList  = "gitlab.deployment.list"
+	OperationReleaseList     = "gitlab.release.list"
+	OperationTagList         = "gitlab.repository.tag.list"
+	OperationCommitList      = "gitlab.repository.commit.list"
 
 	DatasourceProjects      = "gitlab.projects"
 	DatasourceUsers         = "gitlab.users"
@@ -179,7 +188,7 @@ func operationSpecs() []core.OperationSpec {
 		issueUpdateSpec(),
 		issueNoteListSpec(),
 		issueNoteCreateSpec(),
-	}, reviewOperationSpecs()...)
+	}, append(reviewOperationSpecs(), cicdOperationSpecs()...)...)
 }
 
 func issueListSpec() core.OperationSpec {

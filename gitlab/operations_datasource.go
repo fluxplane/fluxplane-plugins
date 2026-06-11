@@ -2,6 +2,7 @@ package gitlab
 
 import (
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -54,7 +55,34 @@ func (s Service) ProjectDatasourceSearch(ctx pluginbinding.Context, input plugin
 	for _, project := range projects {
 		records = append(records, normalizeProjectRecord(ctx.DatasourceSource(), project))
 	}
+	rankProjectRecords(records, input.Query)
 	return pluginbinding.NewDatasourceSearchResult(PluginName, input.Query, records), nil
+}
+
+// rankProjectRecords reorders API results so name/path matches outrank
+// description matches: GitLab's project search matches descriptions too, which
+// buries the project literally named by the query under satellite repos that
+// merely mention it.
+func rankProjectRecords(records []ProjectRecord, query string) {
+	query = strings.ToLower(strings.TrimSpace(query))
+	if query == "" {
+		return
+	}
+	score := func(record ProjectRecord) int {
+		name := strings.ToLower(record.Name)
+		path := strings.ToLower(record.PathWithNamespace)
+		switch {
+		case name == query || path == query || strings.HasSuffix(path, "/"+query):
+			return 3
+		case strings.HasPrefix(name, query):
+			return 2
+		case strings.Contains(name, query) || strings.Contains(path, query):
+			return 1
+		default:
+			return 0 // matched via description/topics only
+		}
+	}
+	sort.SliceStable(records, func(i, j int) bool { return score(records[i]) > score(records[j]) })
 }
 
 func (s Service) ProjectDatasourceGet(ctx pluginbinding.Context, input pluginbinding.DatasourceGetInput) (ProjectGetResult, error) {

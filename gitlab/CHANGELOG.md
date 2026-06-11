@@ -1,5 +1,30 @@
 # Changelog
 
+## v0.22.0
+
+### Added
+- **CI/CD + repository reads** (fluxplane-plugins#5): `gitlab.pipeline.list`
+  (status/ref/source/username filters), `gitlab.job.list` (per pipeline, with
+  stage/status/failure_reason), `gitlab.environment.list` (incl. last
+  deployment), `gitlab.deployment.list` (environment/status filters),
+  `gitlab.release.list`, `gitlab.repository.tag.list`, and
+  `gitlab.repository.commit.list` (ref/file-path/author/since/until filters).
+  All bounded with `has_more` truncation flags.
+- Merge request records carry `merged_at` and `merged_by`
+  (fluxplane-plugins#5).
+
+### Fixed
+- `gitlab.repository.file.show` without `ref` resolves the project's default
+  branch instead of failing (the files API requires an explicit ref); the
+  effective ref is echoed in the result (fluxplane-plugins#5).
+- Instance-wide `gitlab.search.blobs` on instances without advanced search
+  now returns an actionable message ("pass project: or group:") instead of
+  the raw GitLab 400 (fluxplane-plugins#6).
+- `gitlab.projects` search ranks name/path matches above description-only
+  matches, so the project literally named by the query is first
+  (fluxplane-plugins#6).
+- SDK bump to `fluxplane-plugin` v0.13.0; manifest version 0.22.0.
+
 ## v0.21.0
 
 ### Added

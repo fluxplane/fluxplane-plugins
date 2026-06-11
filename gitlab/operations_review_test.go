@@ -337,12 +337,18 @@ func TestRepositoryTreeAndFileShow(t *testing.T) {
 		t.Fatalf("file = %#v", file)
 	}
 
+	// Ref-less show resolves the project's default branch (the files API
+	// rejects a missing ref) and echoes the effective ref.
+	client.project = Project{ID: 7, PathWithNamespace: "group/app", DefaultBranch: "develop"}
 	client.fileRaw = RepoFileRaw{FilePath: "logo.png", Size: 4, Content: []byte{0x89, 0x50, 0x00, 0x47}, BlobID: "blob-2"}
 	binary := plugintest.RunOK[RepositoryFileShowResult](t, testPlugin(client), OperationRepositoryFileShow, RepositoryFileShowInput{
 		Project: "group/app", Path: "logo.png",
 	})
 	if !binary.Binary || binary.Content != "" {
 		t.Fatalf("binary = %#v", binary)
+	}
+	if binary.Ref != "develop" {
+		t.Fatalf("ref = %q, want resolved default branch", binary.Ref)
 	}
 }
 
