@@ -54,7 +54,7 @@ require (
 require (
 	github.com/bahlo/generic-list-go v0.2.0 // indirect
 	github.com/buger/jsonparser v1.2.0 // indirect
-	github.com/fluxplane/fluxplane-plugin v0.15.0
+	github.com/fluxplane/fluxplane-plugin v0.17.0
 	github.com/fxamacker/cbor/v2 v2.9.2 // indirect
 	github.com/go-logr/logr v1.4.3 // indirect
 	github.com/invopop/jsonschema v0.14.0 // indirect
