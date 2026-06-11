@@ -19,6 +19,7 @@ use (
 	./kubernetes
 	./loki
 	./ollama
+	./opsgenie
 	./openai
 	./openapi
 	./prometheus

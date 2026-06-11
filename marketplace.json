@@ -114,6 +114,13 @@
       "local_path": "openai"
     },
     {
+      "name": "opsgenie",
+      "description": "Opsgenie paging visibility and ack loop: alerts, acknowledge/close/note, schedules, and who is on call.",
+      "binary": "fluxplane-plugin-opsgenie",
+      "go_install": "github.com/fluxplane/fluxplane-plugins/opsgenie/cmd/fluxplane-plugin-opsgenie@latest",
+      "local_path": "opsgenie"
+    },
+    {
       "name": "prometheus",
       "description": "Prometheus health checks, PromQL queries, labels, targets, and alerts for configured or discovered endpoints.",
       "binary": "fluxplane-plugin-prometheus",
