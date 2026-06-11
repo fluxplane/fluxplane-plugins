@@ -34,7 +34,7 @@ func withInputExamples(spec core.OperationSpec, examples ...map[string]any) core
 
 const (
 	PluginName        = "kubernetes"
-	PluginVersion     = "0.22.1"
+	PluginVersion     = "0.23.0"
 	PluginDescription = "Kubernetes cluster discovery, inventory, debugging (logs, events, exec), and deployment operations using kubeconfig."
 
 	OperationClusterList       = "kubernetes.cluster.list"
@@ -112,7 +112,7 @@ func manifestSpec() pluginbinding.ManifestSpec {
 			inventoryDatasourceSpec(),
 		},
 		Endpoints: []core.EndpointSpec{
-			pluginbinding.Endpoint(EndpointClusterDiscovered, "Product endpoints discovered inside Kubernetes clusters.", "kubernetes", "prometheus", "loki", "homer", "mysql", "postgres"),
+			pluginbinding.Endpoint(EndpointClusterDiscovered, "Product endpoints discovered inside Kubernetes clusters.", "kubernetes", "prometheus", "alertmanager", "loki", "grafana", "homer", "mysql", "postgres"),
 		},
 		Metadata: map[string]string{
 			pluginbinding.ManifestProtocolKey: protocol.Version,

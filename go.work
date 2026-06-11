@@ -5,6 +5,7 @@ use (
 	../fluxplane-context
 	../fluxplane-operation
 	../fluxplane-plugin
+	./alertmanager
 	./atlassian
 	./asterisk
 	./aws

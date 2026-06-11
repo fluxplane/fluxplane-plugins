@@ -2,39 +2,18 @@
   "version": "1",
   "plugins": [
     {
-      "name": "gitlab",
-      "description": "GitLab operations, datasources, indexes, and reverse lookups.",
-      "binary": "fluxplane-plugin-gitlab",
-      "go_install": "github.com/fluxplane/fluxplane-plugins/gitlab/cmd/fluxplane-plugin-gitlab@latest",
-      "local_path": "gitlab"
+      "name": "alertmanager",
+      "description": "Alertmanager active alerts and silence management (list, create, delete) against registered endpoints.",
+      "binary": "fluxplane-plugin-alertmanager",
+      "go_install": "github.com/fluxplane/fluxplane-plugins/alertmanager/cmd/fluxplane-plugin-alertmanager@latest",
+      "local_path": "alertmanager"
     },
     {
-      "name": "jira",
-      "description": "Jira Cloud issue operations, comments, attachments, transitions, datasources, indexes, and reverse lookups.",
-      "binary": "fluxplane-plugin-jira",
-      "go_install": "github.com/fluxplane/fluxplane-plugins/atlassian/cmd/fluxplane-plugin-jira@latest",
-      "local_path": "atlassian"
-    },
-    {
-      "name": "confluence",
-      "description": "Confluence Cloud page/user operations, attachments, datasources, indexes, and reverse lookups.",
-      "binary": "fluxplane-plugin-confluence",
-      "go_install": "github.com/fluxplane/fluxplane-plugins/atlassian/cmd/fluxplane-plugin-confluence@latest",
-      "local_path": "atlassian"
-    },
-    {
-      "name": "slack",
-      "description": "Slack token info, messaging, file upload, search, thread, channel member, and reverse lookup operations.",
-      "binary": "fluxplane-plugin-slack",
-      "go_install": "github.com/fluxplane/fluxplane-plugins/slack/cmd/fluxplane-plugin-slack@latest",
-      "local_path": "slack"
-    },
-    {
-      "name": "git",
-      "description": "Local Git repository inspection, staging, commit, tag, and push operations.",
-      "binary": "fluxplane-plugin-git",
-      "go_install": "github.com/fluxplane/fluxplane-plugins/git/cmd/fluxplane-plugin-git@latest",
-      "local_path": "git"
+      "name": "asterisk",
+      "description": "Asterisk endpoint discovery and AMI operations.",
+      "binary": "fluxplane-plugin-asterisk",
+      "go_install": "github.com/fluxplane/fluxplane-plugins/asterisk/cmd/fluxplane-plugin-asterisk@latest",
+      "local_path": "asterisk"
     },
     {
       "name": "aws",
@@ -44,20 +23,6 @@
       "local_path": "aws"
     },
     {
-      "name": "system",
-      "description": "Local system information across OS, runtime, user, paths, CPU, time, environment, and network categories.",
-      "binary": "fluxplane-plugin-system",
-      "go_install": "github.com/fluxplane/fluxplane-plugins/system/cmd/fluxplane-plugin-system@latest",
-      "local_path": "system"
-    },
-    {
-      "name": "sleep",
-      "description": "Interruptible local wait operation.",
-      "binary": "fluxplane-plugin-sleep",
-      "go_install": "github.com/fluxplane/fluxplane-plugins/sleep/cmd/fluxplane-plugin-sleep@latest",
-      "local_path": "sleep"
-    },
-    {
       "name": "clock",
       "description": "Current wall-clock time context provider.",
       "binary": "fluxplane-plugin-clock",
@@ -65,18 +30,18 @@
       "local_path": "clock"
     },
     {
-      "name": "websearch",
-      "description": "Generic web search aggregator over provider plugins.",
-      "binary": "fluxplane-plugin-websearch",
-      "go_install": "github.com/fluxplane/fluxplane-plugins/websearch/cmd/fluxplane-plugin-websearch@latest",
-      "local_path": "websearch"
+      "name": "confluence",
+      "description": "Confluence Cloud page/user operations, attachments, datasources, indexes, and reverse lookups.",
+      "binary": "fluxplane-plugin-confluence",
+      "go_install": "github.com/fluxplane/fluxplane-plugins/atlassian/cmd/fluxplane-plugin-confluence@latest",
+      "local_path": "atlassian"
     },
     {
-      "name": "tavily",
-      "description": "Tavily web search provider.",
-      "binary": "fluxplane-plugin-tavily",
-      "go_install": "github.com/fluxplane/fluxplane-plugins/tavily/cmd/fluxplane-plugin-tavily@latest",
-      "local_path": "tavily"
+      "name": "docker",
+      "description": "Local Docker Engine inspection for containers, images, networks, volumes, and daemon info.",
+      "binary": "fluxplane-plugin-docker",
+      "go_install": "github.com/fluxplane/fluxplane-plugins/docker/cmd/fluxplane-plugin-docker@latest",
+      "local_path": "docker"
     },
     {
       "name": "duckduckgo",
@@ -86,25 +51,18 @@
       "local_path": "duckduckgo"
     },
     {
-      "name": "vision",
-      "description": "Generic image understanding aggregator over vision provider plugins.",
-      "binary": "fluxplane-plugin-vision",
-      "go_install": "github.com/fluxplane/fluxplane-plugins/vision/cmd/fluxplane-plugin-vision@latest",
-      "local_path": "vision"
+      "name": "git",
+      "description": "Local Git repository inspection, staging, commit, tag, and push operations.",
+      "binary": "fluxplane-plugin-git",
+      "go_install": "github.com/fluxplane/fluxplane-plugins/git/cmd/fluxplane-plugin-git@latest",
+      "local_path": "git"
     },
     {
-      "name": "openai",
-      "description": "OpenAI API plugin. Exposes image generation, image understanding, and model listing.",
-      "binary": "fluxplane-plugin-openai",
-      "go_install": "github.com/fluxplane/fluxplane-plugins/openai/cmd/fluxplane-plugin-openai@latest",
-      "local_path": "openai"
-    },
-    {
-      "name": "docker",
-      "description": "Local Docker Engine inspection for containers, images, networks, volumes, and daemon info.",
-      "binary": "fluxplane-plugin-docker",
-      "go_install": "github.com/fluxplane/fluxplane-plugins/docker/cmd/fluxplane-plugin-docker@latest",
-      "local_path": "docker"
+      "name": "gitlab",
+      "description": "GitLab operations, datasources, indexes, and reverse lookups.",
+      "binary": "fluxplane-plugin-gitlab",
+      "go_install": "github.com/fluxplane/fluxplane-plugins/gitlab/cmd/fluxplane-plugin-gitlab@latest",
+      "local_path": "gitlab"
     },
     {
       "name": "grafana",
@@ -121,18 +79,11 @@
       "local_path": "homer"
     },
     {
-      "name": "prometheus",
-      "description": "Prometheus health checks, PromQL queries, labels, targets, and alerts for configured or discovered endpoints.",
-      "binary": "fluxplane-plugin-prometheus",
-      "go_install": "github.com/fluxplane/fluxplane-plugins/prometheus/cmd/fluxplane-plugin-prometheus@latest",
-      "local_path": "prometheus"
-    },
-    {
-      "name": "loki",
-      "description": "Loki health checks, LogQL queries, recent logs, and labels for configured or discovered endpoints.",
-      "binary": "fluxplane-plugin-loki",
-      "go_install": "github.com/fluxplane/fluxplane-plugins/loki/cmd/fluxplane-plugin-loki@latest",
-      "local_path": "loki"
+      "name": "jira",
+      "description": "Jira Cloud issue operations, comments, attachments, transitions, datasources, indexes, and reverse lookups.",
+      "binary": "fluxplane-plugin-jira",
+      "go_install": "github.com/fluxplane/fluxplane-plugins/atlassian/cmd/fluxplane-plugin-jira@latest",
+      "local_path": "atlassian"
     },
     {
       "name": "kubernetes",
@@ -142,11 +93,11 @@
       "local_path": "kubernetes"
     },
     {
-      "name": "asterisk",
-      "description": "Asterisk endpoint discovery and AMI operations.",
-      "binary": "fluxplane-plugin-asterisk",
-      "go_install": "github.com/fluxplane/fluxplane-plugins/asterisk/cmd/fluxplane-plugin-asterisk@latest",
-      "local_path": "asterisk"
+      "name": "loki",
+      "description": "Loki health checks, LogQL queries, recent logs, and labels for configured or discovered endpoints.",
+      "binary": "fluxplane-plugin-loki",
+      "go_install": "github.com/fluxplane/fluxplane-plugins/loki/cmd/fluxplane-plugin-loki@latest",
+      "local_path": "loki"
     },
     {
       "name": "ollama",
@@ -156,11 +107,67 @@
       "local_path": "ollama"
     },
     {
+      "name": "openai",
+      "description": "OpenAI API plugin. Exposes image generation, image understanding, and model listing.",
+      "binary": "fluxplane-plugin-openai",
+      "go_install": "github.com/fluxplane/fluxplane-plugins/openai/cmd/fluxplane-plugin-openai@latest",
+      "local_path": "openai"
+    },
+    {
+      "name": "prometheus",
+      "description": "Prometheus health checks, PromQL queries, labels, targets, and alerts for configured or discovered endpoints.",
+      "binary": "fluxplane-plugin-prometheus",
+      "go_install": "github.com/fluxplane/fluxplane-plugins/prometheus/cmd/fluxplane-plugin-prometheus@latest",
+      "local_path": "prometheus"
+    },
+    {
+      "name": "slack",
+      "description": "Slack token info, messaging, file upload, search, thread, channel member, and reverse lookup operations.",
+      "binary": "fluxplane-plugin-slack",
+      "go_install": "github.com/fluxplane/fluxplane-plugins/slack/cmd/fluxplane-plugin-slack@latest",
+      "local_path": "slack"
+    },
+    {
+      "name": "sleep",
+      "description": "Interruptible local wait operation.",
+      "binary": "fluxplane-plugin-sleep",
+      "go_install": "github.com/fluxplane/fluxplane-plugins/sleep/cmd/fluxplane-plugin-sleep@latest",
+      "local_path": "sleep"
+    },
+    {
       "name": "sql",
       "description": "Read-only SQL query operations for MySQL, PostgreSQL, SQLite, and compatible endpoints.",
       "binary": "fluxplane-plugin-sql",
       "go_install": "github.com/fluxplane/fluxplane-plugins/sql/cmd/fluxplane-plugin-sql@latest",
       "local_path": "sql"
+    },
+    {
+      "name": "system",
+      "description": "Local system information across OS, runtime, user, paths, CPU, time, environment, and network categories.",
+      "binary": "fluxplane-plugin-system",
+      "go_install": "github.com/fluxplane/fluxplane-plugins/system/cmd/fluxplane-plugin-system@latest",
+      "local_path": "system"
+    },
+    {
+      "name": "tavily",
+      "description": "Tavily web search provider.",
+      "binary": "fluxplane-plugin-tavily",
+      "go_install": "github.com/fluxplane/fluxplane-plugins/tavily/cmd/fluxplane-plugin-tavily@latest",
+      "local_path": "tavily"
+    },
+    {
+      "name": "vision",
+      "description": "Generic image understanding aggregator over vision provider plugins.",
+      "binary": "fluxplane-plugin-vision",
+      "go_install": "github.com/fluxplane/fluxplane-plugins/vision/cmd/fluxplane-plugin-vision@latest",
+      "local_path": "vision"
+    },
+    {
+      "name": "websearch",
+      "description": "Generic web search aggregator over provider plugins.",
+      "binary": "fluxplane-plugin-websearch",
+      "go_install": "github.com/fluxplane/fluxplane-plugins/websearch/cmd/fluxplane-plugin-websearch@latest",
+      "local_path": "websearch"
     }
   ]
 }

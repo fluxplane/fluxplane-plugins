@@ -1380,11 +1380,12 @@ func nonNilCandidates(candidates []core.EndpointCandidate) []core.EndpointCandid
 // loki-memberlist:7946), so the top-ranked candidate is the registrable one.
 func scoreWithCanonicalPort(score float64, product, endpoint string) float64 {
 	canonical := map[string]string{
-		"prometheus": ":9090",
-		"loki":       ":3100",
-		"grafana":    ":3000",
-		"mysql":      ":3306",
-		"postgres":   ":5432",
+		"prometheus":   ":9090",
+		"alertmanager": ":9093",
+		"loki":         ":3100",
+		"grafana":      ":3000",
+		"mysql":        ":3306",
+		"postgres":     ":5432",
 	}
 	if port, ok := canonical[product]; ok && strings.HasSuffix(endpoint, port) {
 		return score + 0.04
@@ -1394,7 +1395,9 @@ func scoreWithCanonicalPort(score float64, product, endpoint string) float64 {
 
 func classifyService(item corev1.Service, productFilter string) (string, float64) {
 	haystack := strings.ToLower(item.Name + " " + joinMap(item.Labels) + " " + joinMap(item.Annotations))
-	products := []string{"prometheus", "loki", "grafana", "homer", "mysql", "postgres"}
+	// alertmanager before prometheus: kube-prometheus names its alertmanager
+	// service "…-kube-prometheus-alertmanager", which contains both substrings.
+	products := []string{"alertmanager", "prometheus", "loki", "grafana", "homer", "mysql", "postgres"}
 	for _, product := range products {
 		if productFilter != "" && product != productFilter {
 			continue

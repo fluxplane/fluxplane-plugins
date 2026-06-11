@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.7.0
+
+### Added
+- Endpoint discovery covers **alertmanager** (canonical port 9093) and
+  **grafana** products; alertmanager classifies before prometheus so
+  kube-prometheus's "…-kube-prometheus-alertmanager" service lands under the
+  right product. Manifest 0.23.0.
+
 ## v0.6.1
 
 ### Added

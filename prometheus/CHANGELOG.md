@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.3.0
+
+### Fixed
+- **`prometheus.targets` no longer dies on large clusters**: it defaults to
+  `state=active` — the dropped list carries every discovered-then-
+  relabeled-away target and exceeded 240MB on a production cluster,
+  truncating mid-JSON into `unexpected end of JSON input`. `state=dropped`/
+  `any` remain available explicitly, and a truncated response now names the
+  real problem ("response exceeded the 32MB cap…") instead of a JSON parse
+  error. Found while live-connecting prometheus for the first time.
+
 ## v0.2.1
 
 ### Fixed

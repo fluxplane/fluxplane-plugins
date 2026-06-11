@@ -77,7 +77,7 @@ type LabelsResult struct {
 
 type TargetsInput struct {
 	PrometheusTargetInput
-	State string `json:"state,omitempty" jsonschema:"description=active\\, dropped\\, or any"`
+	State string `json:"state,omitempty" jsonschema:"description=active (default)\\, dropped\\, or any. Defaults to active: the dropped list carries every discovered-then-relabeled-away target and can exceed the response cap on large clusters.,enum=active,enum=dropped,enum=any"`
 }
 
 type TargetsResult struct {
@@ -259,7 +259,11 @@ func (s Service) Targets(ctx pluginbinding.Context, input TargetsInput) (Targets
 		return TargetsResult{}, pluginbinding.Errorf("bad_input", "%s", err)
 	}
 	values := url.Values{}
-	if state := strings.TrimSpace(input.State); state != "" {
+	state := strings.TrimSpace(input.State)
+	if state == "" {
+		state = "active" // dropped targets can exceed the response cap; opt in explicitly
+	}
+	if state != "any" {
 		values.Set("state", state)
 	}
 	data, err := client.get(context.Background(), "/api/v1/targets", values)

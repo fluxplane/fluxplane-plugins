@@ -45,6 +45,12 @@ func (c Client) get(ctx context.Context, path string, values url.Values) (json.R
 	}
 	var envelope promResponse
 	if err := json.Unmarshal(resp.Body, &envelope); err != nil {
+		// A truncated body parses as "unexpected end of JSON input" — name the
+		// real problem and the remedy (a prod /api/v1/targets with dropped
+		// targets can exceed 200MB).
+		if resp.Truncated {
+			return nil, fmt.Errorf("response exceeded the 32MB cap and was truncated — narrow the request (e.g. state=active on targets, tighter match/time bounds)")
+		}
 		return nil, err
 	}
 	if envelope.Status != "success" {
