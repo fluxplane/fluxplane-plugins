@@ -2,7 +2,7 @@ module github.com/fluxplane/fluxplane-plugins/git
 
 go 1.26.1
 
-require github.com/fluxplane/fluxplane-plugin v0.9.0
+require github.com/fluxplane/fluxplane-plugin v0.11.1
 
 require (
 	github.com/bahlo/generic-list-go v0.2.0 // indirect
