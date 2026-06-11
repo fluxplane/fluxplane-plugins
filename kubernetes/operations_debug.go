@@ -15,9 +15,9 @@ type EventListInput struct {
 	Context      string `json:"context,omitempty" jsonschema:"description=Kubeconfig context override."`
 	Namespace    string `json:"namespace,omitempty" jsonschema:"description=Namespace filter. Empty means all namespaces."`
 	Name         string `json:"name,omitempty" jsonschema:"description=Filter to events about this object (involvedObject.name)."`
-	Kind         string `json:"kind,omitempty" jsonschema:"description=Filter to events about this object kind (e.g. Pod, Deployment, Node)."`
+	Kind         string `json:"kind,omitempty" jsonschema:"description=Filter to events about this object kind (e.g. Pod\\, Deployment\\, Node)."`
 	WarningsOnly bool   `json:"warnings_only,omitempty" jsonschema:"description=Only return Warning events."`
-	Limit        int    `json:"limit,omitempty" jsonschema:"description=Maximum events to return (default 50), newest first."`
+	Limit        int    `json:"limit,omitempty" jsonschema:"description=Maximum events to return (default 50)\\, newest first."`
 }
 
 type EventRecord struct {
@@ -73,8 +73,8 @@ type PodExecInput struct {
 	Namespace      string   `json:"namespace,omitempty" jsonschema:"description=Pod namespace."`
 	Name           string   `json:"name,omitempty" jsonschema:"description=Pod name."`
 	Container      string   `json:"container,omitempty" jsonschema:"description=Container name. Empty uses Kubernetes default selection."`
-	Command        []string `json:"command,omitempty" jsonschema:"description=Command argv to run (no shell; use [\"sh\",\"-c\",\"...\"] for shell syntax)."`
-	TimeoutSeconds int      `json:"timeout_seconds,omitempty" jsonschema:"description=Command timeout in seconds (default 30, max 300)."`
+	Command        []string `json:"command,omitempty" jsonschema:"description=Command argv to run (no shell; use [\"sh\"\\,\"-c\"\\,\"...\"] for shell syntax)."`
+	TimeoutSeconds int      `json:"timeout_seconds,omitempty" jsonschema:"description=Command timeout in seconds (default 30\\, max 300)."`
 }
 
 type PodExecResult struct {

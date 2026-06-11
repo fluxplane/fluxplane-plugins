@@ -61,7 +61,7 @@ type ClusterContext struct {
 
 type ClusterTestInput struct {
 	EndpointRef string `json:"endpoint_ref,omitempty" jsonschema:"description=Registered endpoint ref resolved by the host."`
-	URL         string `json:"url,omitempty" jsonschema:"description=Kubernetes endpoint URL, usually kubernetes://context/<escaped-context>."`
+	URL         string `json:"url,omitempty" jsonschema:"description=Kubernetes endpoint URL\\, usually kubernetes://context/<escaped-context>."`
 	Context     string `json:"context,omitempty" jsonschema:"description=Kubeconfig context override."`
 }
 
@@ -76,7 +76,7 @@ type ClusterTestResult struct {
 type EndpointDiscoverInput struct {
 	EndpointRef string `json:"endpoint_ref,omitempty" jsonschema:"description=Registered Kubernetes cluster endpoint ref resolved by the host."`
 	URL         string `json:"url,omitempty" jsonschema:"description=Kubernetes endpoint URL."`
-	Product     string `json:"product,omitempty" jsonschema:"description=Product to discover, for example prometheus or loki."`
+	Product     string `json:"product,omitempty" jsonschema:"description=Product to discover\\, for example prometheus or loki."`
 	Context     string `json:"context,omitempty" jsonschema:"description=Kubeconfig context."`
 	Namespace   string `json:"namespace,omitempty" jsonschema:"description=Namespace to inspect. Empty means all namespaces."`
 	Limit       int    `json:"limit,omitempty" jsonschema:"description=Maximum candidates."`
@@ -190,7 +190,7 @@ type PortForwardStartInput struct {
 	URL             string `json:"url,omitempty" jsonschema:"description=Kubernetes endpoint URL."`
 	Context         string `json:"context,omitempty" jsonschema:"description=Kubeconfig context override."`
 	Namespace       string `json:"namespace,omitempty" jsonschema:"description=Namespace containing the target resource."`
-	Resource        string `json:"resource,omitempty" jsonschema:"description=Resource reference such as service/loki, pod/api-123, or deployment/api."`
+	Resource        string `json:"resource,omitempty" jsonschema:"description=Resource reference such as service/loki\\, pod/api-123\\, or deployment/api."`
 	ResourceType    string `json:"resource_type,omitempty" jsonschema:"description=Resource type when name is used.,enum=service,enum=pod,enum=deployment"`
 	Name            string `json:"name,omitempty" jsonschema:"description=Resource name when resource is not used."`
 	RemotePort      int    `json:"remote_port,omitempty" jsonschema:"description=Remote service or pod port to forward."`
@@ -886,7 +886,7 @@ func serviceCandidates(services []corev1.Service, input EndpointDiscoverInput) [
 				Product:  product,
 				Protocol: endpointProtocol(endpoint),
 				Source:   "kubernetes",
-				Score:    score,
+				Score:    scoreWithCanonicalPort(score, product, endpoint),
 				Labels: map[string]string{
 					"namespace": item.Namespace,
 					"service":   item.Name,
@@ -1181,6 +1181,23 @@ func nonNilCandidates(candidates []core.EndpointCandidate) []core.EndpointCandid
 		return []core.EndpointCandidate{}
 	}
 	return candidates
+}
+
+// scoreWithCanonicalPort nudges the candidate whose port is the product's
+// well-known API port above same-service siblings (e.g. loki:3100 over
+// loki-memberlist:7946), so the top-ranked candidate is the registrable one.
+func scoreWithCanonicalPort(score float64, product, endpoint string) float64 {
+	canonical := map[string]string{
+		"prometheus": ":9090",
+		"loki":       ":3100",
+		"grafana":    ":3000",
+		"mysql":      ":3306",
+		"postgres":   ":5432",
+	}
+	if port, ok := canonical[product]; ok && strings.HasSuffix(endpoint, port) {
+		return score + 0.04
+	}
+	return score
 }
 
 func classifyService(item corev1.Service, productFilter string) (string, float64) {

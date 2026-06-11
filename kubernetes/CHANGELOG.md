@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.5.1
+
+### Changed
+- Endpoint discovery ranks a product's canonical API port above same-service
+  siblings (loki:3100 over loki-memberlist:7946, prometheus:9090, grafana:3000,
+  mysql:3306, postgres:5432) so the top candidate is the registrable one
+  (fluxplane-plugins#4 loki/1).
+
+### Fixed
+- jsonschema field descriptions containing commas were truncated at the
+  first comma when rendered; affected descriptions are now escaped.
+
 ## v0.5.0
 
 ### Changed

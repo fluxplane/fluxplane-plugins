@@ -704,3 +704,14 @@ func mustParseTime(t *testing.T, value string) time.Time {
 	}
 	return parsed
 }
+
+func TestScoreWithCanonicalPortPrefersAPIPort(t *testing.T) {
+	api := scoreWithCanonicalPort(0.95, "loki", "http://loki.monitoring.svc:3100")
+	other := scoreWithCanonicalPort(0.95, "loki", "http://loki-memberlist.monitoring.svc:7946")
+	if api <= other {
+		t.Fatalf("canonical port must outrank: api=%v other=%v", api, other)
+	}
+	if got := scoreWithCanonicalPort(0.7, "homer", "http://homer-webapp.latest.svc:80"); got != 0.7 {
+		t.Fatalf("products without canonical port keep their score: %v", got)
+	}
+}
