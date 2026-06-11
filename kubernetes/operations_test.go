@@ -118,6 +118,75 @@ func TestEndpointDiscoverFindsGrafanaIngressWithCredentialRef(t *testing.T) {
 	if candidate.CredentialRef != "kubernetes://monitoring/secrets/grafana-admin-creds?context=infra-eks" {
 		t.Fatalf("credential_ref = %q", candidate.CredentialRef)
 	}
+	if candidate.Annotations["credential_fields"] != "password=adminpassword,username=adminuser" {
+		t.Fatalf("annotations = %#v", candidate.Annotations)
+	}
+}
+
+func TestSecretReadReturnsRequestedKeys(t *testing.T) {
+	plugin := NewPluginWithService(Service{
+		Secrets: func(_ context.Context, input EndpointDiscoverInput) ([]corev1.Secret, error) {
+			if input.Namespace != "monitoring" {
+				return nil, nil
+			}
+			return []corev1.Secret{{
+				ObjectMeta: metav1.ObjectMeta{Name: "grafana-admin-creds", Namespace: "monitoring"},
+				Data:       map[string][]byte{"adminuser": []byte("admin"), "adminpassword": []byte("hunter2"), "ldap-toml": []byte("ignored")},
+			}}, nil
+		},
+	})
+	out := plugintest.RunOK[SecretReadResult](t, plugin, OperationSecretRead, map[string]any{
+		"context":   "infra-eks",
+		"namespace": "monitoring",
+		"name":      "grafana-admin-creds",
+		"keys":      []string{"adminuser", "adminpassword"},
+	})
+	if out.Namespace != "monitoring" || out.Name != "grafana-admin-creds" {
+		t.Fatalf("result = %#v", out)
+	}
+	if len(out.Values) != 2 || out.Values["adminuser"] != "admin" || out.Values["adminpassword"] != "hunter2" {
+		t.Fatalf("values = %#v", out.Values)
+	}
+}
+
+func TestSecretReadAllKeysWhenUnspecified(t *testing.T) {
+	plugin := NewPluginWithService(Service{
+		Secrets: func(_ context.Context, _ EndpointDiscoverInput) ([]corev1.Secret, error) {
+			return []corev1.Secret{{
+				ObjectMeta: metav1.ObjectMeta{Name: "creds", Namespace: "monitoring"},
+				Data:       map[string][]byte{"user": []byte("u"), "pass": []byte("p")},
+			}}, nil
+		},
+	})
+	out := plugintest.RunOK[SecretReadResult](t, plugin, OperationSecretRead, map[string]any{"namespace": "monitoring", "name": "creds"})
+	if len(out.Values) != 2 || out.Values["user"] != "u" || out.Values["pass"] != "p" {
+		t.Fatalf("values = %#v", out.Values)
+	}
+}
+
+func TestSecretReadMissingSecretFails(t *testing.T) {
+	plugin := NewPluginWithService(Service{
+		Secrets: func(_ context.Context, _ EndpointDiscoverInput) ([]corev1.Secret, error) { return nil, nil },
+	})
+	failure := plugintest.RunError(t, plugin, OperationSecretRead, map[string]any{"namespace": "monitoring", "name": "missing"})
+	if !strings.Contains(failure.Message, "was not found") {
+		t.Fatalf("error = %#v", failure)
+	}
+}
+
+func TestSecretReadMissingKeyFails(t *testing.T) {
+	plugin := NewPluginWithService(Service{
+		Secrets: func(_ context.Context, _ EndpointDiscoverInput) ([]corev1.Secret, error) {
+			return []corev1.Secret{{
+				ObjectMeta: metav1.ObjectMeta{Name: "creds", Namespace: "monitoring"},
+				Data:       map[string][]byte{"user": []byte("u")},
+			}}, nil
+		},
+	})
+	failure := plugintest.RunError(t, plugin, OperationSecretRead, map[string]any{"namespace": "monitoring", "name": "creds", "keys": []string{"token"}})
+	if !strings.Contains(failure.Message, `has no key "token"`) {
+		t.Fatalf("error = %#v", failure)
+	}
 }
 
 func TestEndpointDiscoverFindsKubernetesClusterContext(t *testing.T) {

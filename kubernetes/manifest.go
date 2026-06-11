@@ -34,12 +34,13 @@ func withInputExamples(spec core.OperationSpec, examples ...map[string]any) core
 
 const (
 	PluginName        = "kubernetes"
-	PluginVersion     = "0.23.0"
+	PluginVersion     = "0.24.0"
 	PluginDescription = "Kubernetes cluster discovery, inventory, debugging (logs, events, exec), and deployment operations using kubeconfig."
 
 	OperationClusterList       = "kubernetes.cluster.list"
 	OperationClusterTest       = "kubernetes.cluster.test"
 	OperationEndpointDiscover  = "kubernetes.endpoint.discover"
+	OperationSecretRead        = "kubernetes.secret.read"
 	OperationNamespaceList     = "kubernetes.namespace.list"
 	OperationServiceList       = "kubernetes.service.list"
 	OperationServiceShow       = "kubernetes.service.show"
@@ -87,6 +88,7 @@ func manifestSpec() pluginbinding.ManifestSpec {
 			clusterListSpec(),
 			clusterTestSpec(),
 			endpointDiscoverSpec(),
+			secretReadSpec(),
 			namespaceListSpec(),
 			serviceListSpec(),
 			serviceShowSpec(),
@@ -141,6 +143,18 @@ func endpointDiscoverSpec() core.OperationSpec {
 		OperationEndpointDiscover,
 		"Discover product endpoints from Kubernetes services.",
 		kubernetesReadOptions(core.OperationIdempotent)...,
+	)
+}
+
+func secretReadSpec() core.OperationSpec {
+	return pluginbinding.TypedOperationSpec[SecretReadInput, SecretReadResult](
+		OperationSecretRead,
+		"Read one Kubernetes secret's decoded values. Sensitive: the result is secret material intended for piping into auth or secret stores, not for display.",
+		pluginbinding.ReadOnly(),
+		pluginbinding.Effects(core.OperationEffectRead),
+		pluginbinding.Access(core.OperationAccessProvider),
+		pluginbinding.Risk(core.OperationRiskHigh),
+		pluginbinding.Idempotency(core.OperationIdempotent),
 	)
 }
 

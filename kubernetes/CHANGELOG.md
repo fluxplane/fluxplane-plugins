@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.8.0
+
+### Added
+- **`kubernetes.secret.read`** — read one secret's decoded values
+  (optionally key-filtered). Risk high: the result is secret material,
+  intended for piping into auth/secret stores (the `monitor connect`
+  credential auto-import), not for display. Manifest 0.24.0.
+
+### Changed
+- Discovery's grafana credential annotation is now field-mapped:
+  `credential_fields` (`username=adminuser,password=adminpassword`),
+  classified from the secret's actual data keys, replaces the hardcoded
+  `credential_keys` list. Consumers learn which key feeds which auth field.
+
 ## v0.7.0
 
 ### Added

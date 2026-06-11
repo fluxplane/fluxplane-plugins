@@ -87,6 +87,21 @@ type EndpointDiscoverResult struct {
 	Candidates []core.EndpointCandidate `json:"candidates"`
 }
 
+type SecretReadInput struct {
+	EndpointRef string   `json:"endpoint_ref,omitempty" jsonschema:"description=Registered Kubernetes cluster endpoint ref resolved by the host."`
+	URL         string   `json:"url,omitempty" jsonschema:"description=Kubernetes endpoint URL."`
+	Context     string   `json:"context,omitempty" jsonschema:"description=Kubeconfig context."`
+	Namespace   string   `json:"namespace" jsonschema:"description=Namespace of the secret."`
+	Name        string   `json:"name" jsonschema:"description=Secret name."`
+	Keys        []string `json:"keys,omitempty" jsonschema:"description=Data keys to read. Empty means all keys."`
+}
+
+type SecretReadResult struct {
+	Namespace string            `json:"namespace"`
+	Name      string            `json:"name"`
+	Values    map[string]string `json:"values"`
+}
+
 type InventoryInput struct {
 	EndpointRef string `json:"endpoint_ref,omitempty" jsonschema:"description=Registered Kubernetes cluster endpoint ref resolved by the host."`
 	URL         string `json:"url,omitempty" jsonschema:"description=Kubernetes endpoint URL."`
@@ -720,6 +735,48 @@ func (s Service) EndpointDiscover(ctx pluginbinding.Context, input EndpointDisco
 	return EndpointDiscoverResult{Candidates: nonNilCandidates(limitCandidates(candidates, input.Limit))}, nil
 }
 
+// SecretRead returns one secret's decoded data values. The result is secret
+// material — it exists so composing surfaces (monitor connect) can pipe
+// discovered credentials into the auth store, not for display.
+func (s Service) SecretRead(ctx pluginbinding.Context, input SecretReadInput) (SecretReadResult, error) {
+	namespace := strings.TrimSpace(input.Namespace)
+	name := strings.TrimSpace(input.Name)
+	if namespace == "" || name == "" {
+		return SecretReadResult{}, pluginbinding.Errorf(PluginName, "namespace and name are required")
+	}
+	secrets, err := s.secrets(ctx)(context.Background(), EndpointDiscoverInput{
+		EndpointRef: input.EndpointRef,
+		URL:         input.URL,
+		Context:     input.Context,
+		Namespace:   namespace,
+	})
+	if err != nil {
+		return SecretReadResult{}, pluginbinding.Errorf(PluginName, "%s", err)
+	}
+	for _, secret := range secrets {
+		if secret.Name != name || (secret.Namespace != "" && secret.Namespace != namespace) {
+			continue
+		}
+		values := map[string]string{}
+		if len(input.Keys) == 0 {
+			for key, value := range secret.Data {
+				values[key] = string(value)
+			}
+			return SecretReadResult{Namespace: namespace, Name: name, Values: values}, nil
+		}
+		for _, key := range input.Keys {
+			key = strings.TrimSpace(key)
+			value, ok := secret.Data[key]
+			if !ok {
+				return SecretReadResult{}, pluginbinding.Errorf(PluginName, "secret %s/%s has no key %q", namespace, name, key)
+			}
+			values[key] = string(value)
+		}
+		return SecretReadResult{Namespace: namespace, Name: name, Values: values}, nil
+	}
+	return SecretReadResult{}, pluginbinding.Errorf(PluginName, "secret %s/%s was not found", namespace, name)
+}
+
 func (s Service) DiscoverEndpointsCommand(ctx pluginbinding.Context) protocol.Response {
 	input, err := pluginbinding.DecodePayload[EndpointDiscoverInput](ctx.Request.Payload)
 	if err != nil {
@@ -1224,27 +1281,85 @@ func secretCandidates(secrets []corev1.Secret, input EndpointDiscoverInput) []co
 }
 
 func attachGrafanaCredentials(candidates []core.EndpointCandidate, secrets []corev1.Secret, input EndpointDiscoverInput) []core.EndpointCandidate {
-	refs := map[string]string{}
+	type credential struct {
+		ref    string
+		fields string
+	}
+	creds := map[string]credential{}
 	for _, secret := range secrets {
 		if !isGrafanaCredentialSecret(secret) {
 			continue
 		}
-		refs[secret.Namespace] = kubernetesCredentialRef(input.Context, secret.Namespace, secret.Name)
+		fields := classifyCredentialFields(secret.Data)
+		if len(fields) == 0 {
+			continue
+		}
+		creds[secret.Namespace] = credential{
+			ref:    kubernetesCredentialRef(input.Context, secret.Namespace, secret.Name),
+			fields: formatCredentialFields(fields),
+		}
 	}
 	for i := range candidates {
 		if candidates[i].Product != "grafana" || candidates[i].CredentialRef != "" {
 			continue
 		}
 		namespace := candidates[i].Labels["namespace"]
-		if ref := refs[namespace]; ref != "" {
-			candidates[i].CredentialRef = ref
-			if candidates[i].Annotations == nil {
-				candidates[i].Annotations = map[string]string{}
-			}
-			candidates[i].Annotations["credential_keys"] = "adminuser,adminpassword"
+		cred, ok := creds[namespace]
+		if !ok {
+			continue
 		}
+		candidates[i].CredentialRef = cred.ref
+		if candidates[i].Annotations == nil {
+			candidates[i].Annotations = map[string]string{}
+		}
+		candidates[i].Annotations["credential_fields"] = cred.fields
 	}
 	return candidates
+}
+
+// classifyCredentialFields maps a secret's data keys onto plugin auth field
+// names (username/password/api_token) by key-name convention. Keys are
+// scanned in sorted order and the first match per field wins, so the result
+// is deterministic.
+func classifyCredentialFields(data map[string][]byte) map[string]string {
+	keys := make([]string, 0, len(data))
+	for key := range data {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	fields := map[string]string{}
+	assign := func(field, key string) {
+		if _, taken := fields[field]; !taken {
+			fields[field] = key
+		}
+	}
+	for _, key := range keys {
+		lower := strings.ToLower(key)
+		switch {
+		case strings.Contains(lower, "user"):
+			assign("username", key)
+		case strings.Contains(lower, "pass"):
+			assign("password", key)
+		case strings.Contains(lower, "token"), strings.Contains(lower, "apikey"), strings.Contains(lower, "api_key"):
+			assign("api_token", key)
+		}
+	}
+	return fields
+}
+
+// formatCredentialFields renders a field→key mapping as the candidate
+// annotation value, for example "password=adminpassword,username=adminuser".
+func formatCredentialFields(fields map[string]string) string {
+	names := make([]string, 0, len(fields))
+	for name := range fields {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	parts := make([]string, 0, len(names))
+	for _, name := range names {
+		parts = append(parts, name+"="+fields[name])
+	}
+	return strings.Join(parts, ",")
 }
 
 func isGrafanaCredentialSecret(secret corev1.Secret) bool {
