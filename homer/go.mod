@@ -2,7 +2,7 @@ module github.com/fluxplane/fluxplane-plugins/homer
 
 go 1.26.1
 
-require github.com/fluxplane/fluxplane-plugin v0.13.1
+require github.com/fluxplane/fluxplane-plugin v0.14.0
 
 require (
 	github.com/bahlo/generic-list-go v0.2.0 // indirect
