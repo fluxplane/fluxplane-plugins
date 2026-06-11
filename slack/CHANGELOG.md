@@ -1,5 +1,29 @@
 # Changelog
 
+## v0.21.0
+
+### Added
+- Message permalinks resolve to the message: `lookup` with a Slack permalink
+  (or `p<ts>` archive URL) now returns the exact message reference
+  (`channel:ts`, score 1000) with a ready-to-run `slack.thread` hint instead
+  of just the channel (fluxplane-plugins#5).
+- `slack.message.send` returns a `permalink` — the shareable
+  `https://….slack.com/archives/…` URL of the sent message, resolved
+  best-effort after posting (fluxplane-plugins#6).
+
+### Changed
+- Read operations honor token roles: `slack.thread` and `slack.message.list`
+  accept `role` (`user`/`bot` to force a token; default reads user-then-bot
+  with fallback on access errors) and echo the `role` that served the read
+  (fluxplane-plugins#5).
+- `slack.file.download` falls back bot→user when the bot token cannot see the
+  file (`file_not_found`/`channel_not_found`/`missing_scope`), echoes the
+  serving `role`, and failed forced-role reads include a "try role: …" hint
+  (fluxplane-plugins#5).
+- `channel_not_found` and `not_in_channel` joined the fallbackable error
+  classes for multi-token reads.
+- SDK bump to `fluxplane-plugin` v0.13.0; manifest version 0.21.0.
+
 ## v0.20.0
 
 ### Changed

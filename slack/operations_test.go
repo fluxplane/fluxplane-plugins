@@ -462,7 +462,7 @@ func TestServiceSendMessageResolvesChannelAndMentions(t *testing.T) {
 				users:    []User{{ID: "U1", Name: "jane"}, {ID: "U2", Name: "ada"}},
 				channels: []Channel{{ID: "C1", Name: "engineering", IsChannel: true}},
 			},
-			"bot_token": {sendTS: "1710000000.123456"},
+			"bot_token": {sendTS: "1710000000.123456", permalink: "https://example.slack.com/archives/C1/p1710000000123456"},
 		},
 	}
 	plugin := testPlugin(factory)
@@ -470,6 +470,9 @@ func TestServiceSendMessageResolvesChannelAndMentions(t *testing.T) {
 	out := plugintest.RunOK[MessageSendResult](t, plugin, OperationMessageSend, map[string]any{"channel": "#engineering", "text": "hi @jane in #engineering, already <@U2>, mail a@b"}, withHost(factory))
 	if !out.OK || out.Channel != "C1" {
 		t.Fatalf("send result = %#v", out)
+	}
+	if out.Permalink != "https://example.slack.com/archives/C1/p1710000000123456" {
+		t.Fatalf("permalink = %q", out.Permalink)
 	}
 	request := factory.clients["bot_token"].lastSend
 	if request.Channel != "C1" || request.Text != "hi <@U1> in <#C1>, already <@U2>, mail a@b" {
@@ -1332,6 +1335,8 @@ type fakeClient struct {
 	messageHistory             MessageHistory
 	messageHistoryErr          error
 	sendTS                     string
+	permalink                  string
+	permalinkErr               error
 	latestTS                   string
 	searchTotal                int
 	authErr                    error
@@ -1581,6 +1586,10 @@ func (c *fakeClient) SendMessage(_ context.Context, request MessageSendRequest) 
 	return c.sendTS, c.sendErr
 }
 
+func (c *fakeClient) GetPermalink(_ context.Context, _, _ string) (string, error) {
+	return c.permalink, c.permalinkErr
+}
+
 func (c *fakeClient) EditMessage(_ context.Context, request MessageEditRequest) (string, error) {
 	c.editCalls++
 	c.lastEdit = request
@@ -1701,4 +1710,88 @@ func (c *fakeClient) ListMessages(_ context.Context, _ MessageHistoryRequest) (M
 	out := c.messageHistory
 	out.Messages = append([]ThreadMessage(nil), c.messageHistory.Messages...)
 	return out, c.messageHistoryErr
+}
+
+func TestLookupResolvesMessagePermalinks(t *testing.T) {
+	plugin := testPlugin(&capturingFactory{clients: map[string]*fakeClient{}})
+	out := plugintest.DatasourceLookupOK[LookupResult](t, plugin, map[string]any{
+		"text": "https://example.slack.com/archives/C0123ABCD/p1718031600123456",
+	})
+	if out.Count != 1 || len(out.Matches) != 1 {
+		t.Fatalf("out = %#v", out)
+	}
+	match := out.Matches[0]
+	if match.Entity != EntityMessage || match.ID != "C0123ABCD:1718031600.123456" {
+		t.Fatalf("match = %#v", match)
+	}
+	record, ok := match.Record.(map[string]any)
+	if !ok || record["channel"] != "C0123ABCD" || record["ts"] != "1718031600.123456" {
+		t.Fatalf("record = %#v", match.Record)
+	}
+	if !strings.Contains(record["view_thread"].(string), "slack.thread") {
+		t.Fatalf("view_thread hint missing: %#v", record)
+	}
+}
+
+func TestThreadRoleForcesToken(t *testing.T) {
+	factory := &capturingFactory{
+		clients: map[string]*fakeClient{
+			"user_token": {thread: []ThreadMessage{{TS: "1.0", Text: "hi"}}},
+			"bot_token":  {thread: []ThreadMessage{{TS: "1.0", Text: "hi"}}},
+		},
+	}
+	plugin := testPlugin(factory)
+	out := plugintest.RunOK[ThreadResult](t, plugin, OperationThread, map[string]any{
+		"channel": "C1", "ts": "1.0", "role": "user",
+	})
+	if out.Role != "user" {
+		t.Fatalf("role = %q", out.Role)
+	}
+	if factory.created["bot_token"] != 0 {
+		t.Fatalf("forced role must not touch the bot token: %#v", factory.created)
+	}
+	// Default: user-then-bot fallback on channel_not_found.
+	factory = &capturingFactory{
+		clients: map[string]*fakeClient{
+			"user_token": {threadErr: slackapi.SlackErrorResponse{Err: "channel_not_found"}},
+			"bot_token":  {thread: []ThreadMessage{{TS: "1.0", Text: "hi"}}},
+		},
+	}
+	out = plugintest.RunOK[ThreadResult](t, testPlugin(factory), OperationThread, map[string]any{
+		"channel": "C1", "ts": "1.0",
+	})
+	if out.Role != "bot" || out.Count != 1 {
+		t.Fatalf("fallback read = %#v", out)
+	}
+}
+
+func TestDownloadFallsBackToUserToken(t *testing.T) {
+	factory := &capturingFactory{
+		clients: map[string]*fakeClient{
+			"bot_token":  {downloadErr: slackapi.SlackErrorResponse{Err: "file_not_found"}},
+			"user_token": {downloadResult: FileDownloadResult{FileID: "F1", File: FileRecord{ID: "F1", Name: "shot.png"}, content: []byte("png")}},
+		},
+	}
+	plugin := testPlugin(factory)
+	out := plugintest.RunOK[FileDownloadResult](t, plugin, OperationFileDownload, map[string]any{
+		"file_id": "F1",
+	}, plugintest.WithHost(&slackBlobHost{}))
+	if out.Role != "user" {
+		t.Fatalf("role = %q, want fallback to user", out.Role)
+	}
+	// Forced bot role fails with the role hint instead of falling back.
+	err := plugintest.RunError(t, plugin, OperationFileDownload, map[string]any{
+		"file_id": "F1", "role": "bot",
+	}, plugintest.WithHost(&slackBlobHost{}))
+	if !strings.Contains(err.Message, "try role: user") {
+		t.Fatalf("err = %#v, want role hint", err)
+	}
+}
+
+type slackBlobHost struct {
+	pluginbinding.HostClient
+}
+
+func (h *slackBlobHost) BlobWrite(input pluginbinding.BlobWriteRequest) (pluginbinding.BlobRef, error) {
+	return pluginbinding.BlobRef{Ref: "blob://" + input.Filename, Filename: input.Filename, Size: int64(len(input.Content))}, nil
 }

@@ -55,7 +55,7 @@ type TokenInfoResult struct {
 }
 
 type SlackRoleInput struct {
-	Role string `json:"role,omitempty" jsonschema:"description=Slack token role to use for this write operation,enum=bot,enum=user"`
+	Role string `json:"role,omitempty" jsonschema:"description=Slack token role to use for this operation. Reads default to user-then-bot with fallback; set explicitly to force one token.,enum=bot,enum=user"`
 }
 
 type ListInput struct {
@@ -203,8 +203,11 @@ type MessageSendResult struct {
 	Channel  string `json:"channel,omitempty"`
 	TS       string `json:"ts,omitempty"`
 	ThreadTS string `json:"thread_ts,omitempty"`
-	Role     string `json:"role,omitempty"`
-	OK       bool   `json:"ok"`
+	// Permalink is the shareable https://....slack.com/archives/... URL of the
+	// sent message, resolved best-effort (empty if the lookup fails).
+	Permalink string `json:"permalink,omitempty"`
+	Role      string `json:"role,omitempty"`
+	OK        bool   `json:"ok"`
 }
 
 type UserListResult struct {
@@ -572,6 +575,7 @@ type Reaction struct {
 }
 
 type ThreadInput struct {
+	SlackRoleInput
 	Ref        string `json:"ref,omitempty" jsonschema:"description=Slack message reference as permalink URL or channel:timestamp. Provide either ref alone OR channel and ts together."`
 	Channel    string `json:"channel,omitempty" jsonschema:"description=Slack channel ID or name. Used with ts when ref is not given."`
 	TS         string `json:"ts,omitempty" jsonschema:"description=Slack message timestamp (e.g. 1718031600.123456). Used with channel when ref is not given."`
@@ -594,6 +598,7 @@ type ThreadMessagesInput struct {
 type ThreadResult struct {
 	Channel  string          `json:"channel,omitempty"`
 	TS       string          `json:"ts,omitempty"`
+	Role     string          `json:"role,omitempty"` // token role that served the read
 	Count    int             `json:"count"`
 	Messages []ThreadMessage `json:"messages,omitempty"`
 }
@@ -655,6 +660,7 @@ func (i MessageListInput) format() textFormat { return parseTextFormat(i.TextFor
 
 type MessageListResult struct {
 	Channel    string          `json:"channel,omitempty"`
+	Role       string          `json:"role,omitempty"` // token role that served the read
 	Count      int             `json:"count"`
 	NextCursor string          `json:"next_cursor,omitempty"`
 	HasMore    bool            `json:"has_more,omitempty"`
@@ -687,7 +693,39 @@ func (s Service) IndexBuild(ctx pluginbinding.Context, input IndexBuildInput) (p
 	return s.indexBuild(ctx, pluginbinding.InputMap(input))
 }
 
+// slackRoleHint explains the likely remedy when a forced token role failed:
+// the other connected token often has the visibility this one lacks.
+func slackRoleHint(role string) string {
+	switch strings.ToLower(strings.TrimSpace(role)) {
+	case SlackRoleBot:
+		return " — the bot may not be in this channel; try role: user"
+	case SlackRoleUser:
+		return " — the user account may lack access; try role: bot"
+	default:
+		return ""
+	}
+}
+
 func (s Service) Lookup(ctx pluginbinding.Context, input LookupInput) (LookupResult, error) {
+	// Message permalinks resolve to the message itself — channel + ts ready
+	// for a follow-up slack.thread — not just the containing channel.
+	if ref, ok := parseSlackMessageRef(strings.TrimSpace(input.Text)); ok && ref.Channel != "" && ref.TS != "" {
+		id := ref.Channel + ":" + ref.TS
+		match := pluginbinding.NewLookupMatch[any](
+			ctx.LookupSource(PluginName, DatasourceMessages),
+			EntityMessage,
+			id,
+			1000,
+			[]string{"permalink"},
+			map[string]any{
+				"channel":     ref.Channel,
+				"ts":          ref.TS,
+				"ref":         id,
+				"view_thread": "fluxplane-plugin operation invoke slack slack.thread --arg ref=" + id,
+			},
+		)
+		return LookupResult{Source: PluginName, Text: input.Text, Count: 1, Matches: []pluginbinding.LookupMatch[any]{match}}, nil
+	}
 	entity := strings.TrimSpace(input.Entity)
 	var candidates []pluginbinding.LookupCandidate
 	if entity == "" || entity == EntityUser {
@@ -985,7 +1023,13 @@ func (s Service) SendMessage(ctx pluginbinding.Context, input MessageSendInput) 
 	if err != nil {
 		return MessageSendResult{}, pluginbinding.Errorf("slack", "%s", err)
 	}
-	return MessageSendResult{Channel: channel, TS: ts, ThreadTS: request.ThreadTS, Role: role, OK: true}, nil
+	result := MessageSendResult{Channel: channel, TS: ts, ThreadTS: request.ThreadTS, Role: role, OK: true}
+	// Hand back the shareable URL so "send, then paste the link" needs no
+	// second call; the send already succeeded, so a permalink failure is ignored.
+	if permalink, err := client.GetPermalink(context.Background(), channel, ts); err == nil {
+		result.Permalink = permalink
+	}
+	return result, nil
 }
 
 func (s Service) EditMessage(ctx pluginbinding.Context, input MessageEditInput) (MessageEditResult, error) {
@@ -1177,18 +1221,25 @@ func (s Service) DownloadFile(ctx pluginbinding.Context, input FileDownloadInput
 	if fileID == "" {
 		return FileDownloadResult{}, pluginbinding.Fail("bad_input", "file_id is required")
 	}
-	role, purpose, err := slackWriteRole(input.Role, SlackRoleBot)
-	if err != nil {
-		return FileDownloadResult{}, err
+	// Default: bot token first, falling back to the user token — Slack
+	// returns file_not_found for files in channels the bot is not a member
+	// of, where the user token often succeeds. An explicit role disables the
+	// fallback.
+	purposes := []string{AuthPurposeBot, AuthPurposeUser}
+	if strings.TrimSpace(input.Role) != "" {
+		_, purpose, err := slackWriteRole(input.Role, SlackRoleBot)
+		if err != nil {
+			return FileDownloadResult{}, err
+		}
+		purposes = []string{purpose}
 	}
-	client, err := s.clientForPurpose(ctx, purpose)
+	result, usedPurpose, err := pluginbinding.ReadWithPreferredAuthPurposes[Client, FileDownloadResult](purposes, s.openClientForContext(ctx), func(client Client, _ string) (FileDownloadResult, error) {
+		return client.DownloadFile(context.Background(), FileDownloadRequest{FileID: fileID})
+	}, fallbackableSlackError)
 	if err != nil {
-		return FileDownloadResult{}, err
+		return FileDownloadResult{}, pluginbinding.Errorf("slack", "%s%s", err, slackRoleHint(input.Role))
 	}
-	result, err := client.DownloadFile(context.Background(), FileDownloadRequest{FileID: fileID})
-	if err != nil {
-		return FileDownloadResult{}, pluginbinding.Errorf("slack", "%s", err)
-	}
+	role := slackRoleFromPurpose(usedPurpose)
 	if len(result.content) > 0 {
 		filename := firstNonEmpty(input.Filename, result.File.Name, result.File.Title, result.File.ID)
 		blob, err := ctx.Host.BlobWrite(pluginbinding.BlobWriteRequest{
@@ -1390,18 +1441,22 @@ func (s Service) Thread(ctx pluginbinding.Context, input ThreadInput) (ThreadRes
 	if err != nil {
 		return ThreadResult{}, err
 	}
-	messages, _, err := pluginbinding.ReadWithPreferredAuthPurposes[Client, []ThreadMessage]([]string{AuthPurposeUser, AuthPurposeBot}, s.openClientForContext(ctx), func(client Client, _ string) ([]ThreadMessage, error) {
+	purposes, err := slackReadPurposes(input.Role)
+	if err != nil {
+		return ThreadResult{}, err
+	}
+	messages, usedPurpose, err := pluginbinding.ReadWithPreferredAuthPurposes[Client, []ThreadMessage](purposes, s.openClientForContext(ctx), func(client Client, _ string) ([]ThreadMessage, error) {
 		return client.GetThread(context.Background(), ref.Channel, ref.TS, input.Limit, input.MaxBytes)
 	}, fallbackableSlackError)
 	if err != nil {
-		return ThreadResult{}, pluginbinding.Errorf("slack", "%s", err)
+		return ThreadResult{}, pluginbinding.Errorf("slack", "%s%s", err, slackRoleHint(input.Role))
 	}
 	messages = limitThreadMessages(messages, input.Limit)
 	format := parseTextFormat(input.TextFormat)
 	for i := range messages {
 		messages[i].renderText(format)
 	}
-	return ThreadResult{Channel: ref.Channel, TS: ref.TS, Count: len(messages), Messages: messages}, nil
+	return ThreadResult{Channel: ref.Channel, TS: ref.TS, Role: slackRoleFromPurpose(usedPurpose), Count: len(messages), Messages: messages}, nil
 }
 
 // MessageList reads recent messages from a channel (conversations.history), the
@@ -1412,17 +1467,21 @@ func (s Service) MessageList(ctx pluginbinding.Context, input MessageListInput) 
 	if err != nil {
 		return MessageListResult{}, err
 	}
-	history, _, err := pluginbinding.ReadWithPreferredAuthPurposes[Client, MessageHistory]([]string{AuthPurposeUser, AuthPurposeBot}, s.openClientForContext(ctx), func(client Client, _ string) (MessageHistory, error) {
+	purposes, err := slackReadPurposes(input.Role)
+	if err != nil {
+		return MessageListResult{}, err
+	}
+	history, usedPurpose, err := pluginbinding.ReadWithPreferredAuthPurposes[Client, MessageHistory](purposes, s.openClientForContext(ctx), func(client Client, _ string) (MessageHistory, error) {
 		return client.ListMessages(context.Background(), MessageHistoryRequest{Channel: channel, Limit: input.Limit, Cursor: input.Cursor, Oldest: input.Oldest, Latest: input.Latest})
 	}, fallbackableSlackError)
 	if err != nil {
-		return MessageListResult{}, pluginbinding.Errorf("slack", "%s", err)
+		return MessageListResult{}, pluginbinding.Errorf("slack", "%s%s", err, slackRoleHint(input.Role))
 	}
 	format := input.format()
 	for i := range history.Messages {
 		history.Messages[i].renderText(format)
 	}
-	return MessageListResult{Channel: channel, Count: len(history.Messages), NextCursor: history.NextCursor, HasMore: history.HasMore, Messages: history.Messages}, nil
+	return MessageListResult{Channel: channel, Role: slackRoleFromPurpose(usedPurpose), Count: len(history.Messages), NextCursor: history.NextCursor, HasMore: history.HasMore, Messages: history.Messages}, nil
 }
 
 func (s Service) ThreadMessagesDatasource(ctx pluginbinding.Context, input ThreadMessagesInput) (ThreadMessagesDatasourceResult, error) {
@@ -1645,6 +1704,23 @@ func indexBuildMetadata(source string, extra map[string]any) map[string]any {
 		metadata[key] = value
 	}
 	return metadata
+}
+
+// slackReadPurposes maps an optional explicit role to the token purposes a
+// read operation tries: a forced single purpose, or user-then-bot with
+// fallback (Slack Connect channels are often visible only to the user token,
+// bot-private channels only to the bot token).
+func slackReadPurposes(role string) ([]string, error) {
+	switch strings.ToLower(strings.TrimSpace(role)) {
+	case "":
+		return []string{AuthPurposeUser, AuthPurposeBot}, nil
+	case SlackRoleUser:
+		return []string{AuthPurposeUser}, nil
+	case SlackRoleBot:
+		return []string{AuthPurposeBot}, nil
+	default:
+		return nil, pluginbinding.Fail("bad_input", "role must be bot or user")
+	}
 }
 
 func slackWriteRole(role, defaultRole string) (string, string, error) {

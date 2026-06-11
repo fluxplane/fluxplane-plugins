@@ -28,6 +28,7 @@ type Client interface {
 	GetPresence(context.Context, string) (Presence, error)
 	SetPresence(context.Context, string) error
 	SendMessage(context.Context, MessageSendRequest) (string, error)
+	GetPermalink(context.Context, string, string) (string, error)
 	EditMessage(context.Context, MessageEditRequest) (string, error)
 	DeleteMessage(context.Context, MessageRefRequest) error
 	AddReaction(context.Context, ReactionAddRequest) error
@@ -294,6 +295,23 @@ func (c liveClient) SendMessage(ctx context.Context, request MessageSendRequest)
 	options = append(options, slackMessageOptions(request.UnfurlLinks, request.UnfurlMedia, request.Parse)...)
 	_, ts, err := c.client.PostMessageContext(ctx, request.Channel, options...)
 	return ts, err
+}
+
+func (c liveClient) GetPermalink(ctx context.Context, channel, ts string) (string, error) {
+	// chat.getPermalink is a GET; slack-go's GET helper writes its own (empty)
+	// Authorization header, which defeats the bearer token the host HTTP client
+	// injects (POSTs carry the token in the form body, so they are unaffected).
+	// Archive URLs are deterministic, so build one from the workspace URL that
+	// auth.test (a POST) reports.
+	info, err := c.AuthTest(ctx)
+	if err != nil {
+		return "", err
+	}
+	base := strings.TrimSuffix(strings.TrimSpace(info.URL), "/")
+	if base == "" || channel == "" || ts == "" {
+		return "", fmt.Errorf("permalink unavailable: missing workspace url, channel, or ts")
+	}
+	return base + "/archives/" + channel + "/p" + strings.ReplaceAll(ts, ".", ""), nil
 }
 
 func (c liveClient) EditMessage(ctx context.Context, request MessageEditRequest) (string, error) {
@@ -803,7 +821,7 @@ func fallbackableSlackError(err error) bool {
 		return false
 	}
 	switch slackErr.Err {
-	case "missing_scope", "invalid_auth", "not_authed", "token_revoked", "account_inactive", "no_permission", "not_allowed_token_type", "file_not_found":
+	case "missing_scope", "invalid_auth", "not_authed", "token_revoked", "account_inactive", "no_permission", "not_allowed_token_type", "file_not_found", "channel_not_found", "not_in_channel":
 		return true
 	default:
 		return false
