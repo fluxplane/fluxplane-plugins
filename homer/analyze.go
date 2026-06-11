@@ -19,9 +19,9 @@ type CallAnalyzeInput struct {
 	FromUser          string   `json:"from_user,omitempty" jsonschema:"description=Seed caller (used with to_user when call_id is unknown)."`
 	ToUser            string   `json:"to_user,omitempty" jsonschema:"description=Seed callee (used with from_user when call_id is unknown)."`
 	CorrelationHeader string   `json:"correlation_header,omitempty" jsonschema:"required,description=SIP header whose value ties the legs of one logical call together (e.g. X-CID)."`
-	Numbers           []string `json:"numbers,omitempty" jsonschema:"description=Extra numbers (agents, extensions) to widen the leg search; legs involving them are included even without the correlation header."`
+	Numbers           []string `json:"numbers,omitempty" jsonschema:"description=Extra numbers (agents\\, extensions) to widen the leg search; legs involving them are included even without the correlation header."`
 	Headers           []string `json:"headers,omitempty" jsonschema:"description=Additional SIP headers to extract from each leg's INVITE for the report."`
-	Limit             int      `json:"limit,omitempty" jsonschema:"description=Maximum candidate legs from the fan-out. Default 50, max 200."`
+	Limit             int      `json:"limit,omitempty" jsonschema:"description=Maximum candidate legs from the fan-out. Default 50\\, max 200."`
 }
 
 // CallLeg is one confirmed leg of a multi-leg call.
@@ -36,7 +36,7 @@ type CallLeg struct {
 	Route       string            `json:"route,omitempty"`
 	Correlation string            `json:"correlation,omitempty" jsonschema:"description=The correlation header value found on this leg's INVITE."`
 	Headers     map[string]string `json:"headers,omitempty"`
-	MatchedBy   string            `json:"matched_by,omitempty" jsonschema:"description=seed, correlation, or number."`
+	MatchedBy   string            `json:"matched_by,omitempty" jsonschema:"description=seed\\, correlation\\, or number."`
 }
 
 type CallAnalyzeResult struct {

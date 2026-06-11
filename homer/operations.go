@@ -43,8 +43,8 @@ type HomerTargetInput struct {
 }
 
 type TimeRangeInput struct {
-	Since string `json:"since,omitempty" jsonschema:"description=Start time as RFC3339, unix seconds, or duration ago (e.g. 1h). Defaults to 1h."`
-	Until string `json:"until,omitempty" jsonschema:"description=End time as RFC3339, unix seconds, or duration ago. Defaults to now."`
+	Since string `json:"since,omitempty" jsonschema:"description=Start time as RFC3339\\, unix seconds\\, or duration ago (e.g. 1h). Defaults to 1h."`
+	Until string `json:"until,omitempty" jsonschema:"description=End time as RFC3339\\, unix seconds\\, or duration ago. Defaults to now."`
 }
 
 // window resolves the search window with the given default lookback.
@@ -129,14 +129,14 @@ func (s Service) Test(ctx pluginbinding.Context, input TestInput) (TestResult, e
 type SearchInput struct {
 	HomerTargetInput
 	TimeRangeInput
-	Number   string `json:"number,omitempty" jsonschema:"description=Phone number matched against caller OR callee, with and without + prefix."`
+	Number   string `json:"number,omitempty" jsonschema:"description=Phone number matched against caller OR callee\\, with and without + prefix."`
 	FromUser string `json:"from_user,omitempty" jsonschema:"description=Caller filter (use % as wildcard)."`
 	ToUser   string `json:"to_user,omitempty" jsonschema:"description=Callee filter (use % as wildcard)."`
 	CallID   string `json:"call_id,omitempty" jsonschema:"description=Exact SIP Call-ID."`
 	UA       string `json:"ua,omitempty" jsonschema:"description=User-Agent filter (use % as wildcard)."`
-	Method   string `json:"method,omitempty" jsonschema:"description=SIP method or response code, e.g. INVITE or 486."`
-	Query    string `json:"query,omitempty" jsonschema:"description=Query DSL: field = 'value' with AND/OR and % wildcards. Fields: call_id, cseq, from_user, method, ruri_user, sid, status, to_user, ua, user_agent."`
-	Limit    int    `json:"limit,omitempty" jsonschema:"description=Maximum messages. Default 200, max 1000."`
+	Method   string `json:"method,omitempty" jsonschema:"description=SIP method or response code\\, e.g. INVITE or 486."`
+	Query    string `json:"query,omitempty" jsonschema:"description=Query DSL: field = 'value' with AND/OR and % wildcards. Fields: call_id\\, cseq\\, from_user\\, method\\, ruri_user\\, sid\\, status\\, to_user\\, ua\\, user_agent."`
+	Limit    int    `json:"limit,omitempty" jsonschema:"description=Maximum messages. Default 200\\, max 1000."`
 }
 
 // MessageRecord is one SIP message, shaped for reading: RFC3339 time,
@@ -155,8 +155,30 @@ type MessageRecord struct {
 	UserAgent string `json:"user_agent,omitempty"`
 }
 
+// QueryEcho reports how a search was interpreted — the resolved time window
+// and the effective Homer smartinput — so empty results are diagnosable:
+// wrong time partition vs filters vs an edge this instance doesn't capture.
+type QueryEcho struct {
+	From       string `json:"from"`
+	To         string `json:"to"`
+	SmartInput string `json:"smartinput,omitempty"`
+	CallID     string `json:"call_id,omitempty"`
+	Limit      int    `json:"limit,omitempty"`
+}
+
+func queryEcho(from, to time.Time, smartInput, callID string, limit int) QueryEcho {
+	return QueryEcho{
+		From:       from.UTC().Format(time.RFC3339),
+		To:         to.UTC().Format(time.RFC3339),
+		SmartInput: smartInput,
+		CallID:     callID,
+		Limit:      limit,
+	}
+}
+
 type SearchResultOutput struct {
 	URL       string          `json:"url"`
+	Query     QueryEcho       `json:"query"`
 	Messages  []MessageRecord `json:"messages"`
 	Count     int             `json:"count"`
 	Truncated bool            `json:"truncated,omitempty" jsonschema:"description=True when the page is full; narrow the window or raise limit."`
@@ -189,6 +211,7 @@ func (s Service) Search(ctx pluginbinding.Context, input SearchInput) (SearchRes
 	}
 	return SearchResultOutput{
 		URL:       input.EndpointRef,
+		Query:     queryEcho(from, to, smartInput, strings.TrimSpace(input.CallID), limit),
 		Messages:  records,
 		Count:     len(records),
 		Truncated: len(records) >= limit,
@@ -267,8 +290,8 @@ type CallListInput struct {
 	Number   string `json:"number,omitempty" jsonschema:"description=Phone number matched against caller OR callee; also sets direction on results."`
 	FromUser string `json:"from_user,omitempty" jsonschema:"description=Caller filter (use % as wildcard)."`
 	ToUser   string `json:"to_user,omitempty" jsonschema:"description=Callee filter (use % as wildcard)."`
-	Query    string `json:"query,omitempty" jsonschema:"description=Query DSL filter, see homer.search."`
-	Limit    int    `json:"limit,omitempty" jsonschema:"description=Maximum calls. Default 50, max 200."`
+	Query    string `json:"query,omitempty" jsonschema:"description=Query DSL filter\\, see homer.search."`
+	Limit    int    `json:"limit,omitempty" jsonschema:"description=Maximum calls. Default 50\\, max 200."`
 }
 
 // CallSummaryRecord is one grouped call.
@@ -287,6 +310,7 @@ type CallSummaryRecord struct {
 
 type CallListResult struct {
 	URL       string              `json:"url"`
+	Query     QueryEcho           `json:"query"`
 	Calls     []CallSummaryRecord `json:"calls"`
 	Count     int                 `json:"count"`
 	Truncated bool                `json:"truncated,omitempty" jsonschema:"description=True when call discovery was cut off; narrow the window."`
@@ -314,7 +338,13 @@ func (s Service) CallList(ctx pluginbinding.Context, input CallListInput) (CallL
 	for _, call := range calls {
 		records = append(records, callSummaryRecord(call))
 	}
-	return CallListResult{URL: input.EndpointRef, Calls: records, Count: len(records), Truncated: truncated}, nil
+	return CallListResult{
+		URL:       input.EndpointRef,
+		Query:     queryEcho(from, to, smartInput, "", limit),
+		Calls:     records,
+		Count:     len(records),
+		Truncated: truncated,
+	}, nil
 }
 
 func callSummaryRecord(call CallSummary) CallSummaryRecord {

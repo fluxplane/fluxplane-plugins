@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.2.0
+
+### Changed
+- **Empty searches are diagnosable** (fluxplane-plugins#4): `homer.search`
+  and `homer.call.list` results carry a `query` echo with the resolved time
+  window (RFC3339 from/to), the effective Homer smartinput, call_id, and
+  limit — so "wrong time partition" vs "filters didn't match" vs "this edge
+  isn't captured here" can be told apart.
+- The `query` DSL field documentation now renders its full field list
+  (call_id, cseq, from_user, method, ruri_user, sid, status, to_user, ua,
+  user_agent) — commas inside jsonschema descriptions previously truncated
+  it at the first field.
+- SDK bump to `fluxplane-plugin` v0.10.0.
+
 ## v0.1.0
 
 Initial Homer 7 plugin — a port of the original dex homer integration onto the
