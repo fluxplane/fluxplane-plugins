@@ -572,9 +572,9 @@ type Reaction struct {
 }
 
 type ThreadInput struct {
-	Ref        string `json:"ref,omitempty" jsonschema:"description=Slack message reference as URL or channel:timestamp"`
-	Channel    string `json:"channel,omitempty" jsonschema:"description=Slack channel ID or name"`
-	TS         string `json:"ts,omitempty" jsonschema:"description=Slack message timestamp"`
+	Ref        string `json:"ref,omitempty" jsonschema:"description=Slack message reference as permalink URL or channel:timestamp. Provide either ref alone OR channel and ts together."`
+	Channel    string `json:"channel,omitempty" jsonschema:"description=Slack channel ID or name. Used with ts when ref is not given."`
+	TS         string `json:"ts,omitempty" jsonschema:"description=Slack message timestamp (e.g. 1718031600.123456). Used with channel when ref is not given."`
 	Limit      int    `json:"limit,omitempty" jsonschema:"description=Maximum thread messages to return"`
 	MaxBytes   int    `json:"max_bytes,omitempty" jsonschema:"description=Maximum bytes to download per image. Defaults to 10485760."`
 	TextFormat string `json:"text_format,omitempty" jsonschema:"description=Message text format. markdown (default) renders readable Markdown; mrkdwn returns raw Slack mrkdwn; both returns each,enum=markdown,enum=mrkdwn,enum=both"`

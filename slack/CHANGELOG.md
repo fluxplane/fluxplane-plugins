@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.20.0
+
+### Changed
+- `slack.thread` documents its real input contract — provide either `ref`
+  (permalink URL or channel:timestamp) **or** `channel`+`ts` together — in
+  the operation description and field docs, with runnable examples for both
+  forms (fluxplane-plugins#4).
+- SDK bump to `fluxplane-plugin` v0.10.0; manifest version 0.20.0.
+
 ## v0.19.0
 
 ### Added

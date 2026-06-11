@@ -10,7 +10,7 @@ import (
 
 const (
 	PluginName        = "slack"
-	PluginVersion     = "0.19.0"
+	PluginVersion     = "0.20.0"
 	PluginDescription = "Slack token info, messaging, file upload, search, thread, channel member, and reverse lookup operations."
 
 	AuthMethodTokenSet = "token_set"
@@ -324,7 +324,10 @@ func searchSpec() core.OperationSpec {
 }
 
 func threadSpec() core.OperationSpec {
-	return pluginbinding.TypedOperationSpec[ThreadInput, ThreadResult](OperationThread, "View a Slack thread. Message text is rendered to Markdown by default (text_format selects mrkdwn/both).", slackReadOptions(core.OperationIdempotent)...)
+	return withInputExamples(pluginbinding.TypedOperationSpec[ThreadInput, ThreadResult](OperationThread, "View a Slack thread. Provide either ref (permalink URL or channel:timestamp) OR channel and ts together. Message text is rendered to Markdown by default (text_format selects mrkdwn/both).", slackReadOptions(core.OperationIdempotent)...),
+		map[string]any{"ref": "https://example.slack.com/archives/C0123ABCD/p1718031600123456"},
+		map[string]any{"channel": "C0123ABCD", "ts": "1718031600.123456", "limit": 50},
+	)
 }
 
 func messageListSpec() core.OperationSpec {
