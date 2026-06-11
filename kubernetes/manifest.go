@@ -34,7 +34,7 @@ func withInputExamples(spec core.OperationSpec, examples ...map[string]any) core
 
 const (
 	PluginName        = "kubernetes"
-	PluginVersion     = "0.21.0"
+	PluginVersion     = "0.22.0"
 	PluginDescription = "Kubernetes cluster discovery, inventory, debugging (logs, events, exec), and deployment operations using kubeconfig."
 
 	OperationClusterList       = "kubernetes.cluster.list"
@@ -58,6 +58,8 @@ const (
 	OperationPodExec           = "kubernetes.pod.exec"
 	OperationDeploymentScale   = "kubernetes.deployment.scale"
 	OperationDeploymentRestart = "kubernetes.deployment.restart"
+	OperationDeploymentHistory = "kubernetes.deployment.history"
+	OperationIngressList       = "kubernetes.ingress.list"
 
 	EndpointClusterDiscovered = "kubernetes.discovered_endpoints"
 	DatasourceInventory       = "kubernetes.inventory"
@@ -68,6 +70,7 @@ const (
 	EntityPod        = "kubernetes.pod"
 	EntityDeployment = "kubernetes.deployment"
 	EntityContainer  = "kubernetes.container"
+	EntityIngress    = "kubernetes.ingress"
 )
 
 func Manifest() core.PluginManifest {
@@ -95,8 +98,10 @@ func manifestSpec() pluginbinding.ManifestSpec {
 			portForwardListSpec(),
 			deploymentListSpec(),
 			deploymentShowSpec(),
+			deploymentHistorySpec(),
 			deploymentScaleSpec(),
 			deploymentRestartSpec(),
+			ingressListSpec(),
 			containerListSpec(),
 			containerShowSpec(),
 			eventListSpec(),
@@ -219,6 +224,22 @@ func portForwardListSpec() core.OperationSpec {
 	return pluginbinding.TypedOperationSpec[PortForwardListInput, PortForwardListResult](
 		OperationPortForwardList,
 		"List managed Kubernetes port-forwards with liveness, local URL, and target metadata.",
+		kubernetesReadOptions(core.OperationIdempotent)...,
+	)
+}
+
+func ingressListSpec() core.OperationSpec {
+	return pluginbinding.TypedOperationSpec[InventoryInput, IngressListResult](
+		OperationIngressList,
+		"List Kubernetes ingresses with hosts, path-to-backend rules, and TLS hosts — a namespace's HTTP entry points.",
+		kubernetesReadOptions(core.OperationIdempotent)...,
+	)
+}
+
+func deploymentHistorySpec() core.OperationSpec {
+	return pluginbinding.TypedOperationSpec[InventoryInput, DeploymentHistoryResult](
+		OperationDeploymentHistory,
+		"List a deployment's rollout revisions (ReplicaSets, newest first) with images, replica counts, and creation timestamps — which image ran when. name is the deployment.",
 		kubernetesReadOptions(core.OperationIdempotent)...,
 	)
 }

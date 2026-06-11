@@ -274,6 +274,119 @@ func TestInventoryOperationsListResources(t *testing.T) {
 	}
 }
 
+func TestPodListCarriesTriageFields(t *testing.T) {
+	plugin := NewPluginWithService(Service{
+		Pods: func(_ context.Context, _ InventoryInput) ([]corev1.Pod, error) {
+			return []corev1.Pod{{
+				ObjectMeta: metav1.ObjectMeta{Name: "api-123", Namespace: "latest"},
+				Spec:       corev1.PodSpec{Containers: []corev1.Container{{Name: "api"}, {Name: "sidecar"}}},
+				Status: corev1.PodStatus{
+					Phase: corev1.PodRunning,
+					ContainerStatuses: []corev1.ContainerStatus{
+						{Name: "api", Ready: true, RestartCount: 2, State: corev1.ContainerState{Running: &corev1.ContainerStateRunning{}}},
+						{
+							Name: "sidecar", Ready: false, RestartCount: 7,
+							State:                corev1.ContainerState{Waiting: &corev1.ContainerStateWaiting{Reason: "CrashLoopBackOff"}},
+							LastTerminationState: corev1.ContainerState{Terminated: &corev1.ContainerStateTerminated{Reason: "OOMKilled"}},
+						},
+					},
+				},
+			}}, nil
+		},
+	})
+	pods := plugintest.RunOK[PodListResult](t, plugin, OperationPodList, map[string]any{})
+	pod := pods.Pods[0]
+	if pod.Ready != "1/2" || pod.Restarts != 9 {
+		t.Fatalf("triage summary = ready %q restarts %d", pod.Ready, pod.Restarts)
+	}
+	byName := map[string]PodContainerState{}
+	for _, state := range pod.ContainerStates {
+		byName[state.Name] = state
+	}
+	if byName["sidecar"].State != "waiting:CrashLoopBackOff" || byName["sidecar"].LastTerminationReason != "OOMKilled" || byName["sidecar"].RestartCount != 7 {
+		t.Fatalf("sidecar state = %#v", byName["sidecar"])
+	}
+	if !byName["api"].Ready || byName["api"].State != "running" {
+		t.Fatalf("api state = %#v", byName["api"])
+	}
+}
+
+func TestIngressListProjectsRules(t *testing.T) {
+	className := "nginx"
+	plugin := NewPluginWithService(Service{
+		Ingresses: func(_ context.Context, input EndpointDiscoverInput) ([]networkingv1.Ingress, error) {
+			if input.Namespace != "latest" {
+				t.Fatalf("input = %#v", input)
+			}
+			return []networkingv1.Ingress{{
+				ObjectMeta: metav1.ObjectMeta{Name: "api", Namespace: "latest"},
+				Spec: networkingv1.IngressSpec{
+					IngressClassName: &className,
+					Rules: []networkingv1.IngressRule{{
+						Host: "api.example.com",
+						IngressRuleValue: networkingv1.IngressRuleValue{HTTP: &networkingv1.HTTPIngressRuleValue{Paths: []networkingv1.HTTPIngressPath{{
+							Path:    "/v1",
+							Backend: networkingv1.IngressBackend{Service: &networkingv1.IngressServiceBackend{Name: "api", Port: networkingv1.ServiceBackendPort{Number: 8080}}},
+						}}}},
+					}},
+					TLS: []networkingv1.IngressTLS{{Hosts: []string{"api.example.com"}}},
+				},
+			}}, nil
+		},
+	})
+	out := plugintest.RunOK[IngressListResult](t, plugin, OperationIngressList, map[string]any{"namespace": "latest"})
+	if out.Count != 1 {
+		t.Fatalf("out = %#v", out)
+	}
+	ingress := out.Ingresses[0]
+	if ingress.Class != "nginx" || ingress.Hosts[0] != "api.example.com" || ingress.TLSHosts[0] != "api.example.com" {
+		t.Fatalf("ingress = %#v", ingress)
+	}
+	if len(ingress.Rules) != 1 || ingress.Rules[0].Backend != "api:8080" || ingress.Rules[0].Path != "/v1" {
+		t.Fatalf("rules = %#v", ingress.Rules)
+	}
+}
+
+func TestDeploymentHistoryListsRevisions(t *testing.T) {
+	plugin := NewPluginWithService(Service{
+		ReplicaSets: func(_ context.Context, input InventoryInput) ([]appsv1.ReplicaSet, error) {
+			if input.Namespace != "latest" {
+				t.Fatalf("input = %#v", input)
+			}
+			owned := metav1.OwnerReference{Kind: "Deployment", Name: "api"}
+			return []appsv1.ReplicaSet{
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "api-old", Namespace: "latest", OwnerReferences: []metav1.OwnerReference{owned}, Annotations: map[string]string{"deployment.kubernetes.io/revision": "3"}},
+					Spec:       appsv1.ReplicaSetSpec{Replicas: int32Ptr(0), Template: corev1.PodTemplateSpec{Spec: corev1.PodSpec{Containers: []corev1.Container{{Image: "api:1.2.0"}}}}},
+				},
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "api-new", Namespace: "latest", OwnerReferences: []metav1.OwnerReference{owned}, Annotations: map[string]string{"deployment.kubernetes.io/revision": "4"}},
+					Spec:       appsv1.ReplicaSetSpec{Replicas: int32Ptr(2), Template: corev1.PodTemplateSpec{Spec: corev1.PodSpec{Containers: []corev1.Container{{Image: "api:1.3.0"}}}}},
+					Status:     appsv1.ReplicaSetStatus{ReadyReplicas: 2},
+				},
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "other-rs", Namespace: "latest", OwnerReferences: []metav1.OwnerReference{{Kind: "Deployment", Name: "other"}}},
+				},
+			}, nil
+		},
+	})
+	out := plugintest.RunOK[DeploymentHistoryResult](t, plugin, OperationDeploymentHistory, map[string]any{"namespace": "latest", "name": "api"})
+	if out.Count != 2 || out.Deployment != "api" {
+		t.Fatalf("out = %#v", out)
+	}
+	if out.Revisions[0].Revision != 4 || !out.Revisions[0].Current || out.Revisions[0].Images[0] != "api:1.3.0" || out.Revisions[0].Ready != 2 {
+		t.Fatalf("newest = %#v", out.Revisions[0])
+	}
+	if out.Revisions[1].Revision != 3 || out.Revisions[1].Current || out.Revisions[1].Images[0] != "api:1.2.0" {
+		t.Fatalf("previous = %#v", out.Revisions[1])
+	}
+
+	err := plugintest.RunError(t, plugin, OperationDeploymentHistory, map[string]any{"namespace": "latest"})
+	if err.Code != "bad_input" {
+		t.Fatalf("missing name = %#v", err)
+	}
+}
+
 func TestPodLogBoundsDoNotDefaultTailWhenByteOrTimeBounded(t *testing.T) {
 	bounds, err := podLogBounds(PodLogsInput{LimitBytes: 2048})
 	if err != nil {

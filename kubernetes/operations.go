@@ -29,6 +29,7 @@ type Service struct {
 	Ingresses    func(context.Context, EndpointDiscoverInput) ([]networkingv1.Ingress, error)
 	Pods         func(context.Context, InventoryInput) ([]corev1.Pod, error)
 	Deployments  func(context.Context, InventoryInput) ([]appsv1.Deployment, error)
+	ReplicaSets  func(context.Context, InventoryInput) ([]appsv1.ReplicaSet, error)
 	Logs         func(context.Context, PodLogsInput) (PodLogsResult, error)
 	ForwardStart func(context.Context, PortForwardStartInput) (PortForwardResult, error)
 	ForwardStop  func(context.Context, PortForwardStopInput) (PortForwardStopResult, error)
@@ -117,13 +118,29 @@ type ServiceRecord struct {
 
 type PodRecord struct {
 	pluginbinding.DatasourceRecord
-	Name       string            `json:"name"`
-	Namespace  string            `json:"namespace"`
-	Phase      string            `json:"phase,omitempty"`
-	Node       string            `json:"node,omitempty"`
-	Containers []string          `json:"containers,omitempty"`
-	Labels     map[string]string `json:"labels,omitempty"`
-	CreatedAt  string            `json:"created_at,omitempty"`
+	Name      string `json:"name"`
+	Namespace string `json:"namespace"`
+	Phase     string `json:"phase,omitempty"`
+	Node      string `json:"node,omitempty"`
+	// Ready is the kubectl-style "ready/total" over the pod's main containers.
+	Ready string `json:"ready,omitempty"`
+	// Restarts totals restart counts across all containers — the first
+	// crash-loop triage signal.
+	Restarts        int32               `json:"restarts"`
+	Containers      []string            `json:"containers,omitempty"`
+	ContainerStates []PodContainerState `json:"container_states,omitempty"`
+	Labels          map[string]string   `json:"labels,omitempty"`
+	CreatedAt       string              `json:"created_at,omitempty"`
+}
+
+// PodContainerState is the per-container triage summary on pod records:
+// ready/restarts/state plus the last termination reason (OOMKilled, Error, …).
+type PodContainerState struct {
+	Name                  string `json:"name"`
+	Ready                 bool   `json:"ready"`
+	RestartCount          int32  `json:"restart_count"`
+	State                 string `json:"state,omitempty"`
+	LastTerminationReason string `json:"last_termination_reason,omitempty"`
 }
 
 type ContainerRecord struct {
@@ -389,6 +406,171 @@ func (s Service) PodShow(ctx pluginbinding.Context, input InventoryInput) (PodSh
 	return PodShowResult{}, pluginbinding.Errorf("not_found", "pod %q not found", input.Name)
 }
 
+type IngressRule struct {
+	Host    string `json:"host,omitempty"`
+	Path    string `json:"path,omitempty"`
+	Backend string `json:"backend,omitempty"` // service:port
+}
+
+type IngressRecord struct {
+	pluginbinding.DatasourceRecord
+	Name      string        `json:"name"`
+	Namespace string        `json:"namespace"`
+	Class     string        `json:"class,omitempty"`
+	Hosts     []string      `json:"hosts,omitempty"`
+	Rules     []IngressRule `json:"rules,omitempty"`
+	TLSHosts  []string      `json:"tls_hosts,omitempty"`
+	CreatedAt string        `json:"created_at,omitempty"`
+}
+
+type IngressListResult struct {
+	Count     int             `json:"count"`
+	Ingresses []IngressRecord `json:"ingresses"`
+}
+
+// IngressList lists a namespace's HTTP entry points — the missing link
+// between "service exists" and "what URL serves it".
+func (s Service) IngressList(ctx pluginbinding.Context, input InventoryInput) (IngressListResult, error) {
+	items, err := s.ingresses(ctx)(context.Background(), endpointInputFromInventory(input))
+	if err != nil {
+		return IngressListResult{}, pluginbinding.Errorf("kubernetes", "%s", err)
+	}
+	records := ingressRecords(ctx.DatasourceSource(), items)
+	records = filterIngressRecords(records, input.Query)
+	records = limitSlice(records, input.Limit)
+	return IngressListResult{Count: len(records), Ingresses: records}, nil
+}
+
+type DeploymentRevision struct {
+	Revision   int64    `json:"revision"`
+	ReplicaSet string   `json:"replica_set"`
+	Images     []string `json:"images,omitempty"`
+	Desired    int32    `json:"desired_replicas"`
+	Ready      int32    `json:"ready_replicas,omitempty"`
+	// Current marks the revision the deployment is presently running
+	// (desired replicas > 0).
+	Current   bool   `json:"current,omitempty"`
+	CreatedAt string `json:"created_at,omitempty"`
+}
+
+type DeploymentHistoryResult struct {
+	Deployment string               `json:"deployment"`
+	Namespace  string               `json:"namespace,omitempty"`
+	Count      int                  `json:"count"`
+	Revisions  []DeploymentRevision `json:"revisions"`
+}
+
+// DeploymentHistory lists a deployment's rollout revisions (its ReplicaSets,
+// newest revision first) — "which image ran when" for correlating a
+// regression onset with a deploy.
+func (s Service) DeploymentHistory(ctx pluginbinding.Context, input InventoryInput) (DeploymentHistoryResult, error) {
+	input = normalizeInventoryInput(input)
+	name := strings.TrimSpace(input.Name)
+	if name == "" {
+		return DeploymentHistoryResult{}, pluginbinding.Fail("bad_input", "name (deployment) is required")
+	}
+	items, err := s.replicaSets(ctx)(context.Background(), input)
+	if err != nil {
+		return DeploymentHistoryResult{}, pluginbinding.Errorf("kubernetes", "%s", err)
+	}
+	revisions := []DeploymentRevision{}
+	for _, rs := range items {
+		if !replicaSetOwnedByDeployment(rs, name) {
+			continue
+		}
+		revision := int64(0)
+		if raw := strings.TrimSpace(rs.Annotations["deployment.kubernetes.io/revision"]); raw != "" {
+			revision, _ = strconv.ParseInt(raw, 10, 64)
+		}
+		images := make([]string, 0, len(rs.Spec.Template.Spec.Containers))
+		for _, container := range rs.Spec.Template.Spec.Containers {
+			images = append(images, container.Image)
+		}
+		desired := int32(0)
+		if rs.Spec.Replicas != nil {
+			desired = *rs.Spec.Replicas
+		}
+		revisions = append(revisions, DeploymentRevision{
+			Revision:   revision,
+			ReplicaSet: rs.Name,
+			Images:     images,
+			Desired:    desired,
+			Ready:      rs.Status.ReadyReplicas,
+			Current:    desired > 0,
+			CreatedAt:  timestampText(rs.CreationTimestamp),
+		})
+	}
+	sort.Slice(revisions, func(i, j int) bool { return revisions[i].Revision > revisions[j].Revision })
+	revisions = limitSlice(revisions, input.Limit)
+	return DeploymentHistoryResult{Deployment: name, Namespace: strings.TrimSpace(input.Namespace), Count: len(revisions), Revisions: revisions}, nil
+}
+
+func replicaSetOwnedByDeployment(rs appsv1.ReplicaSet, deployment string) bool {
+	for _, owner := range rs.OwnerReferences {
+		if owner.Kind == "Deployment" && owner.Name == deployment {
+			return true
+		}
+	}
+	return false
+}
+
+func ingressRecords(source pluginbinding.DatasourceSource, items []networkingv1.Ingress) []IngressRecord {
+	records := make([]IngressRecord, 0, len(items))
+	for _, item := range items {
+		id := item.Namespace + "/" + item.Name
+		record := IngressRecord{
+			DatasourceRecord: pluginbinding.NewDatasourceRecord(source, EntityIngress, id, pluginbinding.RecordTitle(id), pluginbinding.RecordLink("self", "kubernetes://ingress/"+url.PathEscape(id))),
+			Name:             item.Name,
+			Namespace:        item.Namespace,
+			CreatedAt:        timestampText(item.CreationTimestamp),
+		}
+		if item.Spec.IngressClassName != nil {
+			record.Class = *item.Spec.IngressClassName
+		}
+		for _, rule := range item.Spec.Rules {
+			if rule.Host != "" {
+				record.Hosts = append(record.Hosts, rule.Host)
+			}
+			if rule.HTTP == nil {
+				continue
+			}
+			for _, path := range rule.HTTP.Paths {
+				backend := ""
+				if path.Backend.Service != nil {
+					backend = path.Backend.Service.Name
+					if path.Backend.Service.Port.Number > 0 {
+						backend += ":" + strconv.Itoa(int(path.Backend.Service.Port.Number))
+					} else if path.Backend.Service.Port.Name != "" {
+						backend += ":" + path.Backend.Service.Port.Name
+					}
+				}
+				record.Rules = append(record.Rules, IngressRule{Host: rule.Host, Path: path.Path, Backend: backend})
+			}
+		}
+		for _, tls := range item.Spec.TLS {
+			record.TLSHosts = append(record.TLSHosts, tls.Hosts...)
+		}
+		records = append(records, record)
+	}
+	sort.Slice(records, func(i, j int) bool { return records[i].ID < records[j].ID })
+	return records
+}
+
+func filterIngressRecords(records []IngressRecord, query string) []IngressRecord {
+	query = strings.ToLower(strings.TrimSpace(query))
+	if query == "" {
+		return records
+	}
+	out := make([]IngressRecord, 0, len(records))
+	for _, record := range records {
+		haystack := strings.ToLower(record.Name + " " + record.Namespace + " " + strings.Join(record.Hosts, " "))
+		if strings.Contains(haystack, query) {
+			out = append(out, record)
+		}
+	}
+	return out
+}
+
 func (s Service) DeploymentList(ctx pluginbinding.Context, input InventoryInput) (DeploymentListResult, error) {
 	items, err := s.deployments(ctx)(context.Background(), input)
 	if err != nil {
@@ -613,6 +795,15 @@ func (s Service) deployments(ctx pluginbinding.Context) func(context.Context, In
 	}
 	return func(_ context.Context, input InventoryInput) ([]appsv1.Deployment, error) {
 		return HostKubeDeployments(ctx, input)
+	}
+}
+
+func (s Service) replicaSets(ctx pluginbinding.Context) func(context.Context, InventoryInput) ([]appsv1.ReplicaSet, error) {
+	if s.ReplicaSets != nil {
+		return s.ReplicaSets
+	}
+	return func(_ context.Context, input InventoryInput) ([]appsv1.ReplicaSet, error) {
+		return HostKubeReplicaSets(ctx, input)
 	}
 }
 
@@ -1382,13 +1573,17 @@ func podRecords(source pluginbinding.DatasourceSource, items []corev1.Pod) []Pod
 	records := make([]PodRecord, 0, len(items))
 	for _, item := range items {
 		id := item.Namespace + "/" + item.Name
+		ready, restarts, states := podTriageSummary(item)
 		record := PodRecord{
 			DatasourceRecord: pluginbinding.NewDatasourceRecord(source, EntityPod, id, pluginbinding.RecordTitle(id), pluginbinding.RecordLink("self", "kubernetes://pod/"+url.PathEscape(id))),
 			Name:             item.Name,
 			Namespace:        item.Namespace,
 			Phase:            string(item.Status.Phase),
 			Node:             item.Spec.NodeName,
+			Ready:            ready,
+			Restarts:         restarts,
 			Containers:       podContainerNames(item),
+			ContainerStates:  states,
 			Labels:           cloneStringMap(item.Labels),
 			CreatedAt:        timestampText(item.CreationTimestamp),
 		}
@@ -1396,6 +1591,42 @@ func podRecords(source pluginbinding.DatasourceSource, items []corev1.Pod) []Pod
 	}
 	sort.Slice(records, func(i, j int) bool { return records[i].ID < records[j].ID })
 	return records
+}
+
+// podTriageSummary derives the fields one scans first in incident triage:
+// kubectl-style ready "x/y" over main containers, the total restart count,
+// and a per-container state summary including last termination reasons.
+func podTriageSummary(item corev1.Pod) (string, int32, []PodContainerState) {
+	readyCount := 0
+	for _, status := range item.Status.ContainerStatuses {
+		if status.Ready {
+			readyCount++
+		}
+	}
+	ready := fmt.Sprintf("%d/%d", readyCount, len(item.Spec.Containers))
+	var restarts int32
+	statusByName := podContainerStatuses(item)
+	names := podContainerNames(item)
+	states := make([]PodContainerState, 0, len(names))
+	for _, name := range names {
+		status, ok := statusByName[name]
+		if !ok {
+			states = append(states, PodContainerState{Name: name})
+			continue
+		}
+		restarts += status.RestartCount
+		state := PodContainerState{
+			Name:         name,
+			Ready:        status.Ready,
+			RestartCount: status.RestartCount,
+			State:        containerStateText(status.State),
+		}
+		if status.LastTerminationState.Terminated != nil {
+			state.LastTerminationReason = strings.TrimSpace(status.LastTerminationState.Terminated.Reason)
+		}
+		states = append(states, state)
+	}
+	return ready, restarts, states
 }
 
 func containerRecords(source pluginbinding.DatasourceSource, items []corev1.Pod) []ContainerRecord {

@@ -113,6 +113,18 @@ func HostKubeDeployments(ctx pluginbinding.Context, input InventoryInput) ([]app
 	return list.Items, nil
 }
 
+func HostKubeReplicaSets(ctx pluginbinding.Context, input InventoryInput) ([]appsv1.ReplicaSet, error) {
+	client, err := kubeClientFromInventory(ctx, input)
+	if err != nil {
+		return nil, err
+	}
+	list, err := client.AppsV1().ReplicaSets(namespaceOrAll(input.Namespace)).List(context.Background(), metav1.ListOptions{})
+	if err != nil {
+		return nil, err
+	}
+	return list.Items, nil
+}
+
 func HostKubeSecrets(ctx pluginbinding.Context, input EndpointDiscoverInput) ([]corev1.Secret, error) {
 	client, err := kubeClientFromEndpointInput(ctx, input)
 	if err != nil {

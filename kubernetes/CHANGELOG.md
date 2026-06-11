@@ -1,5 +1,25 @@
 # Changelog
 
+## v0.6.0
+
+### Added
+- **`kubernetes.ingress.list`** — a namespace's HTTP entry points: hosts,
+  path→backend (service:port) rules, ingress class, and TLS hosts — the
+  missing link between "service exists" and "what URL serves it"
+  (fluxplane-plugins#7).
+- **`kubernetes.deployment.history`** — rollout revisions (ReplicaSets,
+  newest first) with images, desired/ready replicas, `current` marker, and
+  creation timestamps: "which image ran when" for correlating a regression
+  onset with a deploy (fluxplane-plugins#7).
+
+### Changed
+- **`kubernetes.pod.list` is triage-complete** (fluxplane-plugins#7): pod
+  records carry kubectl-style `ready` ("1/2"), total `restarts`, and
+  per-container `container_states` (ready, restart_count,
+  state incl. waiting reasons like CrashLoopBackOff, and
+  last_termination_reason like OOMKilled).
+- SDK bump to `fluxplane-plugin` v0.13.1; manifest 0.22.0.
+
 ## v0.5.1
 
 ### Changed
