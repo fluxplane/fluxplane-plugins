@@ -20,8 +20,8 @@ github.com/fluxplane/fluxplane-evidence v0.1.0 h1:8aRwuGBEUh651VO3g3V+Uu/GwLb8hK
 github.com/fluxplane/fluxplane-evidence v0.1.0/go.mod h1:QEfiJqSaToePh98xpzeZUiV7eqBwVzoYxFkndoCxhmA=
 github.com/fluxplane/fluxplane-operation v0.2.0 h1:7FB8JWZJOKgEiaTPBzzirNVQe2xVpZZ2aTyrGv/SEdA=
 github.com/fluxplane/fluxplane-operation v0.2.0/go.mod h1:6olgIlsHg3GxmoDqB64zme4BDmbsTR+V7pSAK4F0eO0=
-github.com/fluxplane/fluxplane-plugin v0.11.1 h1:ZFkSV+nGkRJGuPLJocsJBcpmvG07dNCNB+WE7sgt5Oc=
-github.com/fluxplane/fluxplane-plugin v0.11.1/go.mod h1:NuFzDYH97iEuAs99qNdXXSHWbDuZQZkC//SwUIPOrRk=
+github.com/fluxplane/fluxplane-plugin v0.13.0 h1:MB+bT3UA2n9uj1WWhmdxHQlRtIo4alvHbAAQe0/X1Nc=
+github.com/fluxplane/fluxplane-plugin v0.13.0/go.mod h1:NuFzDYH97iEuAs99qNdXXSHWbDuZQZkC//SwUIPOrRk=
 github.com/fluxplane/fluxplane-policy v0.2.0 h1:q1qxqR5XzjxemRMxu7Y1GmZgMAf+YFm5Vcnbxpjj7RU=
 github.com/fluxplane/fluxplane-policy v0.2.0/go.mod h1:elG/jPzZtX1j7GaFewjpc2tiD8LJMW1lVTxZUPQPDsc=
 github.com/fluxplane/fluxplane-secret v0.2.0 h1:/EzUoR2NysaV7iW70FeROGIcI/HG+SXFR4HD3U8Xqnc=

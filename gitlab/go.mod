@@ -22,7 +22,7 @@ require (
 	github.com/bahlo/generic-list-go v0.2.0 // indirect
 	github.com/buger/jsonparser v1.2.0 // indirect
 	github.com/fatih/color v1.19.0 // indirect
-	github.com/fluxplane/fluxplane-plugin v0.11.1
+	github.com/fluxplane/fluxplane-plugin v0.13.0
 	github.com/google/go-cmp v0.7.0 // indirect
 	github.com/google/go-querystring v1.2.0 // indirect
 	github.com/graph-gophers/graphql-go v1.10.2 // indirect
