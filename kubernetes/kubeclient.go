@@ -305,6 +305,9 @@ func HostKubePortForwardList(ctx pluginbinding.Context, input PortForwardListInp
 		if contextName != "" && meta["context"] != contextName {
 			continue
 		}
+		if input.Live && !process.Alive {
+			continue
+		}
 		record := PortForwardRecord{
 			ID:        process.ID,
 			Context:   meta["context"],

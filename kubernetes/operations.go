@@ -243,6 +243,7 @@ type PortForwardStopInput struct {
 type PortForwardListInput struct {
 	Namespace string `json:"namespace,omitempty" jsonschema:"description=Filter by namespace."`
 	Context   string `json:"context,omitempty" jsonschema:"description=Filter by kubeconfig context."`
+	Live      bool   `json:"live,omitempty" jsonschema:"description=Only list forwards whose process is alive. Dead entries (kept for their log_path) accumulate across sessions; this cuts the noise."`
 }
 
 // PortForwardRecord is one managed port-forward from the host process store,

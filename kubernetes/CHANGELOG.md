@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.6.1
+
+### Added
+- `kubernetes.portforward.list` accepts `live: true` to list only forwards
+  whose process is alive — dead entries (kept for their `log_path`)
+  accumulate across sessions and no longer have to be filtered client-side
+  (fluxplane-plugins#11). Manifest 0.22.1.
+
 ## v0.6.0
 
 ### Added
