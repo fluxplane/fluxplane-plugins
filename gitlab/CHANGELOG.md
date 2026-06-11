@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.22.1
+
+### Fixed
+- The advanced-search 400 mapping on `gitlab.search.blobs` now also covers
+  group scope ("group-wide code search is unavailable — pass project:")
+  (fluxplane-plugins#8).
+
 ## v0.22.0
 
 ### Added

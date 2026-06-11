@@ -22,6 +22,7 @@ type CallAnalyzeInput struct {
 	Numbers           []string `json:"numbers,omitempty" jsonschema:"description=Extra numbers (agents\\, extensions) to widen the leg search; legs involving them are included even without the correlation header."`
 	Headers           []string `json:"headers,omitempty" jsonschema:"description=Additional SIP headers to extract from each leg's INVITE for the report."`
 	Limit             int      `json:"limit,omitempty" jsonschema:"description=Maximum candidate legs from the fan-out. Default 50\\, max 200."`
+	Render            string   `json:"render,omitempty" jsonschema:"description=Render the merged multi-leg flow as an image blob (sequence diagram with per-leg labels and failure highlighting). Returns ladder_blob.,enum=svg"`
 }
 
 // CallLeg is one confirmed leg of a multi-leg call.
@@ -49,6 +50,8 @@ type CallAnalyzeResult struct {
 	Events            []FlowEvent `json:"events,omitempty"`
 	EventCount        int         `json:"event_count"`
 	Ladder            string      `json:"ladder,omitempty"`
+	// LadderBlob is the rendered merged sequence diagram (render: svg).
+	LadderBlob *pluginbinding.BlobRef `json:"ladder_blob,omitempty"`
 }
 
 // CallAnalyze finds the legs of a multi-leg call:
@@ -244,6 +247,14 @@ func (s Service) CallAnalyze(ctx pluginbinding.Context, input CallAnalyzeInput) 
 		}
 	}
 	events := flowEvents(matchedMessages, false, nil)
+	legIDs := make([]string, 0, len(legs))
+	for _, leg := range legs {
+		legIDs = append(legIDs, leg.CallID)
+	}
+	blob, err := renderLadderBlob(ctx, input.Render, events, legIDs)
+	if err != nil {
+		return CallAnalyzeResult{}, err
+	}
 
 	return CallAnalyzeResult{
 		URL:               input.EndpointRef,
@@ -255,5 +266,6 @@ func (s Service) CallAnalyze(ctx pluginbinding.Context, input CallAnalyzeInput) 
 		Events:            events,
 		EventCount:        len(events),
 		Ladder:            renderLadder(events),
+		LadderBlob:        blob,
 	}, nil
 }

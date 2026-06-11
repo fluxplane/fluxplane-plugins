@@ -1256,6 +1256,9 @@ func (s Service) DownloadFile(ctx pluginbinding.Context, input FileDownloadInput
 			return FileDownloadResult{}, pluginbinding.Errorf("blob", "%s", err)
 		}
 		result.Blob = blob
+		// The documented top-level path must carry the real value, not only
+		// the nested blob record.
+		result.Path = blob.Path
 		result.Size = len(result.content)
 		result.content = nil
 	}
@@ -1303,6 +1306,11 @@ func (s Service) UploadFile(ctx pluginbinding.Context, input FileUploadInput) (F
 	}
 	result, err := client.UploadFile(context.Background(), request)
 	if err != nil {
+		// Uploads require channel membership even where message.send does not
+		// — name the remedy instead of surfacing Slack's bare not_in_channel.
+		if strings.Contains(err.Error(), "not_in_channel") {
+			return FileUploadResult{}, pluginbinding.Errorf("slack", "%s — the %s token must be a member of this channel to upload files (unlike message.send); run slack.channel.join first or try the other role", err, role)
+		}
 		return FileUploadResult{}, pluginbinding.Errorf("slack", "%s", err)
 	}
 	result.Role = role

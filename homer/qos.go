@@ -112,9 +112,12 @@ type StreamMetrics struct {
 	SrcPort     int       `json:"src_port"`
 	DstIP       string    `json:"dst_ip"`
 	DstPort     int       `json:"dst_port"`
-	Reports     int       `json:"reports"`
-	Packets     uint32    `json:"packets"`
-	PacketsLost int       `json:"packets_lost"`
+	Reports int `json:"reports"`
+	// Packets is per reporter: it sums cumulative counts from RTCP Sender
+	// Reports emitted by this stream's sender. A healthy stream reads 0 when
+	// its side sends no SR cumulative counts — 0 does NOT mean "no media".
+	Packets     uint32 `json:"packets" jsonschema:"description=Cumulative packet count from this side's RTCP Sender Reports. Per reporter: a healthy stream shows 0 when its sender emits no SR cumulative counts — not proof of missing media."`
+	PacketsLost int    `json:"packets_lost"`
 	LossPercent float64   `json:"loss_percent"`
 	AvgJitterMS float64   `json:"avg_jitter_ms"`
 	MaxJitterMS float64   `json:"max_jitter_ms"`

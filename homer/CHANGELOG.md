@@ -1,5 +1,24 @@
 # Changelog
 
+## v0.4.0
+
+### Added
+- **Built-in SIP ladder rendering** (fluxplane-plugins#8): `render: "svg"`
+  on `homer.call.show` and `homer.call.analyze` returns `ladder_blob` — an
+  SVG sequence diagram with lifelines per host, arrows labeled
+  method+offset, inline SDP/media annotations, failure highlighting (>=400,
+  BYE, CANCEL in red; 2xx green; 1xx gray), and per-leg labels for merged
+  multi-leg flows.
+
+### Changed
+- `call.qos` documents `packets` semantics: it is per reporter (cumulative
+  counts from that side's RTCP Sender Reports), so a healthy stream can
+  read 0 — not proof of missing media (fluxplane-plugins#8).
+- `call.list` documents that `end_time`/`duration` span the *discovered*
+  messages and may understate long calls; `call.show` fetches the
+  authoritative full flow (fluxplane-plugins#8).
+- SDK bump to `fluxplane-plugin` v0.14.0. Manifest 0.4.0.
+
 ## v0.3.0
 
 ### Added

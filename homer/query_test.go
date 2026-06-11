@@ -183,3 +183,28 @@ func TestExtractSIPHeaders(t *testing.T) {
 		t.Fatalf("no requested headers should yield nil")
 	}
 }
+
+func TestRenderLadderSVG(t *testing.T) {
+	events := []FlowEvent{
+		{OffsetMS: 0, CallID: "leg-a", Src: "10.0.0.1:5060", Dst: "10.0.0.2:5060", Method: "INVITE", SDP: "PCMA :17818"},
+		{OffsetMS: 20, CallID: "leg-a", Src: "10.0.0.2:5060", Dst: "10.0.0.1:5060", Method: "180"},
+		{OffsetMS: 90, CallID: "leg-b", Src: "10.0.0.2:5060", Dst: "10.0.0.3:5060", Method: "486"},
+		{OffsetMS: 120, CallID: "leg-a", Src: "10.0.0.1:5060", Dst: "10.0.0.2:5060", Method: "BYE"},
+	}
+	svg := string(RenderLadderSVG(events))
+	if !strings.HasPrefix(svg, "<svg ") || !strings.HasSuffix(svg, "</svg>") {
+		t.Fatalf("not an svg document: %.80s", svg)
+	}
+	// Three lifelines, one per host.
+	if got := strings.Count(svg, "stroke-dasharray"); got != 3 {
+		t.Fatalf("lifelines = %d, want 3", got)
+	}
+	// Failure highlighting on 486 and BYE; success-ish gray on 180.
+	if !strings.Contains(svg, ">L2: 486 +90ms<") || !strings.Contains(svg, "#cc2929") {
+		t.Fatalf("missing highlighted failure: %s", svg)
+	}
+	// Multi-leg flows carry per-leg prefixes; SDP annotation rides the label.
+	if !strings.Contains(svg, "L1: INVITE +0ms") || !strings.Contains(svg, "[PCMA :17818]") {
+		t.Fatalf("missing labels: %s", svg)
+	}
+}

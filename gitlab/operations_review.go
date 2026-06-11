@@ -885,10 +885,13 @@ func (s Service) SearchBlobs(ctx pluginbinding.Context, input BlobSearchInput) (
 	}
 	matches, truncated, err := client.SearchBlobs(project, group, query, input.Ref, limit)
 	if err != nil {
-		// Instance-wide blob search needs advanced search (Elasticsearch/
-		// Zoekt); GitLab answers a raw 400 about "scope" — translate it to
-		// the action that works everywhere.
-		if project == nil && group == nil && strings.Contains(strings.ToLower(err.Error()), "scope supported only") {
+		// Instance- and group-wide blob search need advanced search
+		// (Elasticsearch/Zoekt); GitLab answers a raw 400 about "scope" —
+		// translate it to the action that works everywhere.
+		if strings.Contains(strings.ToLower(err.Error()), "scope supported only") {
+			if group != nil {
+				return BlobSearchResult{}, pluginbinding.Fail("bad_input", "this GitLab instance has no advanced search, so group-wide code search is unavailable — pass project: to scope the search")
+			}
 			return BlobSearchResult{}, pluginbinding.Fail("bad_input", "this GitLab instance has no advanced search, so instance-wide code search is unavailable — pass project: or group: to scope the search")
 		}
 		return BlobSearchResult{}, pluginbinding.Errorf("gitlab", "%s", err)

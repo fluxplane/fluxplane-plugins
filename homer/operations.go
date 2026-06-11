@@ -305,8 +305,8 @@ type CallListInput struct {
 type CallSummaryRecord struct {
 	CallID    string `json:"call_id"`
 	StartTime string `json:"start_time"`
-	EndTime   string `json:"end_time,omitempty"`
-	Duration  string `json:"duration,omitempty"`
+	EndTime   string `json:"end_time,omitempty" jsonschema:"description=Last message seen during call discovery — may understate long calls whose later in-dialog messages fell outside the discovery batch. call.show fetches the full flow."`
+	Duration  string `json:"duration,omitempty" jsonschema:"description=Span of the discovered messages\\, not necessarily the full call — use call.show for the authoritative flow timing."`
 	Caller    string `json:"caller"`
 	Callee    string `json:"callee"`
 	Direction string `json:"direction,omitempty"`
@@ -380,6 +380,7 @@ type CallShowInput struct {
 	CallIDs    []string `json:"call_ids,omitempty" jsonschema:"required,description=One or more SIP Call-IDs."`
 	IncludeRaw bool     `json:"include_raw,omitempty" jsonschema:"description=Attach the full raw SIP message to each flow event."`
 	Headers    []string `json:"headers,omitempty" jsonschema:"description=SIP header names (e.g. X-CID) to project from each message onto the event — correlation headers without raw parsing."`
+	Render     string   `json:"render,omitempty" jsonschema:"description=Render the flow as an image blob: a sequence diagram with lifelines per host\\, arrows labeled method+offset\\, SDP annotations\\, and failure highlighting. Returns ladder_blob.,enum=svg"`
 }
 
 // FlowEvent is one message in a call flow, ordered by time.
@@ -401,15 +402,18 @@ type FlowEvent struct {
 }
 
 type CallShowResult struct {
-	URL      string      `json:"url"`
-	CallIDs  []string    `json:"call_ids"`
-	Events   []FlowEvent `json:"events"`
-	Count    int         `json:"count"`
-	Ladder   string      `json:"ladder,omitempty" jsonschema:"description=Plain-text message ladder for human reading."`
-	Status   string      `json:"status,omitempty"`
-	Caller   string      `json:"caller,omitempty"`
-	Callee   string      `json:"callee,omitempty"`
-	Duration string      `json:"duration,omitempty"`
+	URL     string      `json:"url"`
+	CallIDs []string    `json:"call_ids"`
+	Events  []FlowEvent `json:"events"`
+	Count   int         `json:"count"`
+	Ladder  string      `json:"ladder,omitempty" jsonschema:"description=Plain-text message ladder for human reading."`
+	// LadderBlob is the rendered sequence diagram (render: svg) stored in the
+	// blob store — share it as a file instead of hand-drawing the flow.
+	LadderBlob *pluginbinding.BlobRef `json:"ladder_blob,omitempty"`
+	Status     string                 `json:"status,omitempty"`
+	Caller     string                 `json:"caller,omitempty"`
+	Callee     string                 `json:"callee,omitempty"`
+	Duration   string                 `json:"duration,omitempty"`
 }
 
 func (s Service) CallShow(ctx pluginbinding.Context, input CallShowInput) (CallShowResult, error) {
@@ -455,7 +459,34 @@ func (s Service) CallShow(ctx pluginbinding.Context, input CallShowInput) (CallS
 			out.Duration = formatDuration(first.Duration)
 		}
 	}
+	blob, err := renderLadderBlob(ctx, input.Render, events, callIDs)
+	if err != nil {
+		return CallShowResult{}, err
+	}
+	out.LadderBlob = blob
 	return out, nil
+}
+
+// renderLadderBlob renders the flow as an image blob when requested ("svg")
+// and stores it via the host blob store.
+func renderLadderBlob(ctx pluginbinding.Context, render string, events []FlowEvent, callIDs []string) (*pluginbinding.BlobRef, error) {
+	render = strings.ToLower(strings.TrimSpace(render))
+	if render == "" {
+		return nil, nil
+	}
+	if render != "svg" {
+		return nil, pluginbinding.Fail("bad_input", "render must be svg")
+	}
+	blob, err := ctx.Host.BlobWrite(pluginbinding.BlobWriteRequest{
+		Content:   RenderLadderSVG(events),
+		Filename:  "ladder.svg",
+		MediaType: "image/svg+xml",
+		Metadata:  map[string]string{"source": "homer", "call_ids": strings.Join(callIDs, ",")},
+	})
+	if err != nil {
+		return nil, pluginbinding.Errorf("blob", "%s", err)
+	}
+	return &blob, nil
 }
 
 // callIDSmartInput renders "sid = 'a' OR sid = 'b'".

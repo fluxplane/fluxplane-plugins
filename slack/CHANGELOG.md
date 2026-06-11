@@ -1,5 +1,21 @@
 # Changelog
 
+## v0.22.0
+
+### Fixed
+- `slack.file.download` populates its documented top-level `path` with the
+  stored blob path (previously only `blob.path` carried it)
+  (fluxplane-plugins#8).
+- `slack.file.upload` maps Slack's bare `not_in_channel` to an actionable
+  error: the token must be a channel member to upload (unlike message.send)
+  — run `slack.channel.join` first or try the other role
+  (fluxplane-plugins#8).
+
+### Changed
+- SDK bump to `fluxplane-plugin` v0.14.0 (its new `blob put PLUGIN FILE`
+  closes the local-file → `blob_ref` loop for `slack.file.upload`).
+  Manifest 0.22.0.
+
 ## v0.21.0
 
 ### Added
