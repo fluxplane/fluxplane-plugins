@@ -129,10 +129,11 @@ func (s Service) Test(ctx pluginbinding.Context, input TestInput) (TestResult, e
 type SearchInput struct {
 	HomerTargetInput
 	TimeRangeInput
-	Number   string `json:"number,omitempty" jsonschema:"description=Phone number matched against caller OR callee\\, with and without + prefix."`
-	FromUser string `json:"from_user,omitempty" jsonschema:"description=Caller filter (use % as wildcard)."`
-	ToUser   string `json:"to_user,omitempty" jsonschema:"description=Callee filter (use % as wildcard)."`
-	CallID   string `json:"call_id,omitempty" jsonschema:"description=Exact SIP Call-ID."`
+	Number      string `json:"number,omitempty" jsonschema:"description=Phone number matched against caller OR callee\\, expanded to bare\\, +-prefixed\\, and 00-prefixed forms."`
+	NumberMatch string `json:"number_match,omitempty" jsonschema:"description=How number matches: exact (the three prefix variants) or contains (digits anywhere\\, catches national formats). Defaults to exact.,enum=exact,enum=contains"`
+	FromUser    string `json:"from_user,omitempty" jsonschema:"description=Caller filter (use % as wildcard)."`
+	ToUser      string `json:"to_user,omitempty" jsonschema:"description=Callee filter (use % as wildcard)."`
+	CallID      string `json:"call_id,omitempty" jsonschema:"description=Exact SIP Call-ID."`
 	UA       string `json:"ua,omitempty" jsonschema:"description=User-Agent filter (use % as wildcard)."`
 	Method   string `json:"method,omitempty" jsonschema:"description=SIP method or response code\\, e.g. INVITE or 486."`
 	Query    string `json:"query,omitempty" jsonschema:"description=Query DSL: field = 'value' with AND/OR and % wildcards. Fields: call_id\\, cseq\\, from_user\\, method\\, ruri_user\\, sid\\, status\\, to_user\\, ua\\, user_agent."`
@@ -240,17 +241,22 @@ func messageRecord(record CallRecord) MessageRecord {
 func buildSearchFilters(input SearchInput) (string, error) {
 	var criteria [][]string
 	if number := strings.TrimSpace(input.Number); number != "" {
-		alternatives := append(NumberAlternatives("data_header.from_user", number), NumberAlternatives("data_header.to_user", number)...)
+		var alternatives []string
+		if strings.EqualFold(strings.TrimSpace(input.NumberMatch), "contains") {
+			alternatives = append(NumberContainsAlternative("data_header.from_user", number), NumberContainsAlternative("data_header.to_user", number)...)
+		} else {
+			alternatives = append(NumberAlternatives("data_header.from_user", number), NumberAlternatives("data_header.to_user", number)...)
+		}
 		criteria = append(criteria, alternatives)
 	}
 	if from := strings.TrimSpace(input.FromUser); from != "" {
-		criteria = append(criteria, []string{fmt.Sprintf("data_header.from_user = '%s'", from)})
+		criteria = append(criteria, []string{userPredicate("data_header.from_user", from)})
 	}
 	if to := strings.TrimSpace(input.ToUser); to != "" {
-		criteria = append(criteria, []string{fmt.Sprintf("data_header.to_user = '%s'", to)})
+		criteria = append(criteria, []string{userPredicate("data_header.to_user", to)})
 	}
 	if ua := strings.TrimSpace(input.UA); ua != "" {
-		criteria = append(criteria, []string{fmt.Sprintf("data_header.user_agent = '%s'", ua)})
+		criteria = append(criteria, []string{userPredicate("data_header.user_agent", ua)})
 	}
 	if method := strings.TrimSpace(input.Method); method != "" {
 		criteria = append(criteria, []string{fmt.Sprintf("method = '%s'", strings.ToUpper(method))})
@@ -287,10 +293,11 @@ func clampLimit(limit, fallback, max int) int {
 type CallListInput struct {
 	HomerTargetInput
 	TimeRangeInput
-	Number   string `json:"number,omitempty" jsonschema:"description=Phone number matched against caller OR callee; also sets direction on results."`
-	FromUser string `json:"from_user,omitempty" jsonschema:"description=Caller filter (use % as wildcard)."`
-	ToUser   string `json:"to_user,omitempty" jsonschema:"description=Callee filter (use % as wildcard)."`
-	Query    string `json:"query,omitempty" jsonschema:"description=Query DSL filter\\, see homer.search."`
+	Number      string `json:"number,omitempty" jsonschema:"description=Phone number matched against caller OR callee; also sets direction on results."`
+	NumberMatch string `json:"number_match,omitempty" jsonschema:"description=How number matches: exact (bare/+/00 prefix variants) or contains (digits anywhere). Defaults to exact.,enum=exact,enum=contains"`
+	FromUser    string `json:"from_user,omitempty" jsonschema:"description=Caller filter (use % as wildcard)."`
+	ToUser      string `json:"to_user,omitempty" jsonschema:"description=Callee filter (use % as wildcard)."`
+	Query       string `json:"query,omitempty" jsonschema:"description=Query DSL filter\\, see homer.search."`
 	Limit    int    `json:"limit,omitempty" jsonschema:"description=Maximum calls. Default 50\\, max 200."`
 }
 
@@ -325,7 +332,7 @@ func (s Service) CallList(ctx pluginbinding.Context, input CallListInput) (CallL
 	if err != nil {
 		return CallListResult{}, pluginbinding.Errorf("bad_input", "%s", err)
 	}
-	smartInput, err := buildSearchFilters(SearchInput{Number: input.Number, FromUser: input.FromUser, ToUser: input.ToUser, Query: input.Query})
+	smartInput, err := buildSearchFilters(SearchInput{Number: input.Number, NumberMatch: input.NumberMatch, FromUser: input.FromUser, ToUser: input.ToUser, Query: input.Query})
 	if err != nil {
 		return CallListResult{}, pluginbinding.Errorf("bad_input", "%s", err)
 	}
@@ -372,6 +379,7 @@ type CallShowInput struct {
 	TimeRangeInput
 	CallIDs    []string `json:"call_ids,omitempty" jsonschema:"required,description=One or more SIP Call-IDs."`
 	IncludeRaw bool     `json:"include_raw,omitempty" jsonschema:"description=Attach the full raw SIP message to each flow event."`
+	Headers    []string `json:"headers,omitempty" jsonschema:"description=SIP header names (e.g. X-CID) to project from each message onto the event — correlation headers without raw parsing."`
 }
 
 // FlowEvent is one message in a call flow, ordered by time.
@@ -386,7 +394,10 @@ type FlowEvent struct {
 	FromUser string `json:"from_user,omitempty"`
 	ToUser   string `json:"to_user,omitempty"`
 	SDP      string `json:"sdp,omitempty" jsonschema:"description=Compact SDP media annotation like 'PCMA :17818'."`
-	Raw      string `json:"raw,omitempty"`
+	// Headers carries the values of the SIP headers requested via the
+	// headers input, keyed by the requested name.
+	Headers map[string]string `json:"headers,omitempty"`
+	Raw     string            `json:"raw,omitempty"`
 }
 
 type CallShowResult struct {
@@ -426,7 +437,7 @@ func (s Service) CallShow(ctx pluginbinding.Context, input CallShowInput) (CallS
 	if err != nil {
 		return CallShowResult{}, pluginbinding.Errorf("homer", "%s", err)
 	}
-	events := flowEvents(transaction.Data.Messages, input.IncludeRaw)
+	events := flowEvents(transaction.Data.Messages, input.IncludeRaw, trimmedNonEmpty(input.Headers))
 	calls := GroupCalls(search.Data, "")
 	out := CallShowResult{
 		URL:     input.EndpointRef,
@@ -457,7 +468,8 @@ func callIDSmartInput(callIDs []string) string {
 }
 
 // flowEvents converts transaction SIP messages into ordered flow events.
-func flowEvents(messages []TransactionMessage, includeRaw bool) []FlowEvent {
+// headers names SIP headers to project from each raw message onto the event.
+func flowEvents(messages []TransactionMessage, includeRaw bool, headers []string) []FlowEvent {
 	var sips []TransactionMessage
 	for _, message := range messages {
 		if message.IsSIP() {
@@ -488,6 +500,7 @@ func flowEvents(messages []TransactionMessage, includeRaw bool) []FlowEvent {
 			FromUser: message.FromUser,
 			ToUser:   message.ToUser,
 			SDP:      ExtractSDPMedia(message.Raw),
+			Headers:  extractSIPHeaders(message.Raw, headers),
 		}
 		if includeRaw {
 			event.Raw = message.Raw
@@ -495,6 +508,35 @@ func flowEvents(messages []TransactionMessage, includeRaw bool) []FlowEvent {
 		events = append(events, event)
 	}
 	return events
+}
+
+// extractSIPHeaders pulls the named headers out of a raw SIP message's header
+// section (case-insensitive names, stops at the blank line before the body).
+func extractSIPHeaders(raw string, names []string) map[string]string {
+	if len(names) == 0 || raw == "" {
+		return nil
+	}
+	var out map[string]string
+	for _, line := range strings.Split(raw, "\n") {
+		line = strings.TrimRight(line, "\r")
+		if line == "" {
+			break
+		}
+		colon := strings.Index(line, ":")
+		if colon <= 0 {
+			continue
+		}
+		name := strings.TrimSpace(line[:colon])
+		for _, want := range names {
+			if strings.EqualFold(name, want) {
+				if out == nil {
+					out = map[string]string{}
+				}
+				out[want] = strings.TrimSpace(line[colon+1:])
+			}
+		}
+	}
+	return out
 }
 
 func firstToken(raw string) string {

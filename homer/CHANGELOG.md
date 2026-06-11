@@ -1,5 +1,26 @@
 # Changelog
 
+## v0.3.0
+
+### Added
+- **`headers` projection on `homer.call.show`** (fluxplane-plugins#7): pass
+  `headers: ["X-CID"]` and each flow event carries those SIP header values —
+  correlation on custom X-headers without `raw: true` and manual parsing.
+- **`number_match: "contains"`** on `homer.search` / `homer.call.list`
+  (fluxplane-plugins#7): opt-in broader number matching (digits anywhere via
+  LIKE) that catches national formats; the default exact mode now also
+  covers the `00`-prefixed variant alongside bare and `+`.
+
+### Fixed
+- **`%` wildcards actually match** (fluxplane-plugins#7): `from_user`,
+  `to_user`, `ua` filters and the query DSL emit `LIKE` predicates when the
+  value contains `%` — previously the documented wildcard literal-matched
+  via `=` and could never hit. The smartinput echo shows the effective
+  predicate.
+
+### Changed
+- Requires `fluxplane-plugin` v0.13.1. Manifest 0.3.0.
+
 ## v0.2.0
 
 ### Changed

@@ -76,16 +76,46 @@ func BuildSmartInput(criteria [][]string) string {
 }
 
 // NumberAlternatives renders the smartinput alternatives for a phone number on
-// the given Homer field, with and without the + prefix.
+// the given Homer field: bare, +-prefixed, and 00-prefixed forms — capture
+// points see all three for the same number.
 func NumberAlternatives(field, number string) []string {
-	bare := strings.TrimPrefix(strings.TrimSpace(number), "+")
-	if bare == "" {
+	canonical := canonicalNumber(number)
+	if canonical == "" {
 		return nil
 	}
 	return []string{
-		fmt.Sprintf("%s = '%s'", field, bare),
-		fmt.Sprintf("%s = '+%s'", field, bare),
+		fmt.Sprintf("%s = '%s'", field, canonical),
+		fmt.Sprintf("%s = '+%s'", field, canonical),
+		fmt.Sprintf("%s = '00%s'", field, canonical),
 	}
+}
+
+// NumberContainsAlternative renders an opt-in broader match: the canonical
+// digits anywhere in the field, catching national formats and prefixed
+// variants equality can't enumerate.
+func NumberContainsAlternative(field, number string) []string {
+	canonical := canonicalNumber(number)
+	if canonical == "" {
+		return nil
+	}
+	return []string{fmt.Sprintf("%s LIKE '%%%s%%'", field, canonical)}
+}
+
+// canonicalNumber strips a leading + or 00 so variants are generated from one
+// canonical form.
+func canonicalNumber(number string) string {
+	bare := strings.TrimPrefix(strings.TrimSpace(number), "+")
+	return strings.TrimPrefix(bare, "00")
+}
+
+// userPredicate renders one field predicate; values containing % match as
+// LIKE patterns — the field docs promise % wildcards, so they must not
+// literal-match.
+func userPredicate(field, value string) string {
+	if strings.Contains(value, "%") {
+		return fmt.Sprintf("%s LIKE '%s'", field, value)
+	}
+	return fmt.Sprintf("%s = '%s'", field, value)
 }
 
 type tokenType int
@@ -206,6 +236,9 @@ func (c *condition) toSmartInput() string {
 	}
 	if c.isNum {
 		return fmt.Sprintf("%s %s %s", c.field, c.op, c.value)
+	}
+	if c.op == "=" {
+		return userPredicate(c.field, c.value)
 	}
 	return fmt.Sprintf("%s %s '%s'", c.field, c.op, c.value)
 }

@@ -15,22 +15,22 @@ func TestParseQuery(t *testing.T) {
 		{
 			name:  "simple from_user",
 			input: "from_user = '999%'",
-			want:  "data_header.from_user = '999%'",
+			want:  "data_header.from_user LIKE '999%'",
 		},
 		{
 			name:  "alias ua",
 			input: "ua = 'Asterisk%'",
-			want:  "data_header.user_agent = 'Asterisk%'",
+			want:  "data_header.user_agent LIKE 'Asterisk%'",
 		},
 		{
 			name:  "full name user_agent",
 			input: "user_agent = 'FPBX%'",
-			want:  "data_header.user_agent = 'FPBX%'",
+			want:  "data_header.user_agent LIKE 'FPBX%'",
 		},
 		{
 			name:  "AND",
 			input: "from_user = '999%' AND to_user = '1234'",
-			want:  "data_header.from_user = '999%' AND data_header.to_user = '1234'",
+			want:  "data_header.from_user LIKE '999%' AND data_header.to_user = '1234'",
 		},
 		{
 			name:  "OR",
@@ -40,7 +40,7 @@ func TestParseQuery(t *testing.T) {
 		{
 			name:  "mixed AND with parenthesized OR",
 			input: "from_user = '999%' AND (to_user = '123' OR to_user = '456')",
-			want:  "data_header.from_user = '999%' AND (data_header.to_user = '123' OR data_header.to_user = '456')",
+			want:  "data_header.from_user LIKE '999%' AND (data_header.to_user = '123' OR data_header.to_user = '456')",
 		},
 		{
 			name:  "top-level field method",
@@ -133,5 +133,53 @@ func TestParseQuery(t *testing.T) {
 				t.Errorf("ParseQuery(%q)\n  got:  %q\n  want: %q", tt.input, got, tt.want)
 			}
 		})
+	}
+}
+
+func TestNumberAlternativesCoverPrefixVariants(t *testing.T) {
+	got := NumberAlternatives("data_header.from_user", "+49301234567")
+	want := []string{
+		"data_header.from_user = '49301234567'",
+		"data_header.from_user = '+49301234567'",
+		"data_header.from_user = '0049301234567'",
+	}
+	if len(got) != len(want) {
+		t.Fatalf("alternatives = %#v", got)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("alternatives[%d] = %q, want %q", i, got[i], want[i])
+		}
+	}
+	// 00-prefixed input normalizes to the same canonical variants.
+	if normalized := NumberAlternatives("f", "0049301234567"); normalized[0] != "f = '49301234567'" {
+		t.Fatalf("00-input alternatives = %#v", normalized)
+	}
+}
+
+func TestNumberContainsAlternative(t *testing.T) {
+	got := NumberContainsAlternative("data_header.to_user", "+4930123")
+	if len(got) != 1 || got[0] != "data_header.to_user LIKE '%4930123%'" {
+		t.Fatalf("contains alternative = %#v", got)
+	}
+}
+
+func TestUserPredicateUpgradesWildcardsToLike(t *testing.T) {
+	if got := userPredicate("data_header.from_user", "%1234567%"); got != "data_header.from_user LIKE '%1234567%'" {
+		t.Fatalf("wildcard predicate = %q", got)
+	}
+	if got := userPredicate("data_header.from_user", "1234567"); got != "data_header.from_user = '1234567'" {
+		t.Fatalf("plain predicate = %q", got)
+	}
+}
+
+func TestExtractSIPHeaders(t *testing.T) {
+	raw := "INVITE sip:123@example.com SIP/2.0\r\nFrom: <sip:a@x>\r\nX-CID: abc-123\r\nx-tenant: lyse\r\n\r\nbody X-CID: not-this"
+	got := extractSIPHeaders(raw, []string{"X-CID", "X-Tenant"})
+	if got["X-CID"] != "abc-123" || got["X-Tenant"] != "lyse" {
+		t.Fatalf("headers = %#v", got)
+	}
+	if extractSIPHeaders(raw, nil) != nil {
+		t.Fatalf("no requested headers should yield nil")
 	}
 }

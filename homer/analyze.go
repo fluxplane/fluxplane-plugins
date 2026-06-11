@@ -243,7 +243,7 @@ func (s Service) CallAnalyze(ctx pluginbinding.Context, input CallAnalyzeInput) 
 			matchedMessages = append(matchedMessages, message)
 		}
 	}
-	events := flowEvents(matchedMessages, false)
+	events := flowEvents(matchedMessages, false, nil)
 
 	return CallAnalyzeResult{
 		URL:               input.EndpointRef,
