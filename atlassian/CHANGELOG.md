@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.7.0
+
+### Added
+- **`web_url` on Jira issue outputs** (fluxplane-plugins#7): `issue.show`,
+  `issue.create`, search results, and datasource records carry the human
+  `https://<site>.atlassian.net/browse/KEY-123` link alongside the
+  api.atlassian.com self URL. The site URL resolves from the new optional
+  `site_url` auth field (env hints `ATLASSIAN_SITE_URL`/`JIRA_URL` at
+  setup time); installs that connected before the field existed fall back
+  to one `accessible-resources` call with the stored token.
+- Jira manifest 0.22.0.
+
 ## v0.6.1
 
 ### Fixed

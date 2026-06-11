@@ -34,12 +34,13 @@ func withInputExamples(spec core.OperationSpec, examples ...map[string]any) core
 
 const (
 	PluginName        = "jira"
-	PluginVersion     = "0.21.0"
+	PluginVersion     = "0.22.0"
 	PluginDescription = "Jira Cloud issue operations, comments, attachments, transitions, datasources, indexes, and reverse lookups."
 
 	AuthMethodAtlassianCloud = "atlassian_cloud_basic"
 	AuthPurposeAPIToken      = "api_token"
 	AuthPurposeCloudID       = "cloud_id"
+	AuthPurposeSiteURL       = "site_url"
 
 	EnvAtlassianAPIToken = "ATLASSIAN_API_TOKEN"
 	EnvJiraAPIToken      = "JIRA_API_TOKEN"
@@ -96,6 +97,7 @@ func manifestSpec() pluginbinding.ManifestSpec {
 			Fields: []core.AuthField{
 				pluginbinding.AuthField(AuthPurposeAPIToken, "Atlassian API token", true, true, EnvJiraAPIToken, EnvAtlassianAPIToken),
 				pluginbinding.AuthField(AuthPurposeCloudID, "Atlassian Cloud ID", false, true, "ATLASSIAN_CLOUD_ID", "JIRA_CLOUD_ID"),
+				pluginbinding.AuthField(AuthPurposeSiteURL, "Atlassian site URL (https://<site>.atlassian.net) used for human browse links on issue outputs", false, false, EnvAtlassianSiteURL, EnvJiraURL),
 			},
 		}},
 		Endpoints: []core.EndpointSpec{{
@@ -352,5 +354,5 @@ func jiraUsersLookupSpec() core.DatasourceSpec {
 }
 
 func atlassianAuthPurposes() []string {
-	return []string{AuthPurposeAPIToken, AuthPurposeCloudID}
+	return []string{AuthPurposeAPIToken, AuthPurposeCloudID, AuthPurposeSiteURL}
 }

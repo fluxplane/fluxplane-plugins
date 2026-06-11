@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"regexp"
 	"strings"
+	"sync"
 
 	"github.com/fluxplane/fluxplane-plugin/pluginbinding"
 	"github.com/fluxplane/fluxplane-plugins/atlassian/internal/atlassian"
@@ -19,14 +20,42 @@ func NewService() Service {
 	return Service{ClientFactory: NewLiveClient}
 }
 
-func (s Service) client(ctx pluginbinding.Context, input any) (Client, string, error) {
+func (s Service) client(ctx pluginbinding.Context, input any) (Client, func() string, error) {
 	endpointRef := jiraEndpointRef(ctx, input)
 	factory := s.ClientFactory
 	if factory == nil {
 		factory = NewLiveClient
 	}
 	client, err := factory(ctx, endpointRef)
-	return client, "", err
+	if err != nil {
+		return client, func() string { return "" }, err
+	}
+	// Lazy: resolving may cost an accessible-resources call when site_url is
+	// not stored, so only paths that emit web_url should pay it.
+	return client, sync.OnceValue(func() string { return browseBaseURL(ctx, client) }), nil
+}
+
+// browseBaseURL returns the site URL human browse links hang off
+// (https://<site>.atlassian.net): the persisted site_url secret when stored,
+// else one accessible-resources call with the stored token — the cloud-id →
+// site mapping for installs that connected before the site_url field existed.
+// Empty means issue outputs omit web_url.
+func browseBaseURL(ctx pluginbinding.Context, client Client) string {
+	if ctx.Host != nil {
+		if material, err := ctx.Host.Secret(AuthPurposeSiteURL); err == nil {
+			if site := strings.TrimRight(strings.TrimSpace(material.Value), "/"); site != "" {
+				return site
+			}
+		}
+	}
+	if client == nil {
+		return ""
+	}
+	site, err := client.AccessibleSiteURL(context.Background())
+	if err != nil {
+		return ""
+	}
+	return strings.TrimRight(strings.TrimSpace(site), "/")
 }
 
 func jiraEndpointRef(ctx pluginbinding.Context, input any) string {
@@ -272,7 +301,7 @@ func (s Service) IssueSearch(ctx pluginbinding.Context, input IssueSearchInput) 
 }
 
 func (s Service) IssueShow(ctx pluginbinding.Context, input IssueShowInput) (pluginbinding.ShowResult[Issue], error) {
-	client, _, err := s.client(ctx, input)
+	client, resolveBrowseBase, err := s.client(ctx, input)
 	if err != nil {
 		return pluginbinding.ShowResult[Issue]{}, pluginbinding.Errorf("secret", "%s", err)
 	}
@@ -285,6 +314,7 @@ func (s Service) IssueShow(ctx pluginbinding.Context, input IssueShowInput) (plu
 		return pluginbinding.ShowResult[Issue]{}, pluginbinding.Errorf("jira", "%s", err)
 	}
 	issue.render(input.format())
+	issue.WebURL = issueWebURL(resolveBrowseBase(), issue.Key)
 	return pluginbinding.NewShowResult(issue, map[string]any{"key": key}), nil
 }
 
@@ -415,7 +445,7 @@ func (s Service) TransitionRun(ctx pluginbinding.Context, input IssueTransitionR
 }
 
 func (s Service) IssueCreate(ctx pluginbinding.Context, input IssueCreateInput) (IssueMutationResult, error) {
-	client, _, err := s.client(ctx, input)
+	client, resolveBrowseBase, err := s.client(ctx, input)
 	if err != nil {
 		return IssueMutationResult{}, pluginbinding.Errorf("secret", "%s", err)
 	}
@@ -427,6 +457,7 @@ func (s Service) IssueCreate(ctx pluginbinding.Context, input IssueCreateInput) 
 	if err != nil {
 		return IssueMutationResult{}, pluginbinding.Errorf("jira", "%s", err)
 	}
+	result.WebURL = issueWebURL(resolveBrowseBase(), result.Key)
 	result.Issue.render(bodyFormatMarkdown)
 	if strings.TrimSpace(input.DescriptionMarkdown) != "" && strings.TrimSpace(result.Key) != "" {
 		rewritten, uploadErr := uploadMarkdownBlobImages(ctx, client, result.Key, input.DescriptionMarkdown)
@@ -692,7 +723,7 @@ func (s Service) UserSearch(ctx pluginbinding.Context, input UserSearchInput) (U
 }
 
 func (s Service) IssueDatasource(ctx pluginbinding.Context, input IssueSearchInput) (IssueDatasourceResult, error) {
-	client, baseURL, err := s.client(ctx, input)
+	client, resolveBrowseBase, err := s.client(ctx, input)
 	if err != nil {
 		return IssueDatasourceResult{}, pluginbinding.Errorf("secret", "%s", err)
 	}
@@ -700,7 +731,7 @@ func (s Service) IssueDatasource(ctx pluginbinding.Context, input IssueSearchInp
 	if err != nil {
 		return IssueDatasourceResult{}, pluginbinding.Errorf("jira", "%s", err)
 	}
-	records := issueRecords(ctx.DatasourceSource(), baseURL, issues)
+	records := issueRecords(ctx.DatasourceSource(), resolveBrowseBase(), issues)
 	return pluginbinding.NewDatasourceSearchResult(DatasourceIssues, issueSearchDisplayQuery(pluginbinding.InputMap(input)), records), nil
 }
 
@@ -718,7 +749,7 @@ func (s Service) UserDatasource(ctx pluginbinding.Context, input UserSearchInput
 }
 
 func (s Service) IssueDatasourceGet(ctx pluginbinding.Context, input pluginbinding.DatasourceGetInput) (pluginbinding.DatasourceGetResult[IssueRecord], error) {
-	client, baseURL, err := s.client(ctx, input)
+	client, resolveBrowseBase, err := s.client(ctx, input)
 	if err != nil {
 		return pluginbinding.DatasourceGetResult[IssueRecord]{}, pluginbinding.Errorf("secret", "%s", err)
 	}
@@ -730,7 +761,7 @@ func (s Service) IssueDatasourceGet(ctx pluginbinding.Context, input pluginbindi
 	if err != nil {
 		return pluginbinding.DatasourceGetResult[IssueRecord]{}, pluginbinding.Errorf("jira", "%s", err)
 	}
-	record, ok := normalizeIssueRecord(ctx.DatasourceSource(), baseURL, issue)
+	record, ok := normalizeIssueRecord(ctx.DatasourceSource(), resolveBrowseBase(), issue)
 	if !ok {
 		return pluginbinding.DatasourceGetResult[IssueRecord]{}, pluginbinding.Fail("not_found", "jira issue not found")
 	}
@@ -758,7 +789,7 @@ func (s Service) UserDatasourceGet(ctx pluginbinding.Context, input pluginbindin
 }
 
 func (s Service) IndexBuild(ctx pluginbinding.Context, input IndexBuildInput) (pluginbinding.IndexBuildResult, error) {
-	client, baseURL, err := s.client(ctx, input)
+	client, resolveBrowseBase, err := s.client(ctx, input)
 	if err != nil {
 		return pluginbinding.IndexBuildResult{}, pluginbinding.Errorf("secret", "%s", err)
 	}
@@ -773,7 +804,7 @@ func (s Service) IndexBuild(ctx pluginbinding.Context, input IndexBuildInput) (p
 		pluginbinding.NewIndexJob(DatasourceIssues, EntityIssue, OperationIndexBuild, func() ([]Issue, error) {
 			return client.SearchIssues(context.Background(), issueOptions)
 		}, func(source pluginbinding.DatasourceSource, issue Issue) (IssueRecord, bool) {
-			return normalizeIssueRecord(source, baseURL, issue)
+			return normalizeIssueRecord(source, resolveBrowseBase(), issue)
 		}, indexMetadata(EntityIssue, map[string]any{"jql": issueOptions.JQL, "query": issueOptions.Query, "project": issueOptions.Project, "status": issueOptions.Status, "limit": issueOptions.Limit})),
 		pluginbinding.NewIndexJob(DatasourceUsers, EntityUser, OperationIndexBuild, func() ([]User, error) {
 			return client.SearchUsers(context.Background(), userOptions)
@@ -782,7 +813,7 @@ func (s Service) IndexBuild(ctx pluginbinding.Context, input IndexBuildInput) (p
 }
 
 func (s Service) Lookup(ctx pluginbinding.Context, input LookupInput) (LookupResult, error) {
-	client, baseURL, err := s.client(ctx, input)
+	client, resolveBrowseBase, err := s.client(ctx, input)
 	if err != nil {
 		return LookupResult{}, pluginbinding.Errorf("secret", "%s", err)
 	}
@@ -790,7 +821,7 @@ func (s Service) Lookup(ctx pluginbinding.Context, input LookupInput) (LookupRes
 	if input.Entity == "" || input.Entity == EntityIssue {
 		for _, key := range lookupIssueKeys(input) {
 			if issue, err := client.GetIssue(context.Background(), key); err == nil {
-				record, ok := normalizeIssueRecord(ctx.DatasourceSource(), baseURL, issue)
+				record, ok := normalizeIssueRecord(ctx.DatasourceSource(), resolveBrowseBase(), issue)
 				if ok {
 					candidates = append(candidates, pluginbinding.NewExactLookupCandidate(ctx.LookupSource(PluginName, DatasourceIssues), record.Entity, record.ID, 1200, []string{"key"}, record, issueLookupValues(record)))
 				}
@@ -802,7 +833,7 @@ func (s Service) Lookup(ctx pluginbinding.Context, input LookupInput) (LookupRes
 				return LookupResult{}, pluginbinding.Errorf("jira", "%s", err)
 			}
 			for _, issue := range issues {
-				record, ok := normalizeIssueRecord(ctx.DatasourceSource(), baseURL, issue)
+				record, ok := normalizeIssueRecord(ctx.DatasourceSource(), resolveBrowseBase(), issue)
 				if ok {
 					candidates = append(candidates, pluginbinding.NewLookupCandidate(ctx.LookupSource(PluginName, DatasourceIssues), record.Entity, record.ID, record, issueLookupValues(record)))
 				}

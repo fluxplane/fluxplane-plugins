@@ -3,6 +3,7 @@ package jira
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -291,6 +292,52 @@ func TestIssueCreateNoWarningWhenParentApplied(t *testing.T) {
 	if out.Warning != "" {
 		t.Fatalf("unexpected warning: %q", out.Warning)
 	}
+}
+
+func TestIssueOutputsCarryBrowseURL(t *testing.T) {
+	// site_url not stored → one accessible-resources call resolves the site.
+	client := &fakeClient{
+		siteURL:      "https://example.atlassian.net",
+		issue:        Issue{ID: "1", Key: "DEX-7", Fields: IssueFields{Summary: "Bug"}},
+		createResult: IssueMutationResult{OK: true, Key: "DEV-9", Issue: &Issue{Key: "DEV-9"}},
+	}
+	plugin := testPlugin(client)
+
+	show := plugintest.RunOK[pluginbinding.ShowResult[Issue]](t, plugin, OperationIssueShow, map[string]any{"key": "DEX-7"})
+	if show.Record.WebURL != "https://example.atlassian.net/browse/DEX-7" {
+		t.Fatalf("show web_url = %q", show.Record.WebURL)
+	}
+	created := plugintest.RunOK[IssueMutationResult](t, plugin, OperationIssueCreate, map[string]any{
+		"project_key": "DEV", "issue_type": "Story", "summary": "Story",
+	})
+	if created.WebURL != "https://example.atlassian.net/browse/DEV-9" {
+		t.Fatalf("create web_url = %q", created.WebURL)
+	}
+}
+
+func TestBrowseURLPrefersStoredSiteURL(t *testing.T) {
+	// With site_url persisted, no accessible-resources call is needed even if
+	// it would fail.
+	client := &fakeClient{issue: Issue{ID: "1", Key: "DEX-7", Fields: IssueFields{Summary: "Bug"}}}
+	plugin := testPlugin(client)
+
+	show := plugintest.RunOK[pluginbinding.ShowResult[Issue]](t, plugin, OperationIssueShow, map[string]any{"key": "DEX-7"},
+		plugintest.WithHost(&siteURLHost{site: "https://stored.atlassian.net/"}))
+	if show.Record.WebURL != "https://stored.atlassian.net/browse/DEX-7" {
+		t.Fatalf("show web_url = %q", show.Record.WebURL)
+	}
+}
+
+type siteURLHost struct {
+	pluginbinding.HostClient
+	site string
+}
+
+func (h *siteURLHost) Secret(purpose string) (pluginbinding.SecretMaterial, error) {
+	if purpose == AuthPurposeSiteURL {
+		return pluginbinding.SecretMaterial{Purpose: purpose, Value: h.site}, nil
+	}
+	return pluginbinding.SecretMaterial{Purpose: purpose}, nil
 }
 
 func TestIssueEditSetsParentAndVerifies(t *testing.T) {
@@ -707,6 +754,7 @@ type fakeClient struct {
 	user                   User
 	issues                 []Issue
 	issue                  Issue
+	siteURL                string
 	users                  []User
 	createResult           IssueMutationResult
 	editResult             IssueMutationResult
@@ -856,6 +904,13 @@ func (c *fakeClient) EditMeta(_ context.Context, key string) (IssueMetaResult, e
 func (c *fakeClient) SearchUsers(_ context.Context, options UserSearchOptions) ([]User, error) {
 	c.userOptions = options
 	return c.users, nil
+}
+
+func (c *fakeClient) AccessibleSiteURL(context.Context) (string, error) {
+	if c.siteURL != "" {
+		return c.siteURL, nil
+	}
+	return "", fmt.Errorf("no accessible resource with a site url")
 }
 
 func (c *fakeClient) GetUser(_ context.Context, accountID string) (User, error) {

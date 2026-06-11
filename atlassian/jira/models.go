@@ -83,9 +83,12 @@ type UserRecord struct {
 }
 
 type Issue struct {
-	ID     string      `json:"id,omitempty"`
-	Key    string      `json:"key,omitempty"`
-	Self   string      `json:"self,omitempty"`
+	ID   string `json:"id,omitempty"`
+	Key  string `json:"key,omitempty"`
+	Self string `json:"self,omitempty"`
+	// WebURL is the human https://<site>.atlassian.net/browse/KEY link —
+	// the URL to paste into chat, unlike the api.atlassian.com Self link.
+	WebURL string      `json:"web_url,omitempty"`
 	Fields IssueFields `json:"fields,omitempty"`
 }
 
@@ -229,9 +232,11 @@ type IssueEditRequest struct {
 }
 
 type IssueMutationResult struct {
-	OK      bool   `json:"ok"`
-	ID      string `json:"id,omitempty"`
-	Key     string `json:"key,omitempty"`
+	OK  bool   `json:"ok"`
+	ID  string `json:"id,omitempty"`
+	Key string `json:"key,omitempty"`
+	// WebURL is the human https://<site>.atlassian.net/browse/KEY link.
+	WebURL  string `json:"web_url,omitempty"`
 	Self    string `json:"self,omitempty"`
 	Issue   *Issue `json:"issue,omitempty"`
 	Warning string `json:"warning,omitempty"`

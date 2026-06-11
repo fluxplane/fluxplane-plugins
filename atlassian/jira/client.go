@@ -35,6 +35,7 @@ type Client interface {
 	EditMeta(context.Context, string) (IssueMetaResult, error)
 	SearchUsers(context.Context, UserSearchOptions) ([]User, error)
 	GetUser(context.Context, string) (User, error)
+	AccessibleSiteURL(context.Context) (string, error)
 }
 
 type ClientFactory func(pluginbinding.Context, string) (Client, error)
@@ -342,6 +343,49 @@ func (c liveClient) GetUser(ctx context.Context, accountID string) (User, error)
 	var out User
 	err := c.getJSON(ctx, "/rest/api/3/user", query, &out)
 	return out, err
+}
+
+// AccessibleSiteURL resolves the human site URL (https://<site>.atlassian.net)
+// for this token via accessible-resources — the one-call cloud-id → site
+// mapping, for installs that connected before the site_url auth field
+// existed. Uses only the persisted bearer token.
+func (c liveClient) AccessibleSiteURL(ctx context.Context) (string, error) {
+	_ = ctx
+	if c.host == nil {
+		return "", fmt.Errorf("host client is unavailable")
+	}
+	resp, err := c.host.HTTP(pluginbinding.HTTPRequest{
+		URL:       "https://api.atlassian.com",
+		Path:      "/oauth/token/accessible-resources",
+		Method:    "GET",
+		Headers:   map[string]string{"Accept": "application/json"},
+		Auth:      &pluginbinding.HTTPAuthRequest{BearerTokenPurpose: AuthPurposeAPIToken},
+		TimeoutMS: 15000,
+		MaxBytes:  1024 * 1024,
+	})
+	if err != nil {
+		return "", err
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return "", fmt.Errorf("accessible-resources returned status %d", resp.StatusCode)
+	}
+	var resources []struct {
+		ID  string `json:"id"`
+		URL string `json:"url"`
+	}
+	if err := json.Unmarshal(resp.Body, &resources); err != nil {
+		return "", err
+	}
+	cloudID := strings.TrimPrefix(strings.TrimSpace(c.baseURL), "https://api.atlassian.com/ex/jira/")
+	for _, resource := range resources {
+		if strings.TrimSpace(resource.URL) == "" {
+			continue
+		}
+		if cloudID == "" || cloudID == c.baseURL || resource.ID == cloudID {
+			return strings.TrimRight(resource.URL, "/"), nil
+		}
+	}
+	return "", fmt.Errorf("no accessible resource with a site url")
 }
 
 func (c liveClient) getJSON(ctx context.Context, path string, query url.Values, out any) error {
