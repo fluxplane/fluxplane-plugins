@@ -34,14 +34,20 @@ func withInputExamples(spec core.OperationSpec, examples ...map[string]any) core
 
 const (
 	PluginName        = "loki"
-	PluginVersion     = "0.19.0"
-	PluginDescription = "Loki endpoint discovery, health checks, LogQL queries, recent logs, and labels."
+	PluginVersion     = "0.20.0"
+	PluginDescription = "Loki endpoint discovery, health checks, LogQL stream and metric queries, recent logs, and labels."
 
-	EnvLokiTenantID     = "LOKI_TENANT_ID"
-	AuthPurposeTenantID = "tenant_id"
+	EnvLokiTenantID = "LOKI_TENANT_ID"
+	EnvLokiUsername = "LOKI_USERNAME"
+	EnvLokiPassword = "LOKI_PASSWORD"
+
+	AuthPurposeTenantID      = "tenant_id"
+	AuthPurposeBasicUsername = "basic_username"
+	AuthPurposeBasicPassword = "basic_password"
 
 	OperationTest       = "loki.test"
 	OperationQuery      = "loki.query"
+	OperationMetric     = "loki.metric"
 	OperationLabels     = "loki.labels"
 	OperationRecentLogs = "loki.recent_logs"
 
@@ -68,6 +74,7 @@ func manifestSpec() pluginbinding.ManifestSpec {
 		Operations: []core.OperationSpec{
 			testSpec(),
 			querySpec(),
+			metricSpec(),
 			labelsSpec(),
 			recentLogsSpec(),
 		},
@@ -76,12 +83,18 @@ func manifestSpec() pluginbinding.ManifestSpec {
 			labelsDatasourceSpec(),
 		},
 		Auth: []core.AuthMethod{{
-			Name:        "endpoint",
-			Kind:        "config",
-			Description: "Optional Loki tenant ID used by host-resolved endpoint refs.",
-			Env:         []string{EnvLokiTenantID},
+			Name: "endpoint",
+			Kind: "config",
+			Description: "All fields are optional and resolve from the persisted secret store at call time. " +
+				"Setup: 1) register the Loki URL: fluxplane-plugin endpoint save --id loki-main --product loki --url https://loki.example.com  " +
+				"2) store credentials if the instance needs them: fluxplane-plugin auth connect loki (tenant ID for multi-tenant X-Scope-OrgID, username+password for HTTP basic auth)  " +
+				"3) verify: fluxplane-plugin operation invoke loki loki.test --arg endpoint_ref=loki-main. " +
+				"Environment variables are read once during auth auto as setup hints, never at invoke time.",
+			Env: []string{EnvLokiTenantID, EnvLokiUsername, EnvLokiPassword},
 			Fields: []core.AuthField{
-				pluginbinding.AuthField(AuthPurposeTenantID, "Loki tenant ID", false, false, EnvLokiTenantID),
+				pluginbinding.AuthField(AuthPurposeTenantID, "Loki tenant ID (X-Scope-OrgID header)", false, false, EnvLokiTenantID),
+				pluginbinding.AuthField(AuthPurposeBasicUsername, "HTTP basic auth username", false, false, EnvLokiUsername),
+				pluginbinding.AuthField(AuthPurposeBasicPassword, "HTTP basic auth password", false, true, EnvLokiPassword),
 			},
 		}},
 	}
@@ -94,7 +107,7 @@ func logEntriesDatasourceSpec() core.DatasourceSpec {
 		"Loki log entries.",
 		[]string{pluginbinding.CapabilitySearch},
 		pluginbinding.DatasourceAccess(core.OperationAccessNetwork),
-		pluginbinding.DatasourceSecretPurposes(AuthPurposeTenantID),
+		pluginbinding.DatasourceSecretPurposes(AuthPurposeTenantID, AuthPurposeBasicUsername, AuthPurposeBasicPassword),
 		pluginbinding.EntitySchemaFor[LogEntryRecord](),
 		pluginbinding.EntitySchema(core.DatasourceEntitySchema{IDField: "id", TitleField: "title"}),
 		pluginbinding.Completion("Loki log entry fields.", "app", "namespace", "pod", "container", "endpoint_url"),
@@ -108,7 +121,7 @@ func labelsDatasourceSpec() core.DatasourceSpec {
 		"Loki label names or values.",
 		[]string{pluginbinding.CapabilitySearch},
 		pluginbinding.DatasourceAccess(core.OperationAccessNetwork),
-		pluginbinding.DatasourceSecretPurposes(AuthPurposeTenantID),
+		pluginbinding.DatasourceSecretPurposes(AuthPurposeTenantID, AuthPurposeBasicUsername, AuthPurposeBasicPassword),
 		pluginbinding.EntitySchemaFor[LabelRecord](),
 		pluginbinding.EntitySchema(core.DatasourceEntitySchema{IDField: "id", TitleField: "title"}),
 		pluginbinding.Completion("Loki label fields.", "name", "label", "endpoint_url"),
@@ -123,6 +136,15 @@ func querySpec() core.OperationSpec {
 	return withInputExamples(
 		pluginbinding.TypedOperationSpec[QueryInput, QueryResult](OperationQuery, "Run a LogQL query.", readOptions(core.OperationIdempotent)...),
 		map[string]any{"endpoint_ref": "loki-main", "query": `{namespace="core"} |= "error"`, "since": "30m", "limit": 200},
+	)
+}
+
+func metricSpec() core.OperationSpec {
+	return withInputExamples(
+		pluginbinding.TypedOperationSpec[MetricInput, MetricResult](OperationMetric,
+			"Run a LogQL metric query over a window (query_range, matrix result) — one call for rate/count questions like \"when did this error start and how many per day\" instead of paging raw streams.",
+			readOptions(core.OperationIdempotent)...),
+		map[string]any{"endpoint_ref": "loki-main", "query": `sum(count_over_time({namespace="core"} |= "error" [1d]))`, "since": "720h", "step": "1d"},
 	)
 }
 
@@ -143,7 +165,7 @@ func recentLogsSpec() core.OperationSpec {
 func readOptions(idempotency core.OperationIdempotency) []pluginbinding.OperationSpecOption {
 	return []pluginbinding.OperationSpecOption{
 		pluginbinding.ReadOnly(),
-		pluginbinding.SecretPurposes(AuthPurposeTenantID),
+		pluginbinding.SecretPurposes(AuthPurposeTenantID, AuthPurposeBasicUsername, AuthPurposeBasicPassword),
 		pluginbinding.Effects(core.OperationEffectRead, core.OperationEffectNetwork),
 		pluginbinding.Access(core.OperationAccessNetwork),
 		pluginbinding.Risk(core.OperationRiskLow),

@@ -48,8 +48,8 @@ type TestResult struct {
 type QueryInput struct {
 	LokiTargetInput
 	Query     string `json:"query,omitempty" jsonschema:"required,description=LogQL stream query for Loki query_range."`
-	Since     string `json:"since,omitempty" jsonschema:"description=Start time as RFC3339 unix seconds or duration ago. Defaults to 1h."`
-	Until     string `json:"until,omitempty" jsonschema:"description=End time as RFC3339 unix seconds or duration ago. Defaults to now."`
+	Since     string `json:"since,omitempty" jsonschema:"description=Start time as RFC3339\\, unix seconds\\, duration ago\\, or now. Defaults to 1h."`
+	Until     string `json:"until,omitempty" jsonschema:"description=End time as RFC3339\\, unix seconds\\, duration ago\\, or the literal now. Defaults to now."`
 	Limit     int    `json:"limit,omitempty" jsonschema:"description=Maximum log entries to return. Defaults to 100 and is capped at 1000.,minimum=0,maximum=1000"`
 	Direction string `json:"direction,omitempty" jsonschema:"description=Loki query direction. Defaults to backward.,enum=backward,enum=forward"`
 }
@@ -89,7 +89,7 @@ type RecentLogsInput struct {
 	Pod       string `json:"pod,omitempty" jsonschema:"description=Exact pod label filter."`
 	Container string `json:"container,omitempty" jsonschema:"description=Exact container label filter."`
 	Contains  string `json:"contains,omitempty" jsonschema:"description=Line substring filter."`
-	Since     string `json:"since,omitempty" jsonschema:"description=Start time as RFC3339 unix seconds or duration ago. Defaults to 1h."`
+	Since     string `json:"since,omitempty" jsonschema:"description=Start time as RFC3339\\, unix seconds\\, duration ago\\, or now. Defaults to 1h."`
 	Limit     int    `json:"limit,omitempty" jsonschema:"description=Maximum log entries to return. Defaults to 100 and is capped at 1000.,minimum=0,maximum=1000"`
 }
 
@@ -101,8 +101,8 @@ type LogEntriesInput struct {
 	Pod       string `json:"pod,omitempty" jsonschema:"description=Exact pod label filter used when query is plain text or empty."`
 	Container string `json:"container,omitempty" jsonschema:"description=Exact container label filter used when query is plain text or empty."`
 	Contains  string `json:"contains,omitempty" jsonschema:"description=Line substring filter used when query is plain text or empty."`
-	Since     string `json:"since,omitempty" jsonschema:"description=Start time as RFC3339 unix seconds or duration ago. Defaults to 1h."`
-	Until     string `json:"until,omitempty" jsonschema:"description=End time as RFC3339 unix seconds or duration ago. Defaults to now for LogQL queries."`
+	Since     string `json:"since,omitempty" jsonschema:"description=Start time as RFC3339\\, unix seconds\\, duration ago\\, or now. Defaults to 1h."`
+	Until     string `json:"until,omitempty" jsonschema:"description=End time as RFC3339\\, unix seconds\\, duration ago\\, or the literal now. Defaults to now for LogQL queries."`
 	Limit     int    `json:"limit,omitempty" jsonschema:"description=Maximum log entries to return. Defaults to 100 and is capped at 1000.,minimum=0,maximum=1000"`
 	Direction string `json:"direction,omitempty" jsonschema:"description=Loki query direction for LogQL queries. Defaults to backward.,enum=backward,enum=forward"`
 }
@@ -286,7 +286,9 @@ func (s Service) query(ctx context.Context, target string, client Client, query,
 	if response.Status != "success" {
 		return QueryResult{}, pluginbinding.Errorf("loki", "query failed with status %s", response.Status)
 	}
-	var entries []LogEntry
+	// Always an array in the result — `jq '.entries[]'` must work on empty
+	// pages too.
+	entries := []LogEntry{}
 	for _, stream := range response.Data.Result {
 		for _, value := range stream.Values {
 			if len(value) < 2 {
@@ -306,6 +308,113 @@ func (s Service) query(ctx context.Context, target string, client Client, query,
 	// A full page means Loki likely cut the result at limit — flag it so the
 	// caller knows to narrow the window or raise the limit.
 	return QueryResult{URL: target, NormalizedQuery: query, Entries: entries, Count: len(entries), Limit: limit, Truncated: len(entries) >= limit}, nil
+}
+
+type MetricInput struct {
+	LokiTargetInput
+	Query string `json:"query,omitempty" jsonschema:"required,description=LogQL metric query (e.g. sum(count_over_time({namespace=\"core\"} |= \"error\" [1d]))). A bare stream selector is rejected — wrap it in a metric function."`
+	Since string `json:"since,omitempty" jsonschema:"description=Start time as RFC3339\\, unix seconds\\, duration ago\\, or now. Defaults to 24h."`
+	Until string `json:"until,omitempty" jsonschema:"description=End time as RFC3339\\, unix seconds\\, duration ago\\, or now. Defaults to now."`
+	Step  string `json:"step,omitempty" jsonschema:"description=Resolution step as a Prometheus-style duration (15s\\, 5m\\, 1h\\, 1d). Defaults to ~100 points across the window."`
+}
+
+type MetricSample struct {
+	Timestamp string  `json:"timestamp"`
+	Value     float64 `json:"value"`
+}
+
+type MetricSeries struct {
+	Labels  map[string]string `json:"labels,omitempty"`
+	Samples []MetricSample    `json:"samples"`
+}
+
+type MetricResult struct {
+	URL             string         `json:"url"`
+	NormalizedQuery string         `json:"normalized_query"`
+	Step            string         `json:"step"`
+	Series          []MetricSeries `json:"series"`
+	Count           int            `json:"count"`
+}
+
+// lokiStepPattern matches Prometheus-style durations Loki accepts as step.
+var lokiStepPattern = regexp.MustCompile(`^[0-9]+(ms|s|m|h|d|w|y)$`)
+
+// Metric runs a LogQL metric query over a window — one call answers "when did
+// this start and at what rate" instead of paging raw streams (the report's
+// single biggest time sink).
+func (s Service) Metric(ctx pluginbinding.Context, input MetricInput) (MetricResult, error) {
+	query := strings.TrimSpace(input.Query)
+	if query == "" {
+		return MetricResult{}, pluginbinding.Fail("bad_input", "query is required")
+	}
+	target, client, err := s.client(ctx, input.LokiTargetInput)
+	if err != nil {
+		return MetricResult{}, pluginbinding.Errorf("bad_input", "%s", err)
+	}
+	now := time.Now()
+	end, err := parseTimeValue(input.Until, now)
+	if err != nil {
+		return MetricResult{}, pluginbinding.Errorf("bad_input", "%s", err)
+	}
+	start, err := parseTimeValue(firstNonEmpty(input.Since, "24h"), now)
+	if err != nil {
+		return MetricResult{}, pluginbinding.Errorf("bad_input", "%s", err)
+	}
+	step := strings.TrimSpace(input.Step)
+	if step == "" {
+		auto := end.Sub(start) / 100
+		if auto < 15*time.Second {
+			auto = 15 * time.Second
+		}
+		step = strconv.FormatInt(int64(auto.Seconds()), 10) + "s"
+	} else if !lokiStepPattern.MatchString(step) {
+		return MetricResult{}, pluginbinding.Fail("bad_input", "step must be a duration like 15s, 5m, 1h, or 1d")
+	}
+	values := url.Values{}
+	values.Set("query", query)
+	values.Set("start", strconv.FormatInt(start.UnixNano(), 10))
+	values.Set("end", strconv.FormatInt(end.UnixNano(), 10))
+	values.Set("step", step)
+	var response struct {
+		Status string `json:"status"`
+		Data   struct {
+			ResultType string `json:"resultType"`
+			Result     []struct {
+				Metric map[string]string `json:"metric"`
+				Values [][]any           `json:"values"`
+			} `json:"result"`
+		} `json:"data"`
+	}
+	if err := client.get(context.Background(), "/loki/api/v1/query_range", values, &response); err != nil {
+		return MetricResult{}, pluginbinding.Errorf("loki", "%s", err)
+	}
+	if response.Status != "success" {
+		return MetricResult{}, pluginbinding.Errorf("loki", "metric query failed with status %s", response.Status)
+	}
+	if response.Data.ResultType != "matrix" {
+		return MetricResult{}, pluginbinding.Fail("bad_input", "query returned "+response.Data.ResultType+" — wrap the stream selector in a metric function like sum(count_over_time({...}[1h]))")
+	}
+	series := []MetricSeries{}
+	for _, result := range response.Data.Result {
+		samples := make([]MetricSample, 0, len(result.Values))
+		for _, pair := range result.Values {
+			if len(pair) < 2 {
+				continue
+			}
+			ts, tsOK := pair[0].(float64)
+			raw, rawOK := pair[1].(string)
+			if !tsOK || !rawOK {
+				continue
+			}
+			value, err := strconv.ParseFloat(raw, 64)
+			if err != nil {
+				continue
+			}
+			samples = append(samples, MetricSample{Timestamp: time.Unix(int64(ts), 0).UTC().Format(time.RFC3339), Value: value})
+		}
+		series = append(series, MetricSeries{Labels: result.Metric, Samples: samples})
+	}
+	return MetricResult{URL: target, NormalizedQuery: query, Step: step, Series: series, Count: len(series)}, nil
 }
 
 func (s Service) client(ctx pluginbinding.Context, input LokiTargetInput) (string, Client, error) {
@@ -373,13 +482,21 @@ func quoteLogQLString(value string) string {
 
 func parseTimeValue(value string, now time.Time) (time.Time, error) {
 	value = strings.TrimSpace(value)
+	// The field docs say "defaults to now", so the literal "now" must work too.
+	if value == "" || strings.EqualFold(value, "now") {
+		return now, nil
+	}
 	if d, err := time.ParseDuration(value); err == nil {
 		return now.Add(-d), nil
 	}
 	if ts, err := strconv.ParseInt(value, 10, 64); err == nil {
 		return time.Unix(ts, 0), nil
 	}
-	return time.Parse(time.RFC3339, value)
+	t, err := time.Parse(time.RFC3339, value)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("invalid time %q — accepted: RFC3339 (2026-06-11T10:00:00Z), unix seconds, duration ago (30m, 24h), or now", value)
+	}
+	return t, nil
 }
 
 func logEntryID(labels map[string]string, ts, line string) string {

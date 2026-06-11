@@ -39,9 +39,7 @@ func (c Client) get(ctx context.Context, path string, values url.Values, out any
 		Path:        path,
 		Query:       map[string][]string(values),
 		Method:      "GET",
-		Auth: &pluginbinding.HTTPAuthRequest{
-			HeaderPurposes: map[string]string{"X-Scope-OrgID": AuthPurposeTenantID},
-		},
+		Auth:      lokiAuthRequest(),
 		TimeoutMS: 30000,
 		MaxBytes:  32 * 1024 * 1024,
 		UserAgent: "fluxplane-plugin/0.1",
@@ -61,9 +59,7 @@ func (c Client) ready(ctx context.Context) error {
 		EndpointRef: strings.TrimSpace(c.EndpointRef),
 		Path:        "/ready",
 		Method:      "GET",
-		Auth: &pluginbinding.HTTPAuthRequest{
-			HeaderPurposes: map[string]string{"X-Scope-OrgID": AuthPurposeTenantID},
-		},
+		Auth:      lokiAuthRequest(),
 		TimeoutMS: 5000,
 		MaxBytes:  64 * 1024,
 		UserAgent: "fluxplane-plugin/0.1",
@@ -75,6 +71,18 @@ func (c Client) ready(ctx context.Context) error {
 		return fmt.Errorf("loki not ready, status %d", resp.StatusCode)
 	}
 	return nil
+}
+
+// lokiAuthRequest names every credential the host may attach: the tenant
+// header and optional HTTP basic auth. All resolve from the persisted secret
+// store; purposes with no stored material are simply skipped, so plain
+// unauthenticated Lokis keep working.
+func lokiAuthRequest() *pluginbinding.HTTPAuthRequest {
+	return &pluginbinding.HTTPAuthRequest{
+		UsernamePurpose: AuthPurposeBasicUsername,
+		PasswordPurpose: AuthPurposeBasicPassword,
+		HeaderPurposes:  map[string]string{"X-Scope-OrgID": AuthPurposeTenantID},
+	}
 }
 
 func parseLogTimestamp(value string) time.Time {

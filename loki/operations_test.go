@@ -172,13 +172,103 @@ func TestLabelsRejectInvalidLabelAndFailedStatus(t *testing.T) {
 	}
 }
 
+func TestQueryEmptyResultIsEmptyArrayNotNull(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"status": "success",
+			"data":   map[string]any{"resultType": "streams", "result": []map[string]any{}},
+		})
+	}))
+	defer server.Close()
+	plugin := NewPluginWithService(NewService())
+
+	out := plugintest.RunOK[QueryResult](t, plugin, OperationQuery, map[string]any{"endpoint_ref": "loki-dev", "query": `{app="api"}`}, plugintest.WithHost(newLokiTestHost(server.URL, "")))
+	// jq '.entries[]' must work on zero-hit results: [] not null.
+	if out.Entries == nil || out.Count != 0 {
+		t.Fatalf("entries = %#v, want empty array", out.Entries)
+	}
+}
+
+func TestQueryAcceptsLiteralNow(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"status": "success",
+			"data":   map[string]any{"resultType": "streams", "result": []map[string]any{}},
+		})
+	}))
+	defer server.Close()
+	plugin := NewPluginWithService(NewService())
+
+	plugintest.RunOK[QueryResult](t, plugin, OperationQuery, map[string]any{"endpoint_ref": "loki-dev", "query": `{app="api"}`, "until": "now"}, plugintest.WithHost(newLokiTestHost(server.URL, "")))
+
+	// Unparseable values restate the accepted formats.
+	err := plugintest.RunError(t, plugin, OperationQuery, map[string]any{"endpoint_ref": "loki-dev", "query": `{app="api"}`, "until": "yesterday"}, plugintest.WithHost(newLokiTestHost(server.URL, "")))
+	if err.Code != "bad_input" || !strings.Contains(err.Message, "RFC3339") || !strings.Contains(err.Message, "now") {
+		t.Fatalf("err = %#v, want format list", err)
+	}
+}
+
+func TestMetricParsesMatrix(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/loki/api/v1/query_range" || r.URL.Query().Get("step") != "1d" {
+			t.Fatalf("request = %s?%s", r.URL.Path, r.URL.RawQuery)
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"status": "success",
+			"data": map[string]any{
+				"resultType": "matrix",
+				"result": []map[string]any{{
+					"metric": map[string]string{"namespace": "core"},
+					"values": [][]any{{1710000000, "42"}, {1710086400, "7"}},
+				}},
+			},
+		})
+	}))
+	defer server.Close()
+	plugin := NewPluginWithService(NewService())
+	host := newLokiTestHost(server.URL, "")
+
+	out := plugintest.RunOK[MetricResult](t, plugin, OperationMetric, map[string]any{
+		"endpoint_ref": "loki-dev", "query": `sum(count_over_time({namespace="core"} |= "error" [1d]))`, "since": "720h", "step": "1d",
+	}, plugintest.WithHost(host))
+	if out.Count != 1 || len(out.Series) != 1 || out.Step != "1d" {
+		t.Fatalf("metric out = %#v", out)
+	}
+	series := out.Series[0]
+	if series.Labels["namespace"] != "core" || len(series.Samples) != 2 || series.Samples[0].Value != 42 {
+		t.Fatalf("series = %#v", series)
+	}
+
+	// Invalid step is rejected before any call.
+	err := plugintest.RunError(t, plugin, OperationMetric, map[string]any{"endpoint_ref": "loki-dev", "query": "sum(x)", "step": "daily"}, plugintest.WithHost(host))
+	if err.Code != "bad_input" {
+		t.Fatalf("step err = %#v", err)
+	}
+}
+
+func TestMetricRejectsStreamResults(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"status": "success",
+			"data":   map[string]any{"resultType": "streams", "result": []map[string]any{}},
+		})
+	}))
+	defer server.Close()
+	plugin := NewPluginWithService(NewService())
+
+	err := plugintest.RunError(t, plugin, OperationMetric, map[string]any{"endpoint_ref": "loki-dev", "query": `{app="api"}`}, plugintest.WithHost(newLokiTestHost(server.URL, "")))
+	if err.Code != "bad_input" || !strings.Contains(err.Message, "count_over_time") {
+		t.Fatalf("err = %#v, want metric-function hint", err)
+	}
+}
+
 func TestDatasourceDeclaresNetworkAccessAndTenantSecret(t *testing.T) {
 	for _, spec := range []core.DatasourceSpec{logEntriesDatasourceSpec(), labelsDatasourceSpec()} {
 		if !hasLokiDatasourceAccess(spec, fpdatasource.AccessNetwork) {
 			t.Fatalf("%s access = %v, want network", spec.Name, spec.Access)
 		}
-		if len(spec.SecretPurposes) != 1 || spec.SecretPurposes[0] != AuthPurposeTenantID {
-			t.Fatalf("%s secret purposes = %v, want tenant_id", spec.Name, spec.SecretPurposes)
+		if len(spec.SecretPurposes) != 3 || spec.SecretPurposes[0] != AuthPurposeTenantID {
+			t.Fatalf("%s secret purposes = %v, want tenant_id + basic auth", spec.Name, spec.SecretPurposes)
 		}
 	}
 }
