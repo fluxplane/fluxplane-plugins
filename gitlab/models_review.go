@@ -118,3 +118,15 @@ type ProjectCreateOptions struct {
 	Visibility           string
 	InitializeWithReadme bool
 }
+
+// BlobMatch is one file-content search hit (scope=blobs).
+type BlobMatch struct {
+	ProjectID     int64  `json:"project_id,omitempty"`
+	Path          string `json:"path"`
+	Filename      string `json:"filename,omitempty"`
+	Basename      string `json:"basename,omitempty"`
+	Ref           string `json:"ref,omitempty"`
+	StartLine     int64  `json:"start_line,omitempty"`
+	Data          string `json:"data,omitempty"`
+	DataTruncated bool   `json:"data_truncated,omitempty"`
+}

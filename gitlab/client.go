@@ -57,6 +57,7 @@ type Client interface {
 	GetRepositoryFile(project any, path, ref string) (RepoFileRaw, error)
 	GetRepositoryArchive(project any, format, sha, path string) ([]byte, error)
 	CreateProject(ProjectCreateOptions) (Project, error)
+	SearchBlobs(project any, group any, query, ref string, limit int) ([]BlobMatch, bool, error)
 }
 
 type ClientFactory func(pluginbinding.Context) (Client, error)

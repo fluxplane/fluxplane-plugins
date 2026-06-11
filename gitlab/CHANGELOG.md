@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.21.0
+
+### Added
+- **`gitlab.search.blobs`** — file-content search (scope=blobs) for "where
+  does this error string live": project scope (works on every GitLab, with
+  optional `ref`), or group/instance scope when the instance has advanced
+  search (Elasticsearch/Zoekt). Bounded matches with per-snippet
+  `max_data_bytes` caps and `truncated` flags (fluxplane-plugins#4).
+
+### Fixed
+- jsonschema field descriptions containing commas were truncated at the
+  first comma (the tag parser treats commas as option separators); all
+  affected descriptions are now escaped and render fully.
+
 ## v0.20.0
 
 End-to-end merge request review workflow (issue #3), with the line-level

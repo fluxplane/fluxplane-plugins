@@ -125,6 +125,15 @@ func projectCreateSpec() core.OperationSpec {
 	)
 }
 
+func blobSearchSpec() core.OperationSpec {
+	return withInputExamples(gitlabCompactReadOperation[BlobSearchInput, BlobSearchResult](
+		OperationSearchBlobs,
+		"Search file contents (GitLab search scope=blobs) — find where an error string or symbol lives. Project scope works on every GitLab; group/instance scope requires the instance's advanced search (Elasticsearch/Zoekt). Snippets are capped by max_data_bytes."),
+		map[string]any{"query": "func resolveEndpoint", "project": "group/app", "ref": "main"},
+		map[string]any{"query": "connection refused", "group": "backend"},
+	)
+}
+
 func reviewOperationSpecs() []core.OperationSpec {
 	return []core.OperationSpec{
 		mrChangesSpec(),
@@ -140,6 +149,7 @@ func reviewOperationSpecs() []core.OperationSpec {
 		repositoryFileShowSpec(),
 		repositoryArchiveSpec(),
 		projectCreateSpec(),
+		blobSearchSpec(),
 	}
 }
 
@@ -158,5 +168,6 @@ func registerReviewOperations(service Service) []pluginbinding.PluginOption {
 		pluginbinding.RegisterOperation(repositoryFileShowSpec(), service.RepositoryFileShow),
 		pluginbinding.RegisterOperation(repositoryArchiveSpec(), service.RepositoryArchive),
 		pluginbinding.RegisterOperation(projectCreateSpec(), service.ProjectCreate),
+		pluginbinding.RegisterOperation(blobSearchSpec(), service.SearchBlobs),
 	}
 }

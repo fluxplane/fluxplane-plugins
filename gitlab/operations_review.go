@@ -238,8 +238,8 @@ func findMergeRequestFileDiff(client Client, project string, iid int64, file str
 
 type CompareInput struct {
 	Project      string `json:"project,omitempty" jsonschema:"required,description=Project path or numeric ID"`
-	From         string `json:"from,omitempty" jsonschema:"required,description=Base ref: branch, tag, or commit SHA"`
-	To           string `json:"to,omitempty" jsonschema:"required,description=Head ref: branch, tag, or commit SHA"`
+	From         string `json:"from,omitempty" jsonschema:"required,description=Base ref: branch\\, tag\\, or commit SHA"`
+	To           string `json:"to,omitempty" jsonschema:"required,description=Head ref: branch\\, tag\\, or commit SHA"`
 	Straight     bool   `json:"straight,omitempty" jsonschema:"description=Compare refs directly instead of from the merge base"`
 	MaxFiles     int    `json:"max_files,omitempty" jsonschema:"description=Maximum file diffs returned. Defaults to 50 and is capped at 200.,minimum=0,maximum=200"`
 	MaxDiffBytes int    `json:"max_diff_bytes,omitempty" jsonschema:"description=Per-file diff text byte cap. Defaults to 16384.,minimum=0"`
@@ -520,7 +520,7 @@ type MRDiscussionResolveInput struct {
 	Project      string `json:"project,omitempty" jsonschema:"description=Project path or numeric ID (with iid)"`
 	IID          int64  `json:"iid,omitempty" jsonschema:"description=Merge request IID (with project)"`
 	DiscussionID string `json:"discussion_id,omitempty" jsonschema:"required,description=Discussion thread ID from gitlab.mr.discussion.list"`
-	Resolved     *bool  `json:"resolved,omitempty" jsonschema:"description=Resolve (true, default) or unresolve (false)"`
+	Resolved     *bool  `json:"resolved,omitempty" jsonschema:"description=Resolve (true\\, default) or unresolve (false)"`
 }
 
 // MRDiscussionResolve resolves or unresolves a discussion thread.
@@ -592,7 +592,7 @@ func (s Service) MRUpdate(ctx pluginbinding.Context, input MRUpdateInput) (Merge
 type RepositoryTreeInput struct {
 	Project   string `json:"project,omitempty" jsonschema:"required,description=Project path or numeric ID"`
 	Path      string `json:"path,omitempty" jsonschema:"description=Subdirectory to list. Defaults to the repository root"`
-	Ref       string `json:"ref,omitempty" jsonschema:"description=Branch, tag, or commit SHA. Defaults to the default branch"`
+	Ref       string `json:"ref,omitempty" jsonschema:"description=Branch\\, tag\\, or commit SHA. Defaults to the default branch"`
 	Recursive bool   `json:"recursive,omitempty" jsonschema:"description=Descend into subdirectories"`
 	Limit     int    `json:"limit,omitempty" jsonschema:"description=Maximum entries returned. Defaults to 200 and is capped at 2000.,minimum=0"`
 }
@@ -634,7 +634,7 @@ func (s Service) RepositoryTree(ctx pluginbinding.Context, input RepositoryTreeI
 type RepositoryFileShowInput struct {
 	Project  string `json:"project,omitempty" jsonschema:"required,description=Project path or numeric ID"`
 	Path     string `json:"path,omitempty" jsonschema:"required,description=File path inside the repository"`
-	Ref      string `json:"ref,omitempty" jsonschema:"description=Branch, tag, or commit SHA. Defaults to the default branch"`
+	Ref      string `json:"ref,omitempty" jsonschema:"description=Branch\\, tag\\, or commit SHA. Defaults to the default branch"`
 	MaxBytes int    `json:"max_bytes,omitempty" jsonschema:"description=Content byte cap. Defaults to 65536 and is capped at 262144.,minimum=0"`
 }
 
@@ -707,7 +707,7 @@ func isBinaryContent(content []byte) bool {
 
 type RepositoryArchiveInput struct {
 	Project string `json:"project,omitempty" jsonschema:"required,description=Project path or numeric ID"`
-	Ref     string `json:"ref,omitempty" jsonschema:"description=Branch, tag, or commit SHA. Defaults to the default branch"`
+	Ref     string `json:"ref,omitempty" jsonschema:"description=Branch\\, tag\\, or commit SHA. Defaults to the default branch"`
 	Path    string `json:"path,omitempty" jsonschema:"description=Subdirectory to archive"`
 	Format  string `json:"format,omitempty" jsonschema:"description=Archive format. Defaults to tar.gz.,enum=tar.gz,enum=zip,enum=tar"`
 }
@@ -825,4 +825,59 @@ func (s Service) ProjectCreate(ctx pluginbinding.Context, input ProjectCreateInp
 		return Project{}, pluginbinding.Errorf("gitlab", "%s", err)
 	}
 	return project, nil
+}
+
+// ---- gitlab.search.blobs ----
+
+type BlobSearchInput struct {
+	Query        string `json:"query,omitempty" jsonschema:"required,description=Search expression matched against file contents (GitLab scope=blobs)"`
+	Project      string `json:"project,omitempty" jsonschema:"description=Limit to one project (path or numeric ID)"`
+	Group        string `json:"group,omitempty" jsonschema:"description=Limit to one group (path or numeric ID). Ignored when project is set"`
+	Ref          string `json:"ref,omitempty" jsonschema:"description=Branch or tag to search (project scope only). Defaults to the default branch"`
+	Limit        int    `json:"limit,omitempty" jsonschema:"description=Maximum matches returned. Defaults to 20 and is capped at 100.,minimum=0,maximum=100"`
+	MaxDataBytes int    `json:"max_data_bytes,omitempty" jsonschema:"description=Per-match snippet byte cap. Defaults to 2048.,minimum=0"`
+}
+
+type BlobSearchResult struct {
+	Query     string      `json:"query"`
+	Project   string      `json:"project,omitempty"`
+	Group     string      `json:"group,omitempty"`
+	Matches   []BlobMatch `json:"matches,omitempty"`
+	Count     int         `json:"count"`
+	Truncated bool        `json:"truncated,omitempty"`
+}
+
+// SearchBlobs searches file contents across a project, a group, or the whole
+// instance — the "where does this error string come from" operation.
+func (s Service) SearchBlobs(ctx pluginbinding.Context, input BlobSearchInput) (BlobSearchResult, error) {
+	client, err := s.client(ctx)
+	if err != nil {
+		return BlobSearchResult{}, pluginbinding.Errorf("secret", "%s", err)
+	}
+	query := strings.TrimSpace(input.Query)
+	if query == "" {
+		return BlobSearchResult{}, pluginbinding.Fail("bad_input", "query is required")
+	}
+	limit := clampInt(input.Limit, 20, 100)
+	maxData := clampInt(input.MaxDataBytes, 2048, 64*1024)
+	var project, group any
+	if trimmed := strings.TrimSpace(input.Project); trimmed != "" {
+		project = projectID(trimmed)
+	} else if trimmed := strings.TrimSpace(input.Group); trimmed != "" {
+		group = projectID(trimmed)
+	}
+	matches, truncated, err := client.SearchBlobs(project, group, query, input.Ref, limit)
+	if err != nil {
+		return BlobSearchResult{}, pluginbinding.Errorf("gitlab", "%s", err)
+	}
+	out := BlobSearchResult{Query: query, Project: strings.TrimSpace(input.Project), Group: strings.TrimSpace(input.Group), Truncated: truncated}
+	for _, match := range matches {
+		if len(match.Data) > maxData {
+			match.Data = match.Data[:maxData] + "\n[snippet truncated]"
+			match.DataTruncated = true
+		}
+		out.Matches = append(out.Matches, match)
+	}
+	out.Count = len(out.Matches)
+	return out, nil
 }

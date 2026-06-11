@@ -33,6 +33,11 @@ type reviewFakeClient struct {
 	archiveFormat     string
 	createdProject    ProjectCreateOptions
 	diffsLimit        int
+	blobMatches       []BlobMatch
+	blobTruncated     bool
+	blobProject       any
+	blobGroup         any
+	blobQuery         string
 }
 
 func (f *reviewFakeClient) ListMergeRequestDiffs(project any, iid int64, limit int) ([]FileDiff, bool, error) {
@@ -425,3 +430,43 @@ func (f *fakeClient) GetRepositoryArchive(any, string, string, string) ([]byte, 
 	return nil, nil
 }
 func (f *fakeClient) CreateProject(ProjectCreateOptions) (Project, error) { return Project{}, nil }
+
+func (f *fakeClient) SearchBlobs(any, any, string, string, int) ([]BlobMatch, bool, error) {
+	return nil, false, nil
+}
+
+func (f *reviewFakeClient) SearchBlobs(project any, group any, query, ref string, limit int) ([]BlobMatch, bool, error) {
+	f.blobProject, f.blobGroup, f.blobQuery = project, group, query
+	return f.blobMatches, f.blobTruncated, nil
+}
+
+func TestSearchBlobsScopesAndCapsSnippets(t *testing.T) {
+	client := newReviewClient()
+	client.blobMatches = []BlobMatch{{
+		ProjectID: 7,
+		Path:      "internal/server/dial.go",
+		Ref:       "main",
+		StartLine: 41,
+		Data:      strings.Repeat("x", 50),
+	}}
+	out := plugintest.RunOK[BlobSearchResult](t, testPlugin(client), OperationSearchBlobs, BlobSearchInput{
+		Query: "connection refused", Group: "backend", MaxDataBytes: 10,
+	})
+	if client.blobGroup != "backend" || client.blobProject != nil {
+		t.Fatalf("scope = project %v group %v", client.blobProject, client.blobGroup)
+	}
+	if out.Count != 1 || !out.Matches[0].DataTruncated || !strings.Contains(out.Matches[0].Data, "[snippet truncated]") {
+		t.Fatalf("out = %#v", out)
+	}
+	// Project scope wins over group.
+	plugintest.RunOK[BlobSearchResult](t, testPlugin(client), OperationSearchBlobs, BlobSearchInput{
+		Query: "x", Project: "group/app", Group: "backend",
+	})
+	if client.blobProject != "group/app" || client.blobGroup != nil {
+		t.Fatalf("scope = project %v group %v", client.blobProject, client.blobGroup)
+	}
+	err := plugintest.RunError(t, testPlugin(client), OperationSearchBlobs, BlobSearchInput{})
+	if err.Code != "bad_input" {
+		t.Fatalf("err = %#v", err)
+	}
+}

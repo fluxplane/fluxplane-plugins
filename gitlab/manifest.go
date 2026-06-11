@@ -10,7 +10,7 @@ import (
 
 const (
 	PluginName        = "gitlab"
-	PluginVersion     = "0.20.0"
+	PluginVersion     = "0.21.0"
 	PluginDescription = "GitLab operations, datasources, indexes, and reverse lookups."
 
 	AuthMethodPersonalAccessToken = "personal_access_token"
@@ -72,6 +72,7 @@ const (
 	OperationRepositoryFileShow  = "gitlab.repository.file.show"
 	OperationRepositoryArchive   = "gitlab.repository.archive"
 	OperationProjectCreate       = "gitlab.project.create"
+	OperationSearchBlobs         = "gitlab.search.blobs"
 
 	DatasourceProjects      = "gitlab.projects"
 	DatasourceUsers         = "gitlab.users"

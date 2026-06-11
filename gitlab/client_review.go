@@ -343,3 +343,52 @@ func discussionFromAPI(discussion *gitlabapi.Discussion) DiscussionInfo {
 	}
 	return out
 }
+
+// SearchBlobs searches file contents (scope=blobs) project-wide, group-wide,
+// or instance-wide depending on which of project/group is set.
+func (c liveClient) SearchBlobs(project any, group any, query, ref string, limit int) ([]BlobMatch, bool, error) {
+	opt := &gitlabapi.SearchOptions{}
+	opt.PerPage = int64(clampProjectPageSize(limit, 20))
+	opt.Page = 1
+	if strings.TrimSpace(ref) != "" {
+		opt.Ref = gitlabapi.Ptr(strings.TrimSpace(ref))
+	}
+	var out []BlobMatch
+	for {
+		var blobs []*gitlabapi.Blob
+		var resp *gitlabapi.Response
+		var err error
+		switch {
+		case project != nil:
+			blobs, resp, err = c.client.Search.BlobsByProject(project, query, opt)
+		case group != nil:
+			blobs, resp, err = c.client.Search.BlobsByGroup(group, query, opt)
+		default:
+			blobs, resp, err = c.client.Search.Blobs(query, opt)
+		}
+		if err != nil {
+			return nil, false, err
+		}
+		for _, blob := range blobs {
+			if blob == nil {
+				continue
+			}
+			if limit > 0 && len(out) >= limit {
+				return out, true, nil
+			}
+			out = append(out, BlobMatch{
+				ProjectID: blob.ProjectID,
+				Path:      blob.Path,
+				Filename:  blob.Filename,
+				Basename:  blob.Basename,
+				Ref:       blob.Ref,
+				StartLine: blob.Startline,
+				Data:      blob.Data,
+			})
+		}
+		if resp == nil || resp.NextPage == 0 {
+			return out, false, nil
+		}
+		opt.Page = resp.NextPage
+	}
+}
