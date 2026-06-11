@@ -451,6 +451,62 @@ type TempoTraceResult struct {
 	Truncated  bool          `json:"truncated,omitempty"`
 }
 
+type TestInput struct {
+	GrafanaTargetInput
+}
+
+type TestResult struct {
+	URL     string `json:"url"`
+	Healthy bool   `json:"healthy"`
+	Version string `json:"version,omitempty"`
+	// Database is /api/health's database state ("ok" when reachable).
+	Database string `json:"database,omitempty"`
+	// Authenticated is true when stored credentials passed the /api/org probe.
+	Authenticated bool   `json:"authenticated"`
+	OrgName       string `json:"org_name,omitempty"`
+	HealthError   string `json:"health_error,omitempty"`
+	AuthError     string `json:"auth_error,omitempty"`
+	Hint          string `json:"hint,omitempty"`
+}
+
+// Test probes the instance twice: /api/health (no credentials — is Grafana
+// reachable at all?) and /api/org (do the stored credentials work?), so a
+// bootstrap failure names the exact missing step.
+func (s Service) Test(ctx pluginbinding.Context, input TestInput) (TestResult, error) {
+	target, client, err := s.client(ctx, input.GrafanaTargetInput)
+	if err != nil {
+		return TestResult{}, err
+	}
+	out := TestResult{URL: target.URL}
+	if raw, err := client.get(context.Background(), "/api/health", nil); err != nil {
+		out.HealthError = err.Error()
+		out.Hint = "Grafana is unreachable — check the registered endpoint URL: fluxplane-plugin endpoint list (register with: endpoint save grafana-main https://grafana.example.com --product grafana)"
+	} else {
+		var health struct {
+			Database string `json:"database"`
+			Version  string `json:"version"`
+		}
+		_ = json.Unmarshal(raw, &health)
+		out.Healthy = strings.EqualFold(strings.TrimSpace(health.Database), "ok")
+		out.Database = health.Database
+		out.Version = health.Version
+	}
+	if raw, err := client.get(context.Background(), "/api/org", nil); err != nil {
+		out.AuthError = err.Error()
+		if out.Hint == "" {
+			out.Hint = "instance is healthy but the credentials probe failed — mint a service-account token (Administration → Service accounts), store it with: fluxplane-plugin auth connect grafana, then re-run grafana.test"
+		}
+	} else {
+		var org struct {
+			Name string `json:"name"`
+		}
+		_ = json.Unmarshal(raw, &org)
+		out.Authenticated = true
+		out.OrgName = org.Name
+	}
+	return out, nil
+}
+
 func (s Service) DatasourceList(ctx pluginbinding.Context, input DatasourceListInput) (DatasourceListResult, error) {
 	target, client, err := s.client(ctx, input.GrafanaTargetInput)
 	if err != nil {

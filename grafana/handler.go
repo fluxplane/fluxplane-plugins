@@ -11,6 +11,7 @@ func NewPlugin() *pluginbinding.Plugin {
 
 func NewPluginWithService(service Service) *pluginbinding.Plugin {
 	return pluginbinding.Define(manifestSpec(),
+		pluginbinding.RegisterOperation(testSpec(), service.Test),
 		pluginbinding.RegisterOperation(datasourceListSpec(), service.DatasourceList),
 		pluginbinding.RegisterOperation(datasourceHealthSpec(), service.DatasourceHealth),
 		pluginbinding.RegisterOperation(folderListSpec(), service.FolderList),

@@ -33,7 +33,7 @@ func withInputExamples(spec core.OperationSpec, examples ...map[string]any) core
 
 const (
 	PluginName        = "grafana"
-	PluginVersion     = "0.19.0"
+	PluginVersion     = "0.20.0"
 	PluginDescription = "Grafana datasource catalog and proxy operations for Loki, Prometheus, Alertmanager, and Tempo."
 
 	EnvGrafanaAPIToken = "GRAFANA_API_TOKEN"
@@ -44,6 +44,7 @@ const (
 	AuthPurposeUsername = "username"
 	AuthPurposePassword = "password"
 
+	OperationTest               = "grafana.test"
 	OperationDatasourceList     = "grafana.datasource.list"
 	OperationDatasourceHealth   = "grafana.datasource.health"
 	OperationFolderList         = "grafana.folder.list"
@@ -76,6 +77,7 @@ func manifestSpec() pluginbinding.ManifestSpec {
 		Description: PluginDescription,
 		Aliases:     []string{"graf", PluginName},
 		Operations: []core.OperationSpec{
+			testSpec(),
 			datasourceListSpec(),
 			datasourceHealthSpec(),
 			folderListSpec(),
@@ -97,10 +99,15 @@ func manifestSpec() pluginbinding.ManifestSpec {
 			tempoTraceGetSpec(),
 		},
 		Auth: []core.AuthMethod{{
-			Name:        "endpoint",
-			Kind:        "config",
-			Description: "Grafana bearer token or basic auth used by host-resolved endpoint refs.",
-			Env:         []string{EnvGrafanaAPIToken, EnvGrafanaUsername, EnvGrafanaPassword},
+			Name: "endpoint",
+			Kind: "config",
+			Description: "Grafana service-account token (preferred) or basic auth, resolved from the persisted secret store at call time. " +
+				"Setup: 1) register the URL: fluxplane-plugin endpoint save grafana-main https://grafana.example.com --product grafana  " +
+				"2) in Grafana, mint a token under Administration → Service accounts (Viewer role suffices for reads)  " +
+				"3) store it: fluxplane-plugin auth connect grafana  " +
+				"4) verify both reachability and credentials: fluxplane-plugin operation invoke grafana grafana.test --arg endpoint_ref=grafana-main. " +
+				"Environment variables are read once during auth auto as setup hints, never at invoke time.",
+			Env: []string{EnvGrafanaAPIToken, EnvGrafanaUsername, EnvGrafanaPassword},
 			Fields: []core.AuthField{
 				pluginbinding.AuthField(AuthPurposeAPIToken, "Grafana service account token", true, true, EnvGrafanaAPIToken),
 				pluginbinding.AuthField(AuthPurposeUsername, "Grafana basic auth username", false, false, EnvGrafanaUsername),
@@ -108,6 +115,15 @@ func manifestSpec() pluginbinding.ManifestSpec {
 			},
 		}},
 	}
+}
+
+func testSpec() core.OperationSpec {
+	return withInputExamples(
+		pluginbinding.TypedOperationSpec[TestInput, TestResult](OperationTest,
+			"Test a Grafana endpoint in two steps — reachability (/api/health, no credentials) and stored-credential validity (/api/org) — with a hint naming the missing bootstrap step on failure.",
+			readOptions(core.OperationIdempotent)...),
+		map[string]any{"endpoint_ref": "grafana-main"},
+	)
 }
 
 func datasourceListSpec() core.OperationSpec {

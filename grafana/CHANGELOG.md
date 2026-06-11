@@ -1,5 +1,21 @@
 # Changelog
 
+## v0.3.0
+
+### Added
+- **`grafana.test`** — two-step endpoint probe: `/api/health` (reachability,
+  no credentials; reports version + database state) and `/api/org` (do the
+  stored credentials work?). Failures carry a `hint` naming the exact
+  missing bootstrap step (fluxplane-plugins#5).
+
+### Changed
+- The auth method description is now a guided bootstrap: endpoint save →
+  mint service-account token (Administration → Service accounts) →
+  `auth connect grafana` → `grafana.test` (fluxplane-plugins#5).
+- HTTP basic auth (username/password fields) actually works now — it
+  requires `fluxplane-plugin` ≥ v0.13.1, where the host first honors
+  username/password purposes. Manifest 0.20.0.
+
 ## v0.2.1
 
 ### Fixed

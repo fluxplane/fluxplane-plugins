@@ -38,6 +38,48 @@ func TestManifestMarksCredentialsSensitive(t *testing.T) {
 	}
 }
 
+func TestGrafanaTestProbesHealthAndCredentials(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/health":
+			_, _ = w.Write([]byte(`{"database":"ok","version":"11.2.0"}`))
+		case "/api/org":
+			_, _ = w.Write([]byte(`{"id":1,"name":"Main Org."}`))
+		default:
+			t.Fatalf("path = %s", r.URL.Path)
+		}
+	}))
+	defer server.Close()
+	plugin := NewPluginWithService(NewService())
+
+	out := plugintest.RunOK[TestResult](t, plugin, OperationTest, map[string]any{"endpoint_ref": "grafana-dev"}, plugintest.WithHost(newGrafanaTestHost(server.URL, "")))
+	if !out.Healthy || out.Version != "11.2.0" || !out.Authenticated || out.OrgName != "Main Org." || out.Hint != "" {
+		t.Fatalf("test out = %#v", out)
+	}
+}
+
+func TestGrafanaTestHintsOnAuthFailure(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/health":
+			_, _ = w.Write([]byte(`{"database":"ok","version":"11.2.0"}`))
+		default:
+			w.WriteHeader(http.StatusUnauthorized)
+			_, _ = w.Write([]byte(`{"message":"Unauthorized"}`))
+		}
+	}))
+	defer server.Close()
+	plugin := NewPluginWithService(NewService())
+
+	out := plugintest.RunOK[TestResult](t, plugin, OperationTest, map[string]any{"endpoint_ref": "grafana-dev"}, plugintest.WithHost(newGrafanaTestHost(server.URL, "")))
+	if !out.Healthy || out.Authenticated {
+		t.Fatalf("test out = %#v", out)
+	}
+	if !strings.Contains(out.Hint, "auth connect grafana") || !strings.Contains(out.Hint, "Service accounts") {
+		t.Fatalf("hint = %q, want bootstrap steps", out.Hint)
+	}
+}
+
 func TestDatasourceListDerivesClusterAliases(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/api/datasources" {

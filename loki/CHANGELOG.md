@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.3.1
+
+### Fixed
+- The auth-method bootstrap docs used invented `--id`/`--url` flags; the
+  real syntax is positional: `fluxplane-plugin endpoint save loki-main
+  https://loki.example.com --product loki`.
+
 ## v0.3.0
 
 ### Added

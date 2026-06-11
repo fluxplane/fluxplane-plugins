@@ -86,7 +86,7 @@ func manifestSpec() pluginbinding.ManifestSpec {
 			Name: "endpoint",
 			Kind: "config",
 			Description: "All fields are optional and resolve from the persisted secret store at call time. " +
-				"Setup: 1) register the Loki URL: fluxplane-plugin endpoint save --id loki-main --product loki --url https://loki.example.com  " +
+				"Setup: 1) register the Loki URL: fluxplane-plugin endpoint save loki-main https://loki.example.com --product loki  " +
 				"2) store credentials if the instance needs them: fluxplane-plugin auth connect loki (tenant ID for multi-tenant X-Scope-OrgID, username+password for HTTP basic auth)  " +
 				"3) verify: fluxplane-plugin operation invoke loki loki.test --arg endpoint_ref=loki-main. " +
 				"Environment variables are read once during auth auto as setup hints, never at invoke time.",
