@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.6.1
+
+### Fixed
+- jsonschema field descriptions containing commas were truncated at the
+  first comma when rendered (the tag parser treats commas as option
+  separators); affected descriptions are now escaped and render fully.
+
 ## v0.6.0
 
 ### Added

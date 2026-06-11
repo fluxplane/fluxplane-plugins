@@ -82,7 +82,7 @@ type GenerateInput struct {
 	Format    string             `json:"format,omitempty" jsonschema:"description=Response format. Use 'json' to force a JSON object."`
 	Suffix    string             `json:"suffix,omitempty" jsonschema:"description=Text appended after the response (for fill-in-the-middle models)."`
 	Raw       bool               `json:"raw,omitempty" jsonschema:"description=Skip prompt formatting and send the prompt verbatim."`
-	KeepAlive string             `json:"keep_alive,omitempty" jsonschema:"description=How long to keep the model loaded (e.g. '5m', '0' to unload)."`
+	KeepAlive string             `json:"keep_alive,omitempty" jsonschema:"description=How long to keep the model loaded (e.g. '5m'\\, '0' to unload)."`
 	Options   *GenerationOptions `json:"options,omitempty" jsonschema:"description=Model sampling and loading options."`
 }
 
@@ -101,7 +101,7 @@ type GenerateResult struct {
 }
 
 type ChatMessage struct {
-	Role    string   `json:"role" jsonschema:"required,description=Message role: system, user, assistant, or tool."`
+	Role    string   `json:"role" jsonschema:"required,description=Message role: system\\, user\\, assistant\\, or tool."`
 	Content string   `json:"content" jsonschema:"required,description=Message content."`
 	Images  []string `json:"images,omitempty" jsonschema:"description=Base64-encoded images for multimodal models."`
 }
@@ -191,14 +191,14 @@ type GenerationOptions struct {
 	TopP             float64        `json:"top_p,omitempty" jsonschema:"description=Top-P (nucleus) sampling."`
 	MinP             float64        `json:"min_p,omitempty" jsonschema:"description=Min-P sampling."`
 	Seed             int            `json:"seed,omitempty" jsonschema:"description=Random seed."`
-	NumPredict       int            `json:"num_predict,omitempty" jsonschema:"description=Max tokens to predict. -1 = infinite, -2 = fill context."`
+	NumPredict       int            `json:"num_predict,omitempty" jsonschema:"description=Max tokens to predict. -1 = infinite\\, -2 = fill context."`
 	NumCtx           int            `json:"num_ctx,omitempty" jsonschema:"description=Context window size in tokens."`
 	RepeatLastN      int            `json:"repeat_last_n,omitempty" jsonschema:"description=Window of recent tokens to apply repeat penalty over."`
 	RepeatPenalty    float64        `json:"repeat_penalty,omitempty" jsonschema:"description=Repetition penalty."`
 	PresencePenalty  float64        `json:"presence_penalty,omitempty" jsonschema:"description=Presence penalty."`
 	FrequencyPenalty float64        `json:"frequency_penalty,omitempty" jsonschema:"description=Frequency penalty."`
 	Stop             []string       `json:"stop,omitempty" jsonschema:"description=Stop sequences."`
-	Mirostat         *int           `json:"mirostat,omitempty" jsonschema:"description=Mirostat sampling: 0 (off), 1, or 2."`
+	Mirostat         *int           `json:"mirostat,omitempty" jsonschema:"description=Mirostat sampling: 0 (off)\\, 1\\, or 2."`
 	MirostatTau      float64        `json:"mirostat_tau,omitempty" jsonschema:"description=Mirostat target entropy."`
 	MirostatEta      float64        `json:"mirostat_eta,omitempty" jsonschema:"description=Mirostat learning rate."`
 	NumGPU           int            `json:"num_gpu,omitempty" jsonschema:"description=Number of model layers to offload to GPU."`

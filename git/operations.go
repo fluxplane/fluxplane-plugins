@@ -24,27 +24,27 @@ type DiffInput struct {
 }
 
 type AddInput struct {
-	All   bool     `json:"all,omitempty" jsonschema:"description=Stage all tracked and untracked workspace changes, equivalent to git add -A."`
+	All   bool     `json:"all,omitempty" jsonschema:"description=Stage all tracked and untracked workspace changes\\, equivalent to git add -A."`
 	Paths []string `json:"paths,omitempty" jsonschema:"description=Paths to stage. Required unless all is true."`
 }
 
 type CommitInput struct {
 	Message    string   `json:"message" jsonschema:"description=Commit message. Prefer a concise conventional or semantic commit subject with optional body."`
 	Stage      bool     `json:"stage,omitempty" jsonschema:"description=Stage paths or all changes before committing."`
-	All        bool     `json:"all,omitempty" jsonschema:"description=When stage is true, stage all tracked and untracked workspace changes with git add -A."`
-	Paths      []string `json:"paths,omitempty" jsonschema:"description=When stage is true, stage only these paths unless all is true."`
+	All        bool     `json:"all,omitempty" jsonschema:"description=When stage is true\\, stage all tracked and untracked workspace changes with git add -A."`
+	Paths      []string `json:"paths,omitempty" jsonschema:"description=When stage is true\\, stage only these paths unless all is true."`
 	AllowEmpty bool     `json:"allow_empty,omitempty" jsonschema:"description=Allow creating an empty commit."`
 }
 
 type TagInput struct {
 	Name    string `json:"name" jsonschema:"description=Tag name to create.,required"`
 	Ref     string `json:"ref,omitempty" jsonschema:"description=Optional commit-ish to tag. Defaults to HEAD."`
-	Message string `json:"message,omitempty" jsonschema:"description=Annotated tag message. When set, creates an annotated tag."`
+	Message string `json:"message,omitempty" jsonschema:"description=Annotated tag message. When set\\, creates an annotated tag."`
 }
 
 type PushInput struct {
 	Remote         string   `json:"remote,omitempty" jsonschema:"description=Remote name or URL. Defaults to origin."`
-	Refspecs       []string `json:"refspecs,omitempty" jsonschema:"description=Explicit refspecs to push, for example main or HEAD:refs/heads/main."`
+	Refspecs       []string `json:"refspecs,omitempty" jsonschema:"description=Explicit refspecs to push\\, for example main or HEAD:refs/heads/main."`
 	Tags           bool     `json:"tags,omitempty" jsonschema:"description=Push tags with --tags."`
 	SetUpstream    bool     `json:"set_upstream,omitempty" jsonschema:"description=Set upstream tracking with -u."`
 	ForceWithLease bool     `json:"force_with_lease,omitempty" jsonschema:"description=Use --force-with-lease. Raw force refspecs are rejected."`

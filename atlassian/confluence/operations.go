@@ -77,7 +77,7 @@ type PageSearchInput struct {
 	pluginbinding.DatasourceSearchInput
 	CQL      string `json:"cql,omitempty" jsonschema:"description=Confluence CQL query"`
 	Title    string `json:"title,omitempty" jsonschema:"description=Exact page title filter"`
-	SpaceKey string `json:"space_key,omitempty" jsonschema:"description=Confluence space key filter (e.g. OPS, DEV)"`
+	SpaceKey string `json:"space_key,omitempty" jsonschema:"description=Confluence space key filter (e.g. OPS\\, DEV)"`
 	Status   string `json:"status,omitempty" jsonschema:"description=Page status"`
 }
 
@@ -100,10 +100,10 @@ type PageShowInput struct {
 
 type PageListInput struct {
 	ConfluenceTargetInput
-	SpaceKey string `json:"space_key,omitempty" jsonschema:"description=Confluence space key filter (e.g. OPS, DEV)"`
+	SpaceKey string `json:"space_key,omitempty" jsonschema:"description=Confluence space key filter (e.g. OPS\\, DEV)"`
 	Title    string `json:"title,omitempty" jsonschema:"description=Exact page title filter"`
 	Status   string `json:"status,omitempty" jsonschema:"description=Page status filter (default current),enum=current,enum=archived,enum=draft,enum=trashed"`
-	Limit    int    `json:"limit,omitempty" jsonschema:"description=Maximum pages to return (default 25, max 100)"`
+	Limit    int    `json:"limit,omitempty" jsonschema:"description=Maximum pages to return (default 25\\, max 100)"`
 	Start    string `json:"start,omitempty" jsonschema:"description=Pagination offset from a previous result's next_page_token"`
 }
 
@@ -111,7 +111,7 @@ type PageCreateInput struct {
 	ConfluenceTargetInput
 	SpaceKey     string `json:"space_key,omitempty" jsonschema:"required,description=Confluence space key."`
 	Title        string `json:"title,omitempty" jsonschema:"required,description=Page title."`
-	BodyMarkdown string `json:"body_markdown,omitempty" jsonschema:"description=Page body as Markdown, converted to Confluence storage format. Preferred over body_storage."`
+	BodyMarkdown string `json:"body_markdown,omitempty" jsonschema:"description=Page body as Markdown\\, converted to Confluence storage format. Preferred over body_storage."`
 	BodyStorage  string `json:"body_storage,omitempty" jsonschema:"description=Confluence storage-format XHTML body for hand-authored macros. Mutually exclusive with body_markdown."`
 	ParentID     string `json:"parent_id,omitempty" jsonschema:"description=Optional parent page ID."`
 }
@@ -122,7 +122,7 @@ type PageUpdateInput struct {
 	ID           string `json:"id,omitempty" jsonschema:"description=Page ID"`
 	PageID       string `json:"page_id,omitempty" jsonschema:"description=Alias for id"`
 	Title        string `json:"title,omitempty" jsonschema:"description=New page title. Empty keeps the current title."`
-	BodyMarkdown string `json:"body_markdown,omitempty" jsonschema:"description=New page body as Markdown, converted to Confluence storage format. Replaces the whole body."`
+	BodyMarkdown string `json:"body_markdown,omitempty" jsonschema:"description=New page body as Markdown\\, converted to Confluence storage format. Replaces the whole body."`
 	BodyStorage  string `json:"body_storage,omitempty" jsonschema:"description=New body as storage-format XHTML. Mutually exclusive with body_markdown."`
 }
 
@@ -131,7 +131,7 @@ type CommentListInput struct {
 	BodyFormatInput
 	PageID string `json:"page_id,omitempty" jsonschema:"description=Confluence page ID."`
 	ID     string `json:"id,omitempty" jsonschema:"description=Alias for page_id."`
-	Limit  int    `json:"limit,omitempty" jsonschema:"description=Maximum comments to return (default 25, max 100)"`
+	Limit  int    `json:"limit,omitempty" jsonschema:"description=Maximum comments to return (default 25\\, max 100)"`
 	Start  string `json:"start,omitempty" jsonschema:"description=Pagination offset from a previous result's next_start"`
 }
 
@@ -139,7 +139,7 @@ type CommentAddInput struct {
 	ConfluenceTargetInput
 	PageID       string `json:"page_id,omitempty" jsonschema:"description=Confluence page ID."`
 	ID           string `json:"id,omitempty" jsonschema:"description=Alias for page_id."`
-	BodyMarkdown string `json:"body_markdown,omitempty" jsonschema:"description=Comment body as Markdown, converted to Confluence storage format."`
+	BodyMarkdown string `json:"body_markdown,omitempty" jsonschema:"description=Comment body as Markdown\\, converted to Confluence storage format."`
 	Body         string `json:"body,omitempty" jsonschema:"description=Alias for body_markdown."`
 	BodyStorage  string `json:"body_storage,omitempty" jsonschema:"description=Comment body as storage-format XHTML. Mutually exclusive with body_markdown."`
 }

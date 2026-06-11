@@ -23,8 +23,8 @@ type AnalyzeInput struct {
 	Prompt      string            `json:"prompt,omitempty" jsonschema:"description=Text instruction for the image analysis. Defaults to a concise description and OCR request."`
 	Images      []ImageInput      `json:"images,omitempty" jsonschema:"required,description=Images to analyze. Provide either url or base64 data for each image."`
 	Providers   []string          `json:"providers,omitempty" jsonschema:"description=Optional provider names declared by vision provider plugins."`
-	Model       string            `json:"model,omitempty" jsonschema:"description=Provider model override, for example gpt-4.1-mini or anthropic/claude-sonnet-latest."`
-	Models      map[string]string `json:"models,omitempty" jsonschema:"description=Provider-specific model overrides keyed by provider name, plugin name, or alias."`
+	Model       string            `json:"model,omitempty" jsonschema:"description=Provider model override\\, for example gpt-4.1-mini or anthropic/claude-sonnet-latest."`
+	Models      map[string]string `json:"models,omitempty" jsonschema:"description=Provider-specific model overrides keyed by provider name\\, plugin name\\, or alias."`
 	MaxTokens   int               `json:"max_tokens,omitempty" jsonschema:"description=Provider max output tokens."`
 	Temperature *float64          `json:"temperature,omitempty" jsonschema:"description=Provider sampling temperature."`
 }
@@ -34,7 +34,7 @@ type ImageInput struct {
 	BlobRef      string `json:"blob_ref,omitempty" jsonschema:"description=Host-provided image blob reference."`
 	ContentBytes []byte `json:"content_bytes,omitempty" jsonschema:"description=Base64-encoded inline image bytes."`
 	Filename     string `json:"filename,omitempty" jsonschema:"description=Filename hint for media type detection."`
-	MediaType    string `json:"media_type,omitempty" jsonschema:"description=Media type for raw base64 data, for example image/jpeg.,enum=image/jpeg,enum=image/png,enum=image/webp,enum=image/gif"`
+	MediaType    string `json:"media_type,omitempty" jsonschema:"description=Media type for raw base64 data\\, for example image/jpeg.,enum=image/jpeg,enum=image/png,enum=image/webp,enum=image/gif"`
 	Detail       string `json:"detail,omitempty" jsonschema:"description=Optional provider detail hint.,enum=auto,enum=low,enum=high"`
 }
 

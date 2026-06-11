@@ -20,7 +20,7 @@ const (
 // Prometheus legitimately returns "NaN", "+Inf", and "-Inf", which cannot be
 // encoded as JSON numbers.
 type SamplePoint struct {
-	Timestamp string `json:"timestamp" jsonschema:"description=Sample time, RFC3339."`
+	Timestamp string `json:"timestamp" jsonschema:"description=Sample time\\, RFC3339."`
 	Value     string `json:"value" jsonschema:"description=Sample value as Prometheus returns it; may be NaN or +/-Inf."`
 }
 
@@ -144,7 +144,7 @@ func timestampFromAny(value any) string {
 type Target struct {
 	Job        string            `json:"job,omitempty"`
 	Instance   string            `json:"instance,omitempty"`
-	Health     string            `json:"health,omitempty" jsonschema:"description=up, down, or unknown."`
+	Health     string            `json:"health,omitempty" jsonschema:"description=up\\, down\\, or unknown."`
 	ScrapePool string            `json:"scrape_pool,omitempty"`
 	ScrapeURL  string            `json:"scrape_url,omitempty"`
 	LastScrape string            `json:"last_scrape,omitempty"`
@@ -202,7 +202,7 @@ func targetFromWire(wire wireTarget, dropped bool) Target {
 // Alert is one alert from /api/v1/alerts.
 type Alert struct {
 	Name        string            `json:"name,omitempty"`
-	State       string            `json:"state,omitempty" jsonschema:"description=firing, pending, or inactive."`
+	State       string            `json:"state,omitempty" jsonschema:"description=firing\\, pending\\, or inactive."`
 	Severity    string            `json:"severity,omitempty"`
 	ActiveAt    string            `json:"active_at,omitempty"`
 	Value       string            `json:"value,omitempty"`
@@ -258,7 +258,7 @@ type Rule struct {
 	Name        string            `json:"name"`
 	Type        string            `json:"type" jsonschema:"description=alerting or recording."`
 	Query       string            `json:"query"`
-	State       string            `json:"state,omitempty" jsonschema:"description=firing, pending, or inactive (alerting rules only)."`
+	State       string            `json:"state,omitempty" jsonschema:"description=firing\\, pending\\, or inactive (alerting rules only)."`
 	For         string            `json:"for,omitempty"`
 	Labels      map[string]string `json:"labels,omitempty"`
 	Annotations map[string]string `json:"annotations,omitempty"`

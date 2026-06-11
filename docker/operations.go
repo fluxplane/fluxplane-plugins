@@ -18,7 +18,7 @@ func NewService() Service {
 type InfoInput struct{}
 
 type ShowInput struct {
-	ID string `json:"id,omitempty" jsonschema:"required,description=Object ID, name, digest, or reference."`
+	ID string `json:"id,omitempty" jsonschema:"required,description=Object ID\\, name\\, digest\\, or reference."`
 }
 
 type ContainerLogsInput struct {
@@ -76,7 +76,7 @@ type ContainerCreateInput struct {
 	User       string            `json:"user,omitempty" jsonschema:"description=User to run as."`
 	Hostname   string            `json:"hostname,omitempty" jsonschema:"description=Container hostname."`
 	Network    string            `json:"network,omitempty" jsonschema:"description=Network mode or network name."`
-	Restart    string            `json:"restart,omitempty" jsonschema:"description=Restart policy: no, always, on-failure, unless-stopped."`
+	Restart    string            `json:"restart,omitempty" jsonschema:"description=Restart policy: no\\, always\\, on-failure\\, unless-stopped."`
 	AutoRemove bool              `json:"auto_remove,omitempty" jsonschema:"description=Automatically remove the container when it exits."`
 	TTY        bool              `json:"tty,omitempty" jsonschema:"description=Allocate a TTY."`
 	OpenStdin  bool              `json:"open_stdin,omitempty" jsonschema:"description=Keep stdin open."`
@@ -84,18 +84,18 @@ type ContainerCreateInput struct {
 	Binds      []string          `json:"binds,omitempty" jsonschema:"description=Bind mounts in Docker -v syntax."`
 	Mounts     []MountInput      `json:"mounts,omitempty" jsonschema:"description=Structured mounts."`
 	Ports      []PortInput       `json:"ports,omitempty" jsonschema:"description=Port bindings."`
-	Platform   string            `json:"platform,omitempty" jsonschema:"description=Image platform, for example linux/amd64."`
+	Platform   string            `json:"platform,omitempty" jsonschema:"description=Image platform\\, for example linux/amd64."`
 }
 
 type MountInput struct {
-	Type     string `json:"type,omitempty" jsonschema:"description=Mount type: bind, volume, tmpfs."`
+	Type     string `json:"type,omitempty" jsonschema:"description=Mount type: bind\\, volume\\, tmpfs."`
 	Source   string `json:"source,omitempty" jsonschema:"description=Mount source."`
 	Target   string `json:"target,omitempty" jsonschema:"description=Mount target path in the container."`
 	ReadOnly bool   `json:"read_only,omitempty" jsonschema:"description=Mount read-only."`
 }
 
 type PortInput struct {
-	Container string `json:"container,omitempty" jsonschema:"required,description=Container port, for example 8080 or 8080/tcp."`
+	Container string `json:"container,omitempty" jsonschema:"required,description=Container port\\, for example 8080 or 8080/tcp."`
 	HostIP    string `json:"host_ip,omitempty" jsonschema:"description=Host IP to bind."`
 	HostPort  string `json:"host_port,omitempty" jsonschema:"description=Host port to bind."`
 	Protocol  string `json:"protocol,omitempty" jsonschema:"description=Protocol: tcp or udp."`
@@ -108,13 +108,13 @@ type ContainerStartInput struct {
 type ContainerStopInput struct {
 	ID      string `json:"id,omitempty" jsonschema:"required,description=Container ID or name."`
 	Timeout int    `json:"timeout,omitempty" jsonschema:"description=Seconds to wait before killing. Zero uses Docker default; -1 waits indefinitely."`
-	Signal  string `json:"signal,omitempty" jsonschema:"description=Signal to send before killing, for example SIGTERM."`
+	Signal  string `json:"signal,omitempty" jsonschema:"description=Signal to send before killing\\, for example SIGTERM."`
 }
 
 type ContainerRestartInput struct {
 	ID      string `json:"id,omitempty" jsonschema:"required,description=Container ID or name."`
 	Timeout int    `json:"timeout,omitempty" jsonschema:"description=Seconds to wait before killing during restart. Zero uses Docker default; -1 waits indefinitely."`
-	Signal  string `json:"signal,omitempty" jsonschema:"description=Signal to send before killing, for example SIGTERM."`
+	Signal  string `json:"signal,omitempty" jsonschema:"description=Signal to send before killing\\, for example SIGTERM."`
 }
 
 type ContainerRemoveInput struct {
@@ -124,7 +124,7 @@ type ContainerRemoveInput struct {
 }
 
 type RawInspectInput struct {
-	ID string `json:"id,omitempty" jsonschema:"required,description=Object ID, name, digest, or reference."`
+	ID string `json:"id,omitempty" jsonschema:"required,description=Object ID\\, name\\, digest\\, or reference."`
 }
 
 type PruneInput struct {
@@ -149,7 +149,7 @@ type ImageListInput struct {
 
 type ImagePullInput struct {
 	Reference    string            `json:"reference,omitempty" jsonschema:"required,description=Image reference to pull."`
-	Platform     string            `json:"platform,omitempty" jsonschema:"description=Optional platform, for example linux/amd64."`
+	Platform     string            `json:"platform,omitempty" jsonschema:"description=Optional platform\\, for example linux/amd64."`
 	RegistryAuth string            `json:"registry_auth,omitempty" jsonschema:"description=Base64-encoded Docker registry auth header."`
 	Auth         RegistryAuthInput `json:"auth,omitempty" jsonschema:"description=Registry auth fields to encode for this request."`
 	Limit        int               `json:"limit,omitempty" jsonschema:"description=Maximum pull progress events to keep. Defaults to 200."`
@@ -172,7 +172,7 @@ type ImageTagInput struct {
 
 type ImagePushInput struct {
 	Reference    string            `json:"reference,omitempty" jsonschema:"required,description=Image reference to push."`
-	Platform     string            `json:"platform,omitempty" jsonschema:"description=Optional platform, for example linux/amd64."`
+	Platform     string            `json:"platform,omitempty" jsonschema:"description=Optional platform\\, for example linux/amd64."`
 	RegistryAuth string            `json:"registry_auth,omitempty" jsonschema:"description=Base64-encoded Docker registry auth header."`
 	Auth         RegistryAuthInput `json:"auth,omitempty" jsonschema:"description=Registry auth fields to encode for this request."`
 	Limit        int               `json:"limit,omitempty" jsonschema:"description=Maximum push progress events to keep. Defaults to 200."`
@@ -196,13 +196,13 @@ type ImageBuildInput struct {
 }
 
 type ImageRemoveInput struct {
-	ID            string `json:"id,omitempty" jsonschema:"required,description=Image ID, digest, or reference."`
+	ID            string `json:"id,omitempty" jsonschema:"required,description=Image ID\\, digest\\, or reference."`
 	Force         bool   `json:"force,omitempty" jsonschema:"description=Force image removal."`
 	PruneChildren bool   `json:"prune_children,omitempty" jsonschema:"description=Delete untagged parent images."`
 }
 
 type ImagePruneInput struct {
-	All   bool     `json:"all,omitempty" jsonschema:"description=Prune all unused images, not only dangling images."`
+	All   bool     `json:"all,omitempty" jsonschema:"description=Prune all unused images\\, not only dangling images."`
 	Until string   `json:"until,omitempty" jsonschema:"description=Prune images created before this timestamp or duration supported by Docker."`
 	Label []string `json:"label,omitempty" jsonschema:"description=Only prune images with these labels."`
 }
@@ -249,18 +249,18 @@ type VolumeRemoveInput struct {
 }
 
 type SystemDFInput struct {
-	Type []string `json:"type,omitempty" jsonschema:"description=Object types to include: image, container, volume, build-cache."`
+	Type []string `json:"type,omitempty" jsonschema:"description=Object types to include: image\\, container\\, volume\\, build-cache."`
 }
 
 type SystemPruneInput struct {
-	All     bool     `json:"all,omitempty" jsonschema:"description=Prune all unused images, not only dangling images."`
+	All     bool     `json:"all,omitempty" jsonschema:"description=Prune all unused images\\, not only dangling images."`
 	Volumes bool     `json:"volumes,omitempty" jsonschema:"description=Also prune unused volumes."`
 	Until   string   `json:"until,omitempty" jsonschema:"description=Prune objects created before this timestamp or duration supported by Docker."`
 	Label   []string `json:"label,omitempty" jsonschema:"description=Only prune objects with these labels."`
 }
 
 type BuildCachePruneInput struct {
-	All           bool     `json:"all,omitempty" jsonschema:"description=Remove all unused build cache, not only dangling cache."`
+	All           bool     `json:"all,omitempty" jsonschema:"description=Remove all unused build cache\\, not only dangling cache."`
 	Until         string   `json:"until,omitempty" jsonschema:"description=Prune cache created before this timestamp or duration supported by Docker."`
 	Label         []string `json:"label,omitempty" jsonschema:"description=Only prune cache with these labels."`
 	KeepStorage   int64    `json:"keep_storage,omitempty" jsonschema:"description=Deprecated Docker keep-storage bytes."`

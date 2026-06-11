@@ -166,7 +166,7 @@ type LogsQueryInput struct {
 	RegionInput
 	TimeRangeInput
 	Groups         []string `json:"groups,omitempty" jsonschema:"required,description=Log group names to query."`
-	Query          string   `json:"query,omitempty" jsonschema:"required,description=CloudWatch Logs Insights query (e.g. fields @timestamp, @message | limit 20)."`
+	Query          string   `json:"query,omitempty" jsonschema:"required,description=CloudWatch Logs Insights query (e.g. fields @timestamp\\, @message | limit 20)."`
 	TimeoutSeconds int      `json:"timeout_seconds,omitempty" jsonschema:"description=Maximum seconds to wait for completion. Defaults to 30 and is capped at 120.,minimum=0,maximum=120"`
 }
 

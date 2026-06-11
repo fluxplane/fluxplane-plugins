@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.2.1
+
+### Fixed
+- jsonschema field descriptions containing commas were truncated at the
+  first comma when rendered (the tag parser treats commas as option
+  separators); affected descriptions are now escaped and render fully.
+
 ## v0.2.0
 
 - **Typed aggregator surface.** `ProviderAnalyzeFromOperationOutput` now takes

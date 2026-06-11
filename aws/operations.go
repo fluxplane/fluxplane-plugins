@@ -27,8 +27,8 @@ type RegionInput struct {
 
 // TimeRangeInput selects a time window for log and metric operations.
 type TimeRangeInput struct {
-	Since string `json:"since,omitempty" jsonschema:"description=Start time as RFC3339, unix seconds, or duration ago (e.g. 1h)."`
-	Until string `json:"until,omitempty" jsonschema:"description=End time as RFC3339, unix seconds, or duration ago. Defaults to now."`
+	Since string `json:"since,omitempty" jsonschema:"description=Start time as RFC3339\\, unix seconds\\, or duration ago (e.g. 1h)."`
+	Until string `json:"until,omitempty" jsonschema:"description=End time as RFC3339\\, unix seconds\\, or duration ago. Defaults to now."`
 }
 
 // window resolves the time window with the given default lookback.

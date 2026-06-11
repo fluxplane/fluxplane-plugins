@@ -59,7 +59,7 @@ type SpanSummary struct {
 	Name         string `json:"name"`
 	StartTime    string `json:"start_time,omitempty"`
 	DurationMS   int64  `json:"duration_ms,omitempty"`
-	StatusCode   string `json:"status_code,omitempty" jsonschema:"description=unset, ok, or error."`
+	StatusCode   string `json:"status_code,omitempty" jsonschema:"description=unset\\, ok\\, or error."`
 }
 
 type tempoWireSpan struct {

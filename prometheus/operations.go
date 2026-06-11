@@ -56,8 +56,8 @@ type QueryResult struct {
 type QueryRangeInput struct {
 	PrometheusTargetInput
 	Query string `json:"query,omitempty" jsonschema:"required,description=PromQL query"`
-	Start string `json:"start,omitempty" jsonschema:"description=RFC3339, unix timestamp, or duration ago"`
-	End   string `json:"end,omitempty" jsonschema:"description=RFC3339, unix timestamp, or duration ago"`
+	Start string `json:"start,omitempty" jsonschema:"description=RFC3339\\, unix timestamp\\, or duration ago"`
+	End   string `json:"end,omitempty" jsonschema:"description=RFC3339\\, unix timestamp\\, or duration ago"`
 	Step  string `json:"step,omitempty" jsonschema:"description=Range step duration. Choose step so (end-start)/step stays under 500 points per series; excess points are truncated keeping the newest."`
 }
 
@@ -65,7 +65,7 @@ type QueryRangeResult = QueryResult
 
 type LabelsInput struct {
 	PrometheusTargetInput
-	Label string   `json:"label,omitempty" jsonschema:"description=Optional label name. When set, returns values for that label."`
+	Label string   `json:"label,omitempty" jsonschema:"description=Optional label name. When set\\, returns values for that label."`
 	Match []string `json:"match,omitempty" jsonschema:"description=Optional PromQL match selectors."`
 }
 
@@ -77,7 +77,7 @@ type LabelsResult struct {
 
 type TargetsInput struct {
 	PrometheusTargetInput
-	State string `json:"state,omitempty" jsonschema:"description=active, dropped, or any"`
+	State string `json:"state,omitempty" jsonschema:"description=active\\, dropped\\, or any"`
 }
 
 type TargetsResult struct {
@@ -108,10 +108,10 @@ type RulesResult struct {
 
 type SeriesInput struct {
 	PrometheusTargetInput
-	Match []string `json:"match,omitempty" jsonschema:"required,description=PromQL series selectors, e.g. up{job=\"api\"}."`
-	Start string   `json:"start,omitempty" jsonschema:"description=RFC3339, unix timestamp, or duration ago"`
-	End   string   `json:"end,omitempty" jsonschema:"description=RFC3339, unix timestamp, or duration ago"`
-	Limit int      `json:"limit,omitempty" jsonschema:"description=Maximum series returned. Default 100, max 1000."`
+	Match []string `json:"match,omitempty" jsonschema:"required,description=PromQL series selectors\\, e.g. up{job=\"api\"}."`
+	Start string   `json:"start,omitempty" jsonschema:"description=RFC3339\\, unix timestamp\\, or duration ago"`
+	End   string   `json:"end,omitempty" jsonschema:"description=RFC3339\\, unix timestamp\\, or duration ago"`
+	Limit int      `json:"limit,omitempty" jsonschema:"description=Maximum series returned. Default 100\\, max 1000."`
 }
 
 type SeriesResult struct {

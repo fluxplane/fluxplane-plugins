@@ -52,7 +52,7 @@ type AMIPingResult struct {
 }
 
 type EndpointDiscoverInput struct {
-	Product   string `json:"product,omitempty" jsonschema:"description=Product to discover. Empty, asterisk, ami, and asterisk-ami discover AMI endpoints."`
+	Product   string `json:"product,omitempty" jsonschema:"description=Product to discover. Empty\\, asterisk\\, ami\\, and asterisk-ami discover AMI endpoints."`
 	Context   string `json:"context,omitempty" jsonschema:"description=Kubeconfig context."`
 	Namespace string `json:"namespace,omitempty" jsonschema:"description=Namespace to inspect. Empty means all namespaces."`
 	Limit     int    `json:"limit,omitempty" jsonschema:"description=Maximum candidates."`

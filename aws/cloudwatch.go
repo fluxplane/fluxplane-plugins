@@ -15,8 +15,8 @@ type CloudWatchMetricsInput struct {
 	TimeRangeInput
 	Namespace  string            `json:"namespace,omitempty" jsonschema:"required,description=Metric namespace such as AWS/RDS or AWS/EC2."`
 	Metric     string            `json:"metric,omitempty" jsonschema:"required,description=Metric name such as CPUUtilization."`
-	Dimensions map[string]string `json:"dimensions,omitempty" jsonschema:"description=Dimension name/value pairs, e.g. DBClusterIdentifier=dev-aurora2-mysql."`
-	Stat       string            `json:"stat,omitempty" jsonschema:"description=Statistic: Average, Sum, Minimum, Maximum, SampleCount, or a percentile like p99. Defaults to Average."`
+	Dimensions map[string]string `json:"dimensions,omitempty" jsonschema:"description=Dimension name/value pairs\\, e.g. DBClusterIdentifier=dev-aurora2-mysql."`
+	Stat       string            `json:"stat,omitempty" jsonschema:"description=Statistic: Average\\, Sum\\, Minimum\\, Maximum\\, SampleCount\\, or a percentile like p99. Defaults to Average."`
 	Period     int               `json:"period,omitempty" jsonschema:"description=Period in seconds. Defaults to 300.,minimum=0"`
 }
 

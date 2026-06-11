@@ -163,8 +163,8 @@ type DashboardGetResult struct {
 
 type AnnotationListInput struct {
 	GrafanaTargetInput
-	Since        string   `json:"since,omitempty" jsonschema:"description=Start time as RFC3339, unix timestamp, or duration ago."`
-	Until        string   `json:"until,omitempty" jsonschema:"description=End time as RFC3339, unix timestamp, or duration ago."`
+	Since        string   `json:"since,omitempty" jsonschema:"description=Start time as RFC3339\\, unix timestamp\\, or duration ago."`
+	Until        string   `json:"until,omitempty" jsonschema:"description=End time as RFC3339\\, unix timestamp\\, or duration ago."`
 	Tags         []string `json:"tags,omitempty" jsonschema:"description=Annotation tag filters."`
 	DashboardUID string   `json:"dashboard_uid,omitempty" jsonschema:"description=Dashboard UID filter."`
 	Limit        int      `json:"limit,omitempty" jsonschema:"description=Maximum annotations."`
@@ -172,7 +172,7 @@ type AnnotationListInput struct {
 
 type AnnotationAddInput struct {
 	GrafanaTargetInput
-	Time         string   `json:"time,omitempty" jsonschema:"description=Annotation time as RFC3339, unix timestamp, or duration ago. Defaults to now."`
+	Time         string   `json:"time,omitempty" jsonschema:"description=Annotation time as RFC3339\\, unix timestamp\\, or duration ago. Defaults to now."`
 	TimeEnd      string   `json:"time_end,omitempty" jsonschema:"description=Optional region end time."`
 	Text         string   `json:"text,omitempty" jsonschema:"required,description=Annotation text."`
 	Tags         []string `json:"tags,omitempty" jsonschema:"description=Annotation tags."`
@@ -184,7 +184,7 @@ type LokiLabelsInput struct {
 	GrafanaTargetInput
 	Cluster string `json:"cluster,omitempty" jsonschema:"required,description=Datasource cluster alias from datasource.list or exact datasource UID suffix."`
 	UID     string `json:"uid,omitempty" jsonschema:"description=Grafana datasource UID override."`
-	Label   string `json:"label,omitempty" jsonschema:"description=Optional label name. When set, returns values for that label."`
+	Label   string `json:"label,omitempty" jsonschema:"description=Optional label name. When set\\, returns values for that label."`
 	Query   string `json:"query,omitempty" jsonschema:"description=Optional LogQL selector."`
 }
 
@@ -219,8 +219,8 @@ type LokiQueryInput struct {
 	Cluster string `json:"cluster,omitempty" jsonschema:"required,description=Datasource cluster alias from datasource.list or exact datasource UID suffix."`
 	UID     string `json:"uid,omitempty" jsonschema:"description=Grafana datasource UID override."`
 	Query   string `json:"query,omitempty" jsonschema:"required,description=LogQL query."`
-	Since   string `json:"since,omitempty" jsonschema:"description=Start time as RFC3339, unix timestamp, or duration ago."`
-	Until   string `json:"until,omitempty" jsonschema:"description=End time as RFC3339, unix timestamp, or duration ago."`
+	Since   string `json:"since,omitempty" jsonschema:"description=Start time as RFC3339\\, unix timestamp\\, or duration ago."`
+	Until   string `json:"until,omitempty" jsonschema:"description=End time as RFC3339\\, unix timestamp\\, or duration ago."`
 	Limit   int    `json:"limit,omitempty" jsonschema:"description=Maximum entries or series."`
 }
 
@@ -231,8 +231,8 @@ type LokiRecentLogsInput struct {
 	App       string `json:"app,omitempty" jsonschema:"description=Application label filter."`
 	Namespace string `json:"namespace,omitempty" jsonschema:"description=Namespace label filter."`
 	Contains  string `json:"contains,omitempty" jsonschema:"description=Line contains filter."`
-	Since     string `json:"since,omitempty" jsonschema:"description=Start time as RFC3339, unix timestamp, or duration ago."`
-	Until     string `json:"until,omitempty" jsonschema:"description=End time as RFC3339, unix timestamp, or duration ago."`
+	Since     string `json:"since,omitempty" jsonschema:"description=Start time as RFC3339\\, unix timestamp\\, or duration ago."`
+	Until     string `json:"until,omitempty" jsonschema:"description=End time as RFC3339\\, unix timestamp\\, or duration ago."`
 	Limit     int    `json:"limit,omitempty" jsonschema:"description=Maximum entries."`
 }
 
@@ -241,7 +241,7 @@ type PrometheusQueryInput struct {
 	Cluster string `json:"cluster,omitempty" jsonschema:"required,description=Datasource cluster alias from datasource.list or exact datasource UID suffix."`
 	UID     string `json:"uid,omitempty" jsonschema:"description=Grafana datasource UID override."`
 	Query   string `json:"query,omitempty" jsonschema:"required,description=PromQL query."`
-	Time    string `json:"time,omitempty" jsonschema:"description=Evaluation time as RFC3339, unix timestamp, or duration ago."`
+	Time    string `json:"time,omitempty" jsonschema:"description=Evaluation time as RFC3339\\, unix timestamp\\, or duration ago."`
 }
 
 type PrometheusRangeInput struct {
@@ -249,8 +249,8 @@ type PrometheusRangeInput struct {
 	Cluster string `json:"cluster,omitempty" jsonschema:"required,description=Datasource cluster alias from datasource.list or exact datasource UID suffix."`
 	UID     string `json:"uid,omitempty" jsonschema:"description=Grafana datasource UID override."`
 	Query   string `json:"query,omitempty" jsonschema:"required,description=PromQL query."`
-	Start   string `json:"start,omitempty" jsonschema:"description=Start time as RFC3339, unix timestamp, or duration ago."`
-	End     string `json:"end,omitempty" jsonschema:"description=End time as RFC3339, unix timestamp, or duration ago."`
+	Start   string `json:"start,omitempty" jsonschema:"description=Start time as RFC3339\\, unix timestamp\\, or duration ago."`
+	End     string `json:"end,omitempty" jsonschema:"description=End time as RFC3339\\, unix timestamp\\, or duration ago."`
 	Step    string `json:"step,omitempty" jsonschema:"description=Range step duration."`
 }
 
@@ -297,7 +297,7 @@ type AlertSilenceCreateInput struct {
 	UID       string                `json:"uid,omitempty" jsonschema:"description=Grafana datasource UID override."`
 	Matchers  []AlertSilenceMatcher `json:"matchers,omitempty" jsonschema:"required,description=Alertmanager matchers."`
 	StartsAt  string                `json:"starts_at,omitempty" jsonschema:"description=Silence start time. Defaults to now."`
-	EndsAt    string                `json:"ends_at,omitempty" jsonschema:"required,description=Silence end time as RFC3339, unix timestamp, or duration from now (e.g. 2h)."`
+	EndsAt    string                `json:"ends_at,omitempty" jsonschema:"required,description=Silence end time as RFC3339\\, unix timestamp\\, or duration from now (e.g. 2h)."`
 	CreatedBy string                `json:"created_by,omitempty" jsonschema:"description=Silence creator."`
 	Comment   string                `json:"comment,omitempty" jsonschema:"required,description=Silence comment."`
 }
@@ -313,8 +313,8 @@ type TempoSearchInput struct {
 	GrafanaTargetInput
 	UID   string `json:"uid,omitempty" jsonschema:"description=Grafana Tempo datasource UID override."`
 	Query string `json:"query,omitempty" jsonschema:"description=Tempo search query."`
-	Start string `json:"start,omitempty" jsonschema:"description=Start time as RFC3339, unix timestamp, or duration ago."`
-	End   string `json:"end,omitempty" jsonschema:"description=End time as RFC3339, unix timestamp, or duration ago."`
+	Start string `json:"start,omitempty" jsonschema:"description=Start time as RFC3339\\, unix timestamp\\, or duration ago."`
+	End   string `json:"end,omitempty" jsonschema:"description=End time as RFC3339\\, unix timestamp\\, or duration ago."`
 	Limit int    `json:"limit,omitempty" jsonschema:"description=Maximum traces."`
 }
 
@@ -352,7 +352,7 @@ type PromRulesResult struct {
 // AMAlert is one active Alertmanager alert.
 type AMAlert struct {
 	Name         string            `json:"name,omitempty"`
-	State        string            `json:"state,omitempty" jsonschema:"description=active, suppressed, or unprocessed."`
+	State        string            `json:"state,omitempty" jsonschema:"description=active\\, suppressed\\, or unprocessed."`
 	Severity     string            `json:"severity,omitempty"`
 	StartsAt     string            `json:"starts_at,omitempty"`
 	EndsAt       string            `json:"ends_at,omitempty"`
@@ -367,7 +367,7 @@ type AMAlert struct {
 // Silence is one Alertmanager silence.
 type Silence struct {
 	ID        string                `json:"id"`
-	State     string                `json:"state,omitempty" jsonschema:"description=active, pending, or expired."`
+	State     string                `json:"state,omitempty" jsonschema:"description=active\\, pending\\, or expired."`
 	Matchers  []AlertSilenceMatcher `json:"matchers,omitempty"`
 	StartsAt  string                `json:"starts_at,omitempty"`
 	EndsAt    string                `json:"ends_at,omitempty"`
