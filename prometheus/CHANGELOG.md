@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.4.0
+
+Addresses the prometheus part of the #12 field report. Manifest 0.21.0.
+
+### Changed
+- **Breaking: time ranges are `since`/`until`** on `query_range` and
+  `series` (were `start`/`end`) — one time vocabulary across all query
+  plugins; same value forms as before (RFC3339, unix timestamp, duration
+  ago).
+- `samples`/`series` always serialize as `[]` on empty results.
+- SDK bump to `fluxplane-plugin` v0.18.0.
+
+
 ## v0.3.0
 
 ### Fixed

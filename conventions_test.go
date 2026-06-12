@@ -158,12 +158,7 @@ var timeRangeDescription = regexp.MustCompile(`(?i)time|rfc3339|timestamp`)
 // An input field json-named start/end whose description marks it as a time is
 // a vocabulary fork that costs agents an invalid-input round trip.
 func TestTimeRangeFieldNaming(t *testing.T) {
-	allowed := map[string]bool{
-		"prometheus: QueryRangeInput.End":   true,
-		"prometheus: QueryRangeInput.Start": true,
-		"prometheus: SeriesInput.End":       true,
-		"prometheus: SeriesInput.Start":     true,
-	}
+	allowed := map[string]bool{}
 	var found []string
 	walkGoFiles(t, func(plugin, path string, file *ast.File) {
 		ast.Inspect(file, func(n ast.Node) bool {
@@ -236,7 +231,5 @@ func seededOmitemptyAllowlist() map[string]bool {
 		"docker: SystemDFResult.Volumes":             true,
 		"homer: CallAnalyzeResult.CorrelationValues": true,
 		"homer: CallAnalyzeResult.Events":            true,
-		"prometheus: QueryResult.Samples":            true,
-		"prometheus: QueryResult.Series":             true,
 	}
 }

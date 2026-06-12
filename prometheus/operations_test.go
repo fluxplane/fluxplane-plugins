@@ -91,7 +91,7 @@ func TestQueryRangeParsesMatrixAndTruncates(t *testing.T) {
 	plugin := NewPluginWithService(NewService())
 	host := newPrometheusTestHost(server.URL)
 
-	out := plugintest.RunOK[QueryResult](t, plugin, OperationQueryRange, map[string]any{"endpoint_ref": "prometheus-dev", "query": "up", "start": "1h", "step": "1m"}, plugintest.WithHost(host))
+	out := plugintest.RunOK[QueryResult](t, plugin, OperationQueryRange, map[string]any{"endpoint_ref": "prometheus-dev", "query": "up", "since": "1h", "step": "1m"}, plugintest.WithHost(host))
 	if out.Count != 1 || len(out.Series) != 1 {
 		t.Fatalf("range output = %#v", out)
 	}

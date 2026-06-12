@@ -47,8 +47,8 @@ type QueryResult struct {
 	URL        string   `json:"url"`
 	Query      string   `json:"query"`
 	ResultType string   `json:"result_type"`
-	Samples    []Sample `json:"samples,omitempty" jsonschema:"description=Vector/scalar/string results: one value per metric."`
-	Series     []Series `json:"series,omitempty" jsonschema:"description=Matrix results: points over time per metric."`
+	Samples    []Sample `json:"samples" jsonschema:"description=Vector/scalar/string results: one value per metric."`
+	Series     []Series `json:"series" jsonschema:"description=Matrix results: points over time per metric."`
 	Count      int      `json:"count"`
 	Truncated  bool     `json:"truncated,omitempty" jsonschema:"description=True when series or points were dropped to stay within output caps."`
 }
@@ -56,9 +56,9 @@ type QueryResult struct {
 type QueryRangeInput struct {
 	PrometheusTargetInput
 	Query string `json:"query,omitempty" jsonschema:"required,description=PromQL query"`
-	Start string `json:"start,omitempty" jsonschema:"description=RFC3339\\, unix timestamp\\, or duration ago"`
-	End   string `json:"end,omitempty" jsonschema:"description=RFC3339\\, unix timestamp\\, or duration ago"`
-	Step  string `json:"step,omitempty" jsonschema:"description=Range step duration. Choose step so (end-start)/step stays under 500 points per series; excess points are truncated keeping the newest."`
+	Since string `json:"since,omitempty" jsonschema:"description=Start time as RFC3339\\, unix timestamp\\, or duration ago. Defaults to 1h."`
+	Until string `json:"until,omitempty" jsonschema:"description=End time as RFC3339\\, unix timestamp\\, or duration ago. Defaults to now."`
+	Step  string `json:"step,omitempty" jsonschema:"description=Range step duration. Choose step so (until-since)/step stays under 500 points per series; excess points are truncated keeping the newest."`
 }
 
 type QueryRangeResult = QueryResult
@@ -109,8 +109,8 @@ type RulesResult struct {
 type SeriesInput struct {
 	PrometheusTargetInput
 	Match []string `json:"match,omitempty" jsonschema:"required,description=PromQL series selectors\\, e.g. up{job=\"api\"}."`
-	Start string   `json:"start,omitempty" jsonschema:"description=RFC3339\\, unix timestamp\\, or duration ago"`
-	End   string   `json:"end,omitempty" jsonschema:"description=RFC3339\\, unix timestamp\\, or duration ago"`
+	Since string   `json:"since,omitempty" jsonschema:"description=Start time as RFC3339\\, unix timestamp\\, or duration ago"`
+	Until string   `json:"until,omitempty" jsonschema:"description=End time as RFC3339\\, unix timestamp\\, or duration ago"`
 	Limit int      `json:"limit,omitempty" jsonschema:"description=Maximum series returned. Default 100\\, max 1000."`
 }
 
@@ -207,11 +207,11 @@ func (s Service) QueryRange(ctx pluginbinding.Context, input QueryRangeInput) (Q
 		return QueryRangeResult{}, pluginbinding.Errorf("bad_input", "%s", err)
 	}
 	now := time.Now()
-	end, err := parseTimeValue(firstNonEmpty(input.End, "0s"), now)
+	end, err := parseTimeValue(firstNonEmpty(input.Until, "0s"), now)
 	if err != nil {
 		return QueryRangeResult{}, pluginbinding.Errorf("bad_input", "%s", err)
 	}
-	start, err := parseTimeValue(firstNonEmpty(input.Start, "1h"), now)
+	start, err := parseTimeValue(firstNonEmpty(input.Since, "1h"), now)
 	if err != nil {
 		return QueryRangeResult{}, pluginbinding.Errorf("bad_input", "%s", err)
 	}
@@ -353,15 +353,15 @@ func (s Service) SeriesMeta(ctx pluginbinding.Context, input SeriesInput) (Serie
 	}
 	now := time.Now()
 	values := url.Values{"match[]": match}
-	if strings.TrimSpace(input.Start) != "" {
-		start, err := parseTimeValue(input.Start, now)
+	if strings.TrimSpace(input.Since) != "" {
+		start, err := parseTimeValue(input.Since, now)
 		if err != nil {
 			return SeriesResult{}, pluginbinding.Errorf("bad_input", "%s", err)
 		}
 		values.Set("start", strconv.FormatInt(start.Unix(), 10))
 	}
-	if strings.TrimSpace(input.End) != "" {
-		end, err := parseTimeValue(input.End, now)
+	if strings.TrimSpace(input.Until) != "" {
+		end, err := parseTimeValue(input.Until, now)
 		if err != nil {
 			return SeriesResult{}, pluginbinding.Errorf("bad_input", "%s", err)
 		}
@@ -525,6 +525,12 @@ func (s Service) query(ctx context.Context, target string, client Client, query,
 		return QueryResult{}, pluginbinding.Errorf("prometheus", "%s", err)
 	}
 	out := QueryResult{URL: target, Query: query, ResultType: wrapped.ResultType, Samples: samples, Series: series, Truncated: truncated}
+	if out.Samples == nil {
+		out.Samples = []Sample{}
+	}
+	if out.Series == nil {
+		out.Series = []Series{}
+	}
 	out.Count = len(samples) + len(series)
 	return out, nil
 }

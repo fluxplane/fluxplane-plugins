@@ -33,7 +33,7 @@ func withInputExamples(spec core.OperationSpec, examples ...map[string]any) core
 
 const (
 	PluginName        = "prometheus"
-	PluginVersion     = "0.20.0"
+	PluginVersion     = "0.21.0"
 	PluginDescription = "Prometheus endpoint discovery, health checks, PromQL queries, labels, series, targets, rules, and alerts."
 
 	OperationTest       = "prometheus.test"
