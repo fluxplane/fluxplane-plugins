@@ -34,11 +34,11 @@ func withInputExamples(spec core.OperationSpec, examples ...map[string]any) core
 
 const (
 	PluginName        = "kubernetes"
-	PluginVersion     = "0.24.0"
+	PluginVersion     = "0.25.0"
 	PluginDescription = "Kubernetes cluster discovery, inventory, debugging (logs, events, exec), and deployment operations using kubeconfig."
 
 	OperationClusterList       = "kubernetes.cluster.list"
-	OperationClusterTest       = "kubernetes.cluster.test"
+	OperationTest              = "kubernetes.test"
 	OperationEndpointDiscover  = "kubernetes.endpoint.discover"
 	OperationSecretRead        = "kubernetes.secret.read"
 	OperationNamespaceList     = "kubernetes.namespace.list"
@@ -132,7 +132,7 @@ func clusterListSpec() core.OperationSpec {
 
 func clusterTestSpec() core.OperationSpec {
 	return pluginbinding.TypedOperationSpec[ClusterTestInput, ClusterTestResult](
-		OperationClusterTest,
+		OperationTest,
 		"Probe Kubernetes cluster reachability through kubeconfig.",
 		kubernetesReadOptions(core.OperationIdempotent)...,
 	)

@@ -214,7 +214,7 @@ func TestClusterTestUsesContextFromEndpointURL(t *testing.T) {
 		},
 	})
 
-	out := plugintest.RunOK[ClusterTestResult](t, plugin, OperationClusterTest, map[string]any{"url": "kubernetes://context/dev%2Fcontext"})
+	out := plugintest.RunOK[ClusterTestResult](t, plugin, OperationTest, map[string]any{"url": "kubernetes://context/dev%2Fcontext"})
 	if !out.OK || out.Context != "dev/context" || out.ServerVersion != "v1.30.0" {
 		t.Fatalf("result = %#v", out)
 	}

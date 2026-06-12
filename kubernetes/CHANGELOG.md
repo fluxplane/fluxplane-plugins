@@ -1,5 +1,24 @@
 # Changelog
 
+## v0.9.0
+
+Addresses the kubernetes section of the #12 field report. Manifest 0.25.0.
+
+### Added
+- **`pod.logs` takes a label `selector`** — logs from every matching pod
+  (max 20) in one call, one bounded fetch per pod, returned per-pod under
+  `pods` (with per-pod errors inline). The multi-pod deployment case stops
+  costing one call per pod.
+
+### Changed
+- **Breaking: probe renamed** — `kubernetes.cluster.test` →
+  `kubernetes.test` (the last deviant; the `<plugin>.test` convention is
+  now enforced repo-wide with an empty allowlist).
+- `pod.logs` validates inputs before dialing the cluster; `portforward.start`
+  result's `command` always serializes.
+- SDK bump to `fluxplane-plugin` v0.18.0.
+
+
 ## v0.8.0
 
 ### Added

@@ -87,9 +87,7 @@ func assertAllowlisted(t *testing.T, rule string, found []string, allowed map[st
 // nothing else. Any operation-name literal ending in `.test` must have exactly
 // two segments.
 func TestProbeOperationNaming(t *testing.T) {
-	allowed := map[string]bool{
-		`kubernetes: "kubernetes.cluster.test"`: true,
-	}
+	allowed := map[string]bool{}
 	var found []string
 	walkGoFiles(t, func(plugin, path string, file *ast.File) {
 		if filepath.Base(path) != "manifest.go" {
@@ -238,7 +236,6 @@ func seededOmitemptyAllowlist() map[string]bool {
 		"docker: SystemDFResult.Volumes":             true,
 		"homer: CallAnalyzeResult.CorrelationValues": true,
 		"homer: CallAnalyzeResult.Events":            true,
-		"kubernetes: PortForwardResult.Command":      true,
 		"prometheus: QueryResult.Samples":            true,
 		"prometheus: QueryResult.Series":             true,
 	}

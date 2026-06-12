@@ -2,6 +2,7 @@ package kubernetes
 
 import (
 	"context"
+	"github.com/fluxplane/fluxplane-plugin/pluginbinding"
 	"testing"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -74,5 +75,17 @@ func TestResolveServicePortForwardTargetRejectsSelectorlessService(t *testing.T)
 
 	if _, err := resolvePortForwardTarget(context.Background(), client, "default", "service/external", 443); err == nil {
 		t.Fatal("resolve target error is nil, want selectorless service error")
+	}
+}
+
+func TestPodLogsSelectorValidation(t *testing.T) {
+	// name XOR selector is enforced before any cluster call.
+	_, err := HostKubePodLogs(pluginbinding.Context{}, PodLogsInput{Namespace: "apps"})
+	if err == nil || err.Error() != "pod name or selector is required" {
+		t.Fatalf("err = %v", err)
+	}
+	_, err = HostKubePodLogs(pluginbinding.Context{}, PodLogsInput{Namespace: "apps", Name: "a", Selector: "app=x"})
+	if err == nil || err.Error() != "name and selector are mutually exclusive" {
+		t.Fatalf("err = %v", err)
 	}
 }

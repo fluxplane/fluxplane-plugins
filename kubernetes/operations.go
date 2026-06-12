@@ -192,7 +192,8 @@ type PodLogsInput struct {
 	URL         string `json:"url,omitempty" jsonschema:"description=Kubernetes endpoint URL."`
 	Context     string `json:"context,omitempty" jsonschema:"description=Kubeconfig context override."`
 	Namespace   string `json:"namespace,omitempty" jsonschema:"description=Pod namespace."`
-	Name        string `json:"name,omitempty" jsonschema:"description=Pod name."`
+	Name        string `json:"name,omitempty" jsonschema:"description=Pod name. Provide name or selector."`
+	Selector    string `json:"selector,omitempty" jsonschema:"description=Label selector (app=web) — fetches logs from every matching pod (max 20)\\, one bounded fetch per pod\\, returned under pods."`
 	Container   string `json:"container,omitempty" jsonschema:"description=Container name. Empty uses Kubernetes default selection."`
 	TailLines   int64  `json:"tail_lines,omitempty" jsonschema:"description=Number of trailing lines to return. Defaults to 100 only when no time or byte bound is provided."`
 	LimitBytes  int64  `json:"limit_bytes,omitempty" jsonschema:"description=Maximum bytes to return. This can be used without tail_lines."`
@@ -202,19 +203,32 @@ type PodLogsInput struct {
 	Timestamps  bool   `json:"timestamps,omitempty" jsonschema:"description=Include Kubernetes log timestamps."`
 }
 
+type PodLogStream struct {
+	Name      string   `json:"name"`
+	Container string   `json:"container,omitempty"`
+	Lines     []string `json:"lines"`
+	LineCount int      `json:"line_count"`
+	Error     string   `json:"error,omitempty"`
+}
+
 type PodLogsResult struct {
-	Namespace  string   `json:"namespace"`
-	Name       string   `json:"name"`
-	Container  string   `json:"container,omitempty"`
-	Lines      []string `json:"lines"`
-	Text       string   `json:"text,omitempty"`
-	LineCount  int      `json:"line_count"`
-	TailLines  int64    `json:"tail_lines,omitempty"`
-	LimitBytes int64    `json:"limit_bytes,omitempty"`
-	Since      string   `json:"since,omitempty"`
-	Until      string   `json:"until,omitempty"`
-	Previous   bool     `json:"previous,omitempty"`
-	Timestamps bool     `json:"timestamps,omitempty"`
+	Namespace string `json:"namespace"`
+	// Name and lines serve the single-pod form; selector and pods serve the
+	// label-selector fan-in.
+	Name       string         `json:"name,omitempty"`
+	Selector   string         `json:"selector,omitempty"`
+	Pods       []PodLogStream `json:"pods"`
+	Truncated  bool           `json:"truncated,omitempty" jsonschema:"description=True when more pods matched the selector than were fetched."`
+	Container  string         `json:"container,omitempty"`
+	Lines      []string       `json:"lines"`
+	Text       string         `json:"text,omitempty"`
+	LineCount  int            `json:"line_count"`
+	TailLines  int64          `json:"tail_lines,omitempty"`
+	LimitBytes int64          `json:"limit_bytes,omitempty"`
+	Since      string         `json:"since,omitempty"`
+	Until      string         `json:"until,omitempty"`
+	Previous   bool           `json:"previous,omitempty"`
+	Timestamps bool           `json:"timestamps,omitempty"`
 }
 
 type PortForwardStartInput struct {
@@ -246,7 +260,7 @@ type PortForwardResult struct {
 	DurationSeconds int       `json:"duration_seconds"`
 	ExpiresAt       time.Time `json:"expires_at"`
 	LogPath         string    `json:"log_path,omitempty"`
-	Command         []string  `json:"command,omitempty"`
+	Command         []string  `json:"command"`
 }
 
 type PortForwardStopInput struct {

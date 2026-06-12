@@ -138,6 +138,18 @@ func HostKubeSecrets(ctx pluginbinding.Context, input EndpointDiscoverInput) ([]
 }
 
 func HostKubePodLogs(ctx pluginbinding.Context, input PodLogsInput) (PodLogsResult, error) {
+	namespace := strings.TrimSpace(input.Namespace)
+	name := strings.TrimSpace(input.Name)
+	selector := strings.TrimSpace(input.Selector)
+	if namespace == "" {
+		return PodLogsResult{}, fmt.Errorf("namespace is required")
+	}
+	if name == "" && selector == "" {
+		return PodLogsResult{}, fmt.Errorf("pod name or selector is required")
+	}
+	if name != "" && selector != "" {
+		return PodLogsResult{}, fmt.Errorf("name and selector are mutually exclusive")
+	}
 	contextName, err := resolveKubeContext(ctx, input.EndpointRef, input.URL, input.Context)
 	if err != nil {
 		return PodLogsResult{}, err
@@ -146,18 +158,64 @@ func HostKubePodLogs(ctx pluginbinding.Context, input PodLogsInput) (PodLogsResu
 	if err != nil {
 		return PodLogsResult{}, err
 	}
-	namespace := strings.TrimSpace(input.Namespace)
-	name := strings.TrimSpace(input.Name)
-	if namespace == "" {
-		return PodLogsResult{}, fmt.Errorf("namespace is required")
-	}
-	if name == "" {
-		return PodLogsResult{}, fmt.Errorf("pod name is required")
-	}
 	bounds, err := podLogBounds(input)
 	if err != nil {
 		return PodLogsResult{}, err
 	}
+	base := PodLogsResult{
+		Namespace:  namespace,
+		Container:  strings.TrimSpace(input.Container),
+		Lines:      []string{},
+		Pods:       []PodLogStream{},
+		TailLines:  valueOrZero(bounds.TailLines),
+		LimitBytes: valueOrZero(bounds.LimitBytes),
+		Since:      strings.TrimSpace(input.Since),
+		Until:      strings.TrimSpace(input.Until),
+		Previous:   input.Previous,
+		Timestamps: input.Timestamps,
+	}
+	if selector != "" {
+		// Fan in across every matching pod, one bounded fetch per pod — the
+		// multi-pod deployment case stops costing one call per pod.
+		pods, err := client.CoreV1().Pods(namespace).List(context.Background(), metav1.ListOptions{LabelSelector: selector, Limit: maxSelectorLogPods})
+		if err != nil {
+			return PodLogsResult{}, err
+		}
+		base.Selector = selector
+		for i := range pods.Items {
+			podName := pods.Items[i].Name
+			lines, _, err := fetchPodLogLines(client, namespace, podName, input, bounds)
+			stream := PodLogStream{Name: podName, Container: strings.TrimSpace(input.Container), Lines: []string{}}
+			if err != nil {
+				stream.Error = err.Error()
+			} else {
+				stream.Lines = lines
+				stream.LineCount = len(lines)
+			}
+			base.Pods = append(base.Pods, stream)
+			base.LineCount += stream.LineCount
+		}
+		if pods.RemainingItemCount != nil && *pods.RemainingItemCount > 0 {
+			base.Truncated = true
+		}
+		return base, nil
+	}
+	lines, text, err := fetchPodLogLines(client, namespace, name, input, bounds)
+	if err != nil {
+		return PodLogsResult{}, err
+	}
+	base.Name = name
+	base.Lines = lines
+	base.Text = text
+	base.LineCount = len(lines)
+	return base, nil
+}
+
+// maxSelectorLogPods bounds the selector fan-in; together with the per-pod
+// tail/limit bounds it keeps multi-pod pulls under the host payload cap.
+const maxSelectorLogPods = 20
+
+func fetchPodLogLines(client kubernetes.Interface, namespace, name string, input PodLogsInput, bounds podLogBoundOptions) ([]string, string, error) {
 	options := &corev1.PodLogOptions{
 		Container:  strings.TrimSpace(input.Container),
 		Follow:     false,
@@ -174,7 +232,7 @@ func HostKubePodLogs(ctx pluginbinding.Context, input PodLogsInput) (PodLogsResu
 	}
 	stream, err := client.CoreV1().Pods(namespace).GetLogs(name, options).Stream(context.Background())
 	if err != nil {
-		return PodLogsResult{}, err
+		return nil, "", err
 	}
 	defer stream.Close()
 	maxBytes := int64(4 * 1024 * 1024)
@@ -183,24 +241,11 @@ func HostKubePodLogs(ctx pluginbinding.Context, input PodLogsInput) (PodLogsResu
 	}
 	data, err := io.ReadAll(io.LimitReader(stream, maxBytes))
 	if err != nil {
-		return PodLogsResult{}, err
+		return nil, "", err
 	}
 	text := filterPodLogText(strings.TrimRight(string(data), "\n"), bounds, input.Timestamps)
 	lines := splitNonEmptyLines(text)
-	return PodLogsResult{
-		Namespace:  namespace,
-		Name:       name,
-		Container:  strings.TrimSpace(input.Container),
-		Lines:      lines,
-		Text:       text,
-		LineCount:  len(lines),
-		TailLines:  valueOrZero(bounds.TailLines),
-		LimitBytes: valueOrZero(bounds.LimitBytes),
-		Since:      strings.TrimSpace(input.Since),
-		Until:      strings.TrimSpace(input.Until),
-		Previous:   input.Previous,
-		Timestamps: input.Timestamps,
-	}, nil
+	return lines, text, nil
 }
 
 func HostKubePortForwardStart(ctx pluginbinding.Context, input PortForwardStartInput) (PortForwardResult, error) {
