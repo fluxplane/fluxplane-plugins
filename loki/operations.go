@@ -74,6 +74,8 @@ type LabelsInput struct {
 	LokiTargetInput
 	Label string `json:"label,omitempty" jsonschema:"description=Optional Loki label name. When omitted label names are returned."`
 	Query string `json:"query,omitempty" jsonschema:"description=Optional LogQL stream selector used to filter label names or values."`
+	Since string `json:"since,omitempty" jsonschema:"description=Start time as RFC3339\\, unix seconds\\, duration ago\\, or now. Empty uses Loki's default window."`
+	Until string `json:"until,omitempty" jsonschema:"description=End time as RFC3339\\, unix seconds\\, duration ago\\, or now."`
 }
 
 type LabelsResult struct {
@@ -181,6 +183,21 @@ func (s Service) Labels(ctx pluginbinding.Context, input LabelsInput) (LabelsRes
 	values := url.Values{}
 	if strings.TrimSpace(input.Query) != "" {
 		values.Set("query", input.Query)
+	}
+	now := time.Now()
+	if strings.TrimSpace(input.Since) != "" {
+		start, err := parseTimeValue(input.Since, now)
+		if err != nil {
+			return LabelsResult{}, pluginbinding.Errorf("bad_input", "%s", err)
+		}
+		values.Set("start", strconv.FormatInt(start.UnixNano(), 10))
+	}
+	if strings.TrimSpace(input.Until) != "" {
+		end, err := parseTimeValue(input.Until, now)
+		if err != nil {
+			return LabelsResult{}, pluginbinding.Errorf("bad_input", "%s", err)
+		}
+		values.Set("end", strconv.FormatInt(end.UnixNano(), 10))
 	}
 	var response struct {
 		Status string   `json:"status"`

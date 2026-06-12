@@ -1,5 +1,20 @@
 # Changelog
 
+## v0.4.0
+
+Addresses the loki part of the #12 field report. Manifest 0.21.0.
+
+### Added
+- **`labels` accepts `since`/`until`** — label names/values can be scoped
+  to an incident window (passed to Loki as start/end nanos). Previously
+  the op took no time range at all, mismatched with archaeology work.
+
+### Changed
+- SDK bump to `fluxplane-plugin` v0.18.0. (The `entries: []`-never-null
+  behavior shipped in v0.3.x is now also pinned by the repo-wide
+  conformance test.)
+
+
 ## v0.3.1
 
 ### Fixed

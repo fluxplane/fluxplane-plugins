@@ -34,7 +34,7 @@ func withInputExamples(spec core.OperationSpec, examples ...map[string]any) core
 
 const (
 	PluginName        = "loki"
-	PluginVersion     = "0.20.0"
+	PluginVersion     = "0.21.0"
 	PluginDescription = "Loki endpoint discovery, health checks, LogQL stream and metric queries, recent logs, and labels."
 
 	EnvLokiTenantID = "LOKI_TENANT_ID"

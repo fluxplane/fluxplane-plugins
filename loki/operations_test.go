@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 
@@ -371,3 +372,20 @@ func (h *lokiTestHost) CapabilityCall(pluginbinding.ProviderCallRequest) (plugin
 }
 
 var _ pluginbinding.HostClient = (*lokiTestHost)(nil)
+
+func TestLabelsAcceptsTimeRange(t *testing.T) {
+	var captured url.Values
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		captured = r.URL.Query()
+		_ = json.NewEncoder(w).Encode(map[string]any{"status": "success", "data": []string{"app", "namespace"}})
+	}))
+	defer server.Close()
+	plugin := NewPluginWithService(NewService())
+	out := plugintest.RunOK[LabelsResult](t, plugin, OperationLabels, map[string]any{"endpoint_ref": "loki-dev", "since": "24h", "until": "now"}, plugintest.WithHost(newLokiTestHost(server.URL, "")))
+	if len(out.Values) != 2 {
+		t.Fatalf("out = %#v", out)
+	}
+	if captured.Get("start") == "" || captured.Get("end") == "" {
+		t.Fatalf("start/end params missing: %s", captured.Encode())
+	}
+}
