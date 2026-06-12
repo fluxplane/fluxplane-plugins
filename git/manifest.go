@@ -10,15 +10,15 @@ import (
 
 const (
 	PluginName        = "git"
-	PluginVersion     = "0.2.0"
+	PluginVersion     = "0.3.0"
 	PluginDescription = "Local Git repository inspection and write operations through the host process boundary."
 
-	OperationStatus = "git_status"
-	OperationDiff   = "git_diff"
-	OperationAdd    = "git_add"
-	OperationCommit = "git_commit"
-	OperationTag    = "git_tag"
-	OperationPush   = "git_push"
+	OperationStatus = "git.status"
+	OperationDiff   = "git.diff"
+	OperationAdd    = "git.add"
+	OperationCommit = "git.commit"
+	OperationTag    = "git.tag"
+	OperationPush   = "git.push"
 )
 
 // withInputExamples injects JSON Schema `examples` into an operation's input

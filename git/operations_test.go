@@ -243,3 +243,26 @@ func (h *fakeHost) CapabilityCall(pluginbinding.ProviderCallRequest) (pluginbind
 }
 
 var _ pluginbinding.HostClient = (*fakeHost)(nil)
+
+func TestStatusNonZeroExitIsAnError(t *testing.T) {
+	// Exit 128 ("not a git repository") used to come back as a SUCCESSFUL
+	// result with "No git status output."
+	host := &fakeHost{responses: []processResponse{{code: 128, stderr: "fatal: not a git repository (or any of the parent directories): .git"}}}
+	perr := plugintest.RunError(t, NewPlugin(), OperationStatus, StatusInput{}, plugintest.WithHost(host))
+	if perr.Code != "git_status_failed" || !strings.Contains(perr.Message, "not a git repository") {
+		t.Fatalf("err = %#v", perr)
+	}
+}
+
+func TestRepoInputTargetsRepositoryViaDashC(t *testing.T) {
+	host := &fakeHost{responses: []processResponse{{stdout: "## main\n"}}}
+	_ = plugintest.RunOK[GitResult](t, NewPlugin(), OperationStatus, StatusInput{RepoInput: RepoInput{Repo: "/work/repo"}}, plugintest.WithHost(host))
+	host.expectCalls(t, []string{"-C /work/repo status --short --branch"})
+}
+
+func TestRepoInputRejectsFlagInjection(t *testing.T) {
+	perr := plugintest.RunError(t, NewPlugin(), OperationStatus, StatusInput{RepoInput: RepoInput{Repo: "--upload-pack=evil"}}, plugintest.WithHost(&fakeHost{}))
+	if perr.Code != "invalid_git_status_input" {
+		t.Fatalf("err = %#v", perr)
+	}
+}

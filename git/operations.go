@@ -12,9 +12,17 @@ const (
 	maximumGitDiffMaxBytes = 128 * 1024
 )
 
-type StatusInput struct{}
+// RepoInput targets a repository on disk; empty means the host process cwd.
+type RepoInput struct {
+	Repo string `json:"repo,omitempty" jsonschema:"description=Repository path (git -C). Empty uses the host's working directory."`
+}
+
+type StatusInput struct {
+	RepoInput
+}
 
 type DiffInput struct {
+	RepoInput
 	Staged    bool     `json:"staged,omitempty" jsonschema:"description=Show staged changes instead of unstaged changes."`
 	Ref       string   `json:"ref,omitempty" jsonschema:"description=Optional ref or ref range."`
 	Paths     []string `json:"paths,omitempty" jsonschema:"description=Limit diff to paths."`
@@ -24,11 +32,13 @@ type DiffInput struct {
 }
 
 type AddInput struct {
+	RepoInput
 	All   bool     `json:"all,omitempty" jsonschema:"description=Stage all tracked and untracked workspace changes\\, equivalent to git add -A."`
 	Paths []string `json:"paths,omitempty" jsonschema:"description=Paths to stage. Required unless all is true."`
 }
 
 type CommitInput struct {
+	RepoInput
 	Message    string   `json:"message" jsonschema:"description=Commit message. Prefer a concise conventional or semantic commit subject with optional body."`
 	Stage      bool     `json:"stage,omitempty" jsonschema:"description=Stage paths or all changes before committing."`
 	All        bool     `json:"all,omitempty" jsonschema:"description=When stage is true\\, stage all tracked and untracked workspace changes with git add -A."`
@@ -37,12 +47,14 @@ type CommitInput struct {
 }
 
 type TagInput struct {
+	RepoInput
 	Name    string `json:"name" jsonschema:"description=Tag name to create.,required"`
 	Ref     string `json:"ref,omitempty" jsonschema:"description=Optional commit-ish to tag. Defaults to HEAD."`
 	Message string `json:"message,omitempty" jsonschema:"description=Annotated tag message. When set\\, creates an annotated tag."`
 }
 
 type PushInput struct {
+	RepoInput
 	Remote         string   `json:"remote,omitempty" jsonschema:"description=Remote name or URL. Defaults to origin."`
 	Refspecs       []string `json:"refspecs,omitempty" jsonschema:"description=Explicit refspecs to push\\, for example main or HEAD:refs/heads/main."`
 	Tags           bool     `json:"tags,omitempty" jsonschema:"description=Push tags with --tags."`
@@ -79,10 +91,13 @@ type GitData struct {
 	DryRun          bool     `json:"dry_run,omitempty"`
 }
 
-func Status(ctx pluginbinding.Context, _ StatusInput) (GitResult, error) {
-	run, err := runGit(ctx, []string{"status", "--short", "--branch"}, processLimits{TimeoutMS: 30000})
+func Status(ctx pluginbinding.Context, req StatusInput) (GitResult, error) {
+	if err := validateRepoPath(req.Repo); err != nil {
+		return GitResult{}, pluginbinding.Fail("invalid_git_status_input", err.Error())
+	}
+	run, err := runGit(ctx, req.Repo, []string{"status", "--short", "--branch"}, processLimits{TimeoutMS: 30000})
 	data := processData(run)
-	if err != nil {
+	if err := gitRunFailure(run, err); err != nil {
 		return GitResult{}, pluginbinding.Fail("git_status_failed", gitProcessErrorMessage(err, run.Stderr))
 	}
 	text := strings.TrimSpace(run.Stdout)
@@ -97,8 +112,11 @@ func Diff(ctx pluginbinding.Context, req DiffInput) (GitResult, error) {
 	if err != nil {
 		return GitResult{}, pluginbinding.Fail("invalid_git_diff_input", err.Error())
 	}
+	if err := validateRepoPath(req.Repo); err != nil {
+		return GitResult{}, pluginbinding.Fail("invalid_git_diff_input", err.Error())
+	}
 	maxBytes := gitDiffMaxBytes(req)
-	run, err := runGit(ctx, args, processLimits{TimeoutMS: 30000, MaxStdout: 256 * 1024})
+	run, err := runGit(ctx, req.Repo, args, processLimits{TimeoutMS: 30000, MaxStdout: 256 * 1024})
 	text, truncated := capGitDiffText(strings.TrimSpace(run.Stdout), maxBytes)
 	data := processData(run)
 	data.Stdout = text
@@ -106,7 +124,7 @@ func Diff(ctx pluginbinding.Context, req DiffInput) (GitResult, error) {
 	data.Mode = gitDiffMode(req)
 	data.Truncated = truncated
 	data.MaxBytes = maxBytes
-	if err != nil {
+	if err := gitRunFailure(run, err); err != nil {
 		return GitResult{}, pluginbinding.Fail("git_diff_failed", gitProcessErrorMessage(err, run.Stderr))
 	}
 	if text == "" {
@@ -123,9 +141,12 @@ func Add(ctx pluginbinding.Context, req AddInput) (GitResult, error) {
 	if err != nil {
 		return GitResult{}, pluginbinding.Fail("invalid_git_add_input", err.Error())
 	}
-	run, err := runGit(ctx, args, processLimits{TimeoutMS: 30000})
+	if err := validateRepoPath(req.Repo); err != nil {
+		return GitResult{}, pluginbinding.Fail("invalid_git_add_input", err.Error())
+	}
+	run, err := runGit(ctx, req.Repo, args, processLimits{TimeoutMS: 30000})
 	data := processData(run)
-	if err != nil {
+	if err := gitRunFailure(run, err); err != nil {
 		return GitResult{}, pluginbinding.Fail("git_add_failed", err.Error())
 	}
 	return gitResult(processText(run, "Staged changes."), data), nil
@@ -136,6 +157,9 @@ func Commit(ctx pluginbinding.Context, req CommitInput) (GitResult, error) {
 	if message == "" {
 		return GitResult{}, pluginbinding.Fail("invalid_git_commit_input", "message is required")
 	}
+	if err := validateRepoPath(req.Repo); err != nil {
+		return GitResult{}, pluginbinding.Fail("invalid_git_commit_input", err.Error())
+	}
 	if !req.Stage && (req.All || len(req.Paths) > 0) {
 		return GitResult{}, pluginbinding.Fail("invalid_git_commit_input", "paths or all require stage to be true")
 	}
@@ -144,8 +168,8 @@ func Commit(ctx pluginbinding.Context, req CommitInput) (GitResult, error) {
 		if err != nil {
 			return GitResult{}, pluginbinding.Fail("invalid_git_commit_input", err.Error())
 		}
-		_, err = runGit(ctx, args, processLimits{TimeoutMS: 30000})
-		if err != nil {
+		stageRun, err := runGit(ctx, req.Repo, args, processLimits{TimeoutMS: 30000})
+		if err := gitRunFailure(stageRun, err); err != nil {
 			return GitResult{}, pluginbinding.Fail("git_commit_stage_failed", err.Error())
 		}
 	}
@@ -154,20 +178,20 @@ func Commit(ctx pluginbinding.Context, req CommitInput) (GitResult, error) {
 		args = append(args, "--allow-empty")
 	}
 	args = append(args, "-m", message)
-	commitRun, err := runGit(ctx, args, processLimits{TimeoutMS: 30000, MaxStdout: 128 * 1024, MaxStderr: 128 * 1024})
+	commitRun, err := runGit(ctx, req.Repo, args, processLimits{TimeoutMS: 30000, MaxStdout: 128 * 1024, MaxStderr: 128 * 1024})
 	data := processData(commitRun)
-	if err != nil {
+	if err := gitRunFailure(commitRun, err); err != nil {
 		return GitResult{}, pluginbinding.Fail("git_commit_failed", err.Error())
 	}
-	headRun, err := runGit(ctx, []string{"rev-parse", "HEAD"}, processLimits{TimeoutMS: 30000, MaxStdout: 1024, MaxStderr: 1024})
-	if err != nil {
+	headRun, err := runGit(ctx, req.Repo, []string{"rev-parse", "HEAD"}, processLimits{TimeoutMS: 30000, MaxStdout: 1024, MaxStderr: 1024})
+	if err := gitRunFailure(headRun, err); err != nil {
 		return GitResult{}, pluginbinding.Fail("git_commit_rev_parse_failed", err.Error())
 	}
 	commit := strings.TrimSpace(headRun.Stdout)
 	data.Commit = commit
 	text := commitText(commit, commitRun)
 	if req.Stage && !req.All && len(req.Paths) > 0 {
-		if dirty := remainingDirtyFiles(ctx); len(dirty) > 0 {
+		if dirty := remainingDirtyFiles(ctx, req.Repo); len(dirty) > 0 {
 			data.RemainingDirty = dirty
 			text += "\n\nUncommitted changes remain in: " + strings.Join(dirty, ", ")
 		}
@@ -180,10 +204,13 @@ func Tag(ctx pluginbinding.Context, req TagInput) (GitResult, error) {
 	if err != nil {
 		return GitResult{}, pluginbinding.Fail("invalid_git_tag_input", err.Error())
 	}
-	run, err := runGit(ctx, args, processLimits{TimeoutMS: 30000, MaxStdout: 128 * 1024, MaxStderr: 128 * 1024})
+	if err := validateRepoPath(req.Repo); err != nil {
+		return GitResult{}, pluginbinding.Fail("invalid_git_tag_input", err.Error())
+	}
+	run, err := runGit(ctx, req.Repo, args, processLimits{TimeoutMS: 30000, MaxStdout: 128 * 1024, MaxStderr: 128 * 1024})
 	data := processData(run)
 	data.Tag = strings.TrimSpace(req.Name)
-	if err != nil {
+	if err := gitRunFailure(run, err); err != nil {
 		return GitResult{}, pluginbinding.Fail("git_tag_failed", err.Error())
 	}
 	return gitResult(processText(run, "Created tag "+strings.TrimSpace(req.Name)), data), nil
@@ -194,13 +221,16 @@ func Push(ctx pluginbinding.Context, req PushInput) (GitResult, error) {
 	if err != nil {
 		return GitResult{}, pluginbinding.Fail("invalid_git_push_input", err.Error())
 	}
-	run, err := runGit(ctx, args, processLimits{TimeoutMS: 120000, MaxStdout: 128 * 1024, MaxStderr: 128 * 1024})
+	if err := validateRepoPath(req.Repo); err != nil {
+		return GitResult{}, pluginbinding.Fail("invalid_git_push_input", err.Error())
+	}
+	run, err := runGit(ctx, req.Repo, args, processLimits{TimeoutMS: 120000, MaxStdout: 128 * 1024, MaxStderr: 128 * 1024})
 	data := processData(run)
 	data.Remote = gitPushRemote(req)
 	data.Refspecs = append([]string(nil), req.Refspecs...)
 	data.Tags = req.Tags
 	data.DryRun = req.DryRun
-	if err != nil {
+	if err := gitRunFailure(run, err); err != nil {
 		return GitResult{}, pluginbinding.Fail("git_push_failed", err.Error())
 	}
 	return gitResult(processText(run, "Pushed to "+gitPushRemote(req)), data), nil
@@ -212,7 +242,10 @@ type processLimits struct {
 	MaxStderr int64
 }
 
-func runGit(ctx pluginbinding.Context, args []string, limits processLimits) (pluginbinding.ProcessRunResponse, error) {
+func runGit(ctx pluginbinding.Context, repo string, args []string, limits processLimits) (pluginbinding.ProcessRunResponse, error) {
+	if repo = strings.TrimSpace(repo); repo != "" {
+		args = append([]string{"-C", repo}, args...)
+	}
 	return ctx.Host.ProcessRun(pluginbinding.ProcessRunRequest{
 		Command:   "git",
 		Args:      append([]string(nil), args...),
@@ -223,6 +256,17 @@ func runGit(ctx pluginbinding.Context, args []string, limits processLimits) (plu
 		Group:     "git",
 		Tags:      []string{"git"},
 	})
+}
+
+func validateRepoPath(repo string) error {
+	repo = strings.TrimSpace(repo)
+	if repo == "" {
+		return nil
+	}
+	if strings.HasPrefix(repo, "-") {
+		return fmt.Errorf("repo must not start with '-'")
+	}
+	return nil
 }
 
 func gitDiffArgs(req DiffInput) ([]string, error) {
@@ -388,6 +432,19 @@ func validateGitRefspec(value string) error {
 	return nil
 }
 
+// gitRunFailure folds the two failure shapes into one: a process error OR a
+// non-zero git exit (which the host reports as a *successful* process run).
+// A 128 "not a git repository" must never read as ok.
+func gitRunFailure(run pluginbinding.ProcessRunResponse, err error) error {
+	if err != nil {
+		return err
+	}
+	if run.ExitCode != 0 {
+		return fmt.Errorf("git exited %d: %s", run.ExitCode, gitProcessErrorMessage(nil, run.Stderr))
+	}
+	return nil
+}
+
 func gitProcessErrorMessage(err error, stderr string) string {
 	if strings.Contains(stderr, "Not a git repository") || strings.Contains(stderr, "not a git repository") {
 		return "workspace is not a git repository"
@@ -466,9 +523,9 @@ func commitText(commit string, result pluginbinding.ProcessRunResponse) string {
 	return text
 }
 
-func remainingDirtyFiles(ctx pluginbinding.Context) []string {
-	result, err := runGit(ctx, []string{"status", "--porcelain"}, processLimits{TimeoutMS: 30000})
-	if err != nil {
+func remainingDirtyFiles(ctx pluginbinding.Context, repo string) []string {
+	result, err := runGit(ctx, repo, []string{"status", "--porcelain"}, processLimits{TimeoutMS: 30000})
+	if gitRunFailure(result, err) != nil {
 		return nil
 	}
 	var dirty []string

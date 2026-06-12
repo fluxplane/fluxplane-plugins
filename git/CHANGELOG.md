@@ -1,5 +1,22 @@
 # Changelog
 
+## v0.4.0
+
+Addresses the git section of the #12 field report. Manifest 0.3.0.
+
+### Changed
+- **Breaking: operations renamed to the toolchain convention** —
+  `git_status`/`git_diff`/`git_add`/`git_commit`/`git_tag`/`git_push` are
+  now `git.status`/`git.diff`/`git.add`/`git.commit`/`git.tag`/`git.push`.
+- **Non-zero git exits are errors.** `exit_code: 128` ("not a git
+  repository") previously returned a *successful* result with "No git
+  status output."; every operation now fails loudly with git's stderr.
+- **Repositories are targetable**: every operation accepts `repo`
+  (`git -C <repo>`); empty keeps the host working directory. Flag-shaped
+  paths are rejected.
+- SDK bump to `fluxplane-plugin` v0.18.0.
+
+
 ## v0.3.1
 
 ### Fixed
