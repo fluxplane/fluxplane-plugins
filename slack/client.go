@@ -28,6 +28,7 @@ type Client interface {
 	GetPresence(context.Context, string) (Presence, error)
 	SetPresence(context.Context, string) error
 	SendMessage(context.Context, MessageSendRequest) (string, error)
+	OpenIM(context.Context, string) (string, error)
 	GetPermalink(context.Context, string, string) (string, error)
 	EditMessage(context.Context, MessageEditRequest) (string, error)
 	DeleteMessage(context.Context, MessageRefRequest) error
@@ -275,6 +276,22 @@ func (c liveClient) GetPresence(ctx context.Context, user string) (Presence, err
 
 func (c liveClient) SetPresence(ctx context.Context, presence string) error {
 	return c.client.SetUserPresenceContext(ctx, strings.TrimSpace(presence))
+}
+
+// OpenIM opens (or fetches) the direct-message conversation with a user and
+// returns its D… channel id. conversations.open is idempotent on Slack's side.
+func (c liveClient) OpenIM(ctx context.Context, userID string) (string, error) {
+	channel, _, _, err := c.client.OpenConversationContext(ctx, &slackapi.OpenConversationParameters{
+		Users:    []string{strings.TrimSpace(userID)},
+		ReturnIM: true,
+	})
+	if err != nil {
+		return "", err
+	}
+	if channel == nil || strings.TrimSpace(channel.ID) == "" {
+		return "", fmt.Errorf("conversations.open returned no channel for user %s", userID)
+	}
+	return channel.ID, nil
 }
 
 func (c liveClient) SendMessage(ctx context.Context, request MessageSendRequest) (string, error) {

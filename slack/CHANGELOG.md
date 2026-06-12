@@ -1,5 +1,29 @@
 # Changelog
 
+## v0.23.0
+
+Addresses the slack section of the #12 field report. Manifest 0.23.0.
+
+### Added
+- **DMs to users work**: `channel` on `message.send` (and every
+  channel-taking operation) now accepts a user id (`U…`/`W…`) or `@name` —
+  the IM conversation is opened via `conversations.open` automatically and
+  the message lands there. Previously a user id failed with "unknown Slack
+  reference … build the Slack index", a fix that did not fix it.
+- `message.send` carries runnable examples (channel + markdown, DM via
+  user id).
+
+### Changed
+- **Breaking: probe renamed** — `slack.auth.test` → `slack.test` (one probe
+  name across all plugins).
+- **Empty collections are `[]`, never omitted**: all 14 result-struct
+  collections (channels, messages, users, files, emojis, bookmarks,
+  mentions, tickets, tokens, unreads) lost `omitempty` and serialize as
+  `[]` when empty.
+- SDK bump to `fluxplane-plugin` v0.18.0 (unknown-operation responses carry
+  did-you-mean suggestions).
+
+
 ## v0.22.0
 
 ### Fixed

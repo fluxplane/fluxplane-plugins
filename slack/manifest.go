@@ -10,7 +10,7 @@ import (
 
 const (
 	PluginName        = "slack"
-	PluginVersion     = "0.22.0"
+	PluginVersion     = "0.23.0"
 	PluginDescription = "Slack token info, messaging, file upload, search, thread, channel member, and reverse lookup operations."
 
 	AuthMethodTokenSet = "token_set"
@@ -22,7 +22,7 @@ const (
 	EnvSlackUserToken = "SLACK_USER_TOKEN"
 	EnvSlackAppToken  = "SLACK_APP_TOKEN"
 
-	OperationAuthTest       = "slack.auth.test"
+	OperationTest           = "slack.test"
 	OperationBookmarkAdd    = "slack.bookmark.add"
 	OperationBookmarkEdit   = "slack.bookmark.edit"
 	OperationBookmarkDelete = "slack.bookmark.delete"
@@ -145,7 +145,7 @@ func operationSpecs() []core.OperationSpec {
 
 func authTestSpec() core.OperationSpec {
 	return pluginbinding.TypedOperationSpec[NoInput, AuthTestResult](
-		OperationAuthTest,
+		OperationTest,
 		"Test Slack user and bot token authentication.",
 		slackReadOptions(core.OperationIdempotent)...,
 	)
@@ -280,7 +280,11 @@ func infoSpec() core.OperationSpec {
 }
 
 func messageSendSpec() core.OperationSpec {
-	return slackWriteOperation[MessageSendInput, MessageSendResult](OperationMessageSend, "Send a Slack message.")
+	return withInputExamples(
+		slackWriteOperation[MessageSendInput, MessageSendResult](OperationMessageSend, "Send a Slack message. channel accepts a channel id or #name — or a user id (U…/W…) or @name, which opens the direct-message conversation automatically."),
+		map[string]any{"channel": "#general", "markdown": "Deploy **done** — details in the thread."},
+		map[string]any{"channel": "U0123ABCD", "text": "direct message via user id"},
+	)
 }
 
 func reactionAddSpec() core.OperationSpec {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strconv"
 	"strings"
 	"testing"
@@ -269,7 +270,7 @@ func TestServiceAuthTestReportsTokenIdentities(t *testing.T) {
 	}
 	plugin := testPlugin(factory)
 
-	out := plugintest.RunOK[AuthTestResult](t, plugin, OperationAuthTest, map[string]any{})
+	out := plugintest.RunOK[AuthTestResult](t, plugin, OperationTest, map[string]any{})
 	if out.Status != "ok" || out.Count != 2 || len(out.Tokens) != 2 {
 		t.Fatalf("auth test result = %#v", out)
 	}
@@ -311,7 +312,7 @@ func TestServiceAuthTestReportsPartialTokenFailure(t *testing.T) {
 	}
 	plugin := testPlugin(factory)
 
-	out := plugintest.RunOK[AuthTestResult](t, plugin, OperationAuthTest, map[string]any{})
+	out := plugintest.RunOK[AuthTestResult](t, plugin, OperationTest, map[string]any{})
 	if out.Status != "partial" || out.Count != 2 {
 		t.Fatalf("auth test result = %#v", out)
 	}
@@ -1295,6 +1296,11 @@ func TestServiceChannelMembersDatasourceFallsBackToBotToken(t *testing.T) {
 	}
 }
 
+// testPluginWithClient serves the same fake for every token purpose.
+func testPluginWithClient(client *fakeClient) *pluginbinding.Plugin {
+	return testPlugin(&capturingFactory{clients: map[string]*fakeClient{"bot_token": client, "user_token": client}})
+}
+
 func testPlugin(factory *capturingFactory) *pluginbinding.Plugin {
 	return NewPluginWithService(Service{ClientFactory: factory.newClient})
 }
@@ -1335,6 +1341,9 @@ type fakeClient struct {
 	messageHistory             MessageHistory
 	messageHistoryErr          error
 	sendTS                     string
+	openIMUser                 string
+	openIMChannel              string
+	openIMErr                  error
 	permalink                  string
 	permalinkErr               error
 	latestTS                   string
@@ -1586,6 +1595,17 @@ func (c *fakeClient) SendMessage(_ context.Context, request MessageSendRequest) 
 	return c.sendTS, c.sendErr
 }
 
+func (c *fakeClient) OpenIM(_ context.Context, userID string) (string, error) {
+	c.openIMUser = userID
+	if c.openIMErr != nil {
+		return "", c.openIMErr
+	}
+	if c.openIMChannel != "" {
+		return c.openIMChannel, nil
+	}
+	return "D" + userID, nil
+}
+
 func (c *fakeClient) GetPermalink(_ context.Context, _, _ string) (string, error) {
 	return c.permalink, c.permalinkErr
 }
@@ -1794,4 +1814,31 @@ type slackBlobHost struct {
 
 func (h *slackBlobHost) BlobWrite(input pluginbinding.BlobWriteRequest) (pluginbinding.BlobRef, error) {
 	return pluginbinding.BlobRef{Ref: "blob://" + input.Filename, Filename: input.Filename, Size: int64(len(input.Content))}, nil
+}
+
+func TestMessageSendToUserIDOpensDM(t *testing.T) {
+	client := &fakeClient{sendTS: "1718031600.000100"}
+	plugin := testPluginWithClient(client)
+	out := plugintest.RunOK[MessageSendResult](t, plugin, OperationMessageSend, map[string]any{"channel": "U0123ABCD", "text": "hi"})
+	if client.openIMUser != "U0123ABCD" {
+		t.Fatalf("OpenIM user = %q", client.openIMUser)
+	}
+	if client.lastSend.Channel != "DU0123ABCD" {
+		t.Fatalf("message went to %q, want the opened DM channel", client.lastSend.Channel)
+	}
+	if out.TS == "" {
+		t.Fatalf("out = %#v", out)
+	}
+}
+
+func TestMessageSendDMOpenFailureIsLoud(t *testing.T) {
+	client := &fakeClient{openIMErr: fmt.Errorf("user_not_found")}
+	plugin := testPluginWithClient(client)
+	perr := plugintest.RunError(t, plugin, OperationMessageSend, map[string]any{"channel": "U0123ABCD", "text": "hi"})
+	if !strings.Contains(perr.Message, "opening a DM with U0123ABCD failed") {
+		t.Fatalf("error = %#v", perr)
+	}
+	if client.sendCalls != 0 {
+		t.Fatalf("message must not be sent when the DM cannot be opened")
+	}
 }

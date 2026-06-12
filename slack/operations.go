@@ -15,6 +15,15 @@ type Service struct {
 	ClientFactory ClientFactory
 }
 
+// nonNilSlice keeps empty collections present in JSON output — `[]`, never
+// `null` — so iteration code downstream never special-cases empty results.
+func nonNilSlice[T any](s []T) []T {
+	if s == nil {
+		return []T{}
+	}
+	return s
+}
+
 func NewService() Service {
 	return Service{ClientFactory: NewLiveClient}
 }
@@ -37,13 +46,13 @@ type ChannelMembersDatasourceResult = pluginbinding.DatasourceSearchResult[Chann
 type AuthTestResult struct {
 	Status string            `json:"status"`
 	Count  int               `json:"count"`
-	Tokens []TokenInfoResult `json:"tokens,omitempty"`
+	Tokens []TokenInfoResult `json:"tokens"`
 }
 
 type InfoResult struct {
 	Status string            `json:"status"`
 	Count  int               `json:"count"`
-	Tokens []TokenInfoResult `json:"tokens,omitempty"`
+	Tokens []TokenInfoResult `json:"tokens"`
 }
 
 type TokenInfoResult struct {
@@ -212,18 +221,18 @@ type MessageSendResult struct {
 
 type UserListResult struct {
 	Count int    `json:"count"`
-	Users []User `json:"users,omitempty"`
+	Users []User `json:"users"`
 }
 
 type ChannelListResult struct {
 	Count    int       `json:"count"`
-	Channels []Channel `json:"channels,omitempty"`
+	Channels []Channel `json:"channels"`
 }
 
 type BookmarkListResult struct {
 	Count     int        `json:"count"`
 	Channel   string     `json:"channel,omitempty"`
-	Bookmarks []Bookmark `json:"bookmarks,omitempty"`
+	Bookmarks []Bookmark `json:"bookmarks"`
 }
 
 type BookmarkResult struct {
@@ -242,7 +251,7 @@ type BookmarkDeleteResult struct {
 
 type EmojiListResult struct {
 	Count  int     `json:"count"`
-	Emojis []Emoji `json:"emojis,omitempty"`
+	Emojis []Emoji `json:"emojis"`
 }
 
 type Presence struct {
@@ -302,7 +311,7 @@ type ChannelMarkResult struct {
 
 type FileListResult struct {
 	Count int          `json:"count"`
-	Files []FileRecord `json:"files,omitempty"`
+	Files []FileRecord `json:"files"`
 }
 
 type FileInfoResult struct {
@@ -485,8 +494,8 @@ type MessageSearchInput struct {
 
 type SearchResult struct {
 	Count    int             `json:"count"`
-	Messages []SearchMessage `json:"messages,omitempty"`
-	Tickets  []TicketMention `json:"tickets,omitempty"`
+	Messages []SearchMessage `json:"messages"`
+	Tickets  []TicketMention `json:"tickets"`
 }
 
 type SearchMessage struct {
@@ -528,14 +537,14 @@ type MentionsResult struct {
 	Count     int             `json:"count"`
 	Total     int             `json:"total"`
 	Unhandled bool            `json:"unhandled,omitempty"`
-	Mentions  []MentionItem   `json:"mentions,omitempty"`
-	Tickets   []TicketMention `json:"tickets,omitempty"`
+	Mentions  []MentionItem   `json:"mentions"`
+	Tickets   []TicketMention `json:"tickets"`
 }
 
 type UnreadsResult struct {
 	Since    string          `json:"since,omitempty"`
 	Count    int             `json:"count"`
-	Channels []UnreadChannel `json:"channels,omitempty"`
+	Channels []UnreadChannel `json:"channels"`
 }
 
 type UnreadChannel struct {
@@ -600,7 +609,7 @@ type ThreadResult struct {
 	TS       string          `json:"ts,omitempty"`
 	Role     string          `json:"role,omitempty"` // token role that served the read
 	Count    int             `json:"count"`
-	Messages []ThreadMessage `json:"messages,omitempty"`
+	Messages []ThreadMessage `json:"messages"`
 }
 
 type ThreadMessage struct {
@@ -664,7 +673,7 @@ type MessageListResult struct {
 	Count      int             `json:"count"`
 	NextCursor string          `json:"next_cursor,omitempty"`
 	HasMore    bool            `json:"has_more,omitempty"`
-	Messages   []ThreadMessage `json:"messages,omitempty"`
+	Messages   []ThreadMessage `json:"messages"`
 }
 
 type SlackFile struct {
@@ -762,7 +771,7 @@ func (s Service) AuthTest(ctx pluginbinding.Context, _ NoInput) (AuthTestResult,
 	if err != nil {
 		return AuthTestResult{}, err
 	}
-	return AuthTestResult{Status: status, Count: len(results), Tokens: results}, nil
+	return AuthTestResult{Status: status, Count: len(results), Tokens: nonNilSlice(results)}, nil
 }
 
 func (s Service) Info(ctx pluginbinding.Context, _ NoInput) (InfoResult, error) {
@@ -770,7 +779,7 @@ func (s Service) Info(ctx pluginbinding.Context, _ NoInput) (InfoResult, error) 
 	if err != nil {
 		return InfoResult{}, err
 	}
-	return InfoResult{Status: status, Count: len(results), Tokens: results}, nil
+	return InfoResult{Status: status, Count: len(results), Tokens: nonNilSlice(results)}, nil
 }
 
 func (s Service) tokenIdentityReport(ctx pluginbinding.Context) (string, []TokenInfoResult, error) {
@@ -818,7 +827,7 @@ func (s Service) ListUsers(ctx pluginbinding.Context, input UserListInput) (User
 	}
 	users = filterUsers(users, strings.TrimSpace(input.Query))
 	users = limitUsers(users, input.Limit)
-	return UserListResult{Count: len(users), Users: users}, nil
+	return UserListResult{Count: len(users), Users: nonNilSlice(users)}, nil
 }
 
 func (s Service) ListChannels(ctx pluginbinding.Context, input ChannelListInput) (ChannelListResult, error) {
@@ -828,7 +837,7 @@ func (s Service) ListChannels(ctx pluginbinding.Context, input ChannelListInput)
 	}
 	channels = filterChannels(channels, strings.TrimSpace(input.Query))
 	channels = limitChannels(channels, input.Limit)
-	return ChannelListResult{Count: len(channels), Channels: channels}, nil
+	return ChannelListResult{Count: len(channels), Channels: nonNilSlice(channels)}, nil
 }
 
 func (s Service) ListEmojis(ctx pluginbinding.Context, input EmojiListInput) (EmojiListResult, error) {
@@ -844,7 +853,7 @@ func (s Service) ListEmojis(ctx pluginbinding.Context, input EmojiListInput) (Em
 		return EmojiListResult{}, pluginbinding.Errorf("slack", "%s", err)
 	}
 	records := emojiRecords(emojis, mode, input.IncludeAliases, strings.TrimSpace(input.Query), input.Limit)
-	return EmojiListResult{Count: len(records), Emojis: records}, nil
+	return EmojiListResult{Count: len(records), Emojis: nonNilSlice(records)}, nil
 }
 
 func (s Service) ListBookmarks(ctx pluginbinding.Context, input BookmarkListInput) (BookmarkListResult, error) {
@@ -860,7 +869,7 @@ func (s Service) ListBookmarks(ctx pluginbinding.Context, input BookmarkListInpu
 	}
 	bookmarks = filterBookmarks(bookmarks, strings.TrimSpace(input.Query))
 	bookmarks = limitBookmarks(bookmarks, input.Limit)
-	return BookmarkListResult{Count: len(bookmarks), Channel: channel, Bookmarks: bookmarks}, nil
+	return BookmarkListResult{Count: len(bookmarks), Channel: channel, Bookmarks: nonNilSlice(bookmarks)}, nil
 }
 
 func (s Service) AddBookmark(ctx pluginbinding.Context, input BookmarkAddInput) (BookmarkResult, error) {
@@ -1199,7 +1208,7 @@ func (s Service) ListFiles(ctx pluginbinding.Context, input FileListInput) (File
 	}
 	files = filterFiles(files, strings.TrimSpace(input.Query))
 	files = limitFiles(files, input.Limit)
-	return FileListResult{Count: len(files), Files: files}, nil
+	return FileListResult{Count: len(files), Files: nonNilSlice(files)}, nil
 }
 
 func (s Service) FileInfo(ctx pluginbinding.Context, input FileInfoInput) (FileInfoResult, error) {
@@ -1332,7 +1341,7 @@ func (s Service) Search(ctx pluginbinding.Context, input SearchInput) (SearchRes
 	if input.Tickets {
 		addTicketsToMessages(messages.Messages, input.TicketKeys)
 	}
-	return SearchResult{Count: messages.Total, Messages: messages.Messages, Tickets: collectTicketMentionsFromSearch(messages.Messages)}, nil
+	return SearchResult{Count: messages.Total, Messages: nonNilSlice(messages.Messages), Tickets: nonNilSlice(collectTicketMentionsFromSearch(messages.Messages))}, nil
 }
 
 func (s Service) Mentions(ctx pluginbinding.Context, input MentionsInput) (MentionsResult, error) {
@@ -1390,8 +1399,8 @@ func (s Service) Mentions(ctx pluginbinding.Context, input MentionsInput) (Menti
 		Count:     len(mentions),
 		Total:     messages.Total,
 		Unhandled: input.Unhandled,
-		Mentions:  mentions,
-		Tickets:   collectTicketMentionsFromMentions(mentions),
+		Mentions:  nonNilSlice(mentions),
+		Tickets:   nonNilSlice(collectTicketMentionsFromMentions(mentions)),
 	}, nil
 }
 
@@ -1416,7 +1425,7 @@ func (s Service) Unreads(ctx pluginbinding.Context, input UnreadsInput) (Unreads
 	if err != nil {
 		return UnreadsResult{}, pluginbinding.Errorf("slack", "%s", err)
 	}
-	return UnreadsResult{Since: sinceLabel, Count: len(channels), Channels: channels}, nil
+	return UnreadsResult{Since: sinceLabel, Count: len(channels), Channels: nonNilSlice(channels)}, nil
 }
 
 func (s Service) SearchMessagesDatasource(ctx pluginbinding.Context, input MessageSearchInput) (MessageDatasourceResult, error) {
@@ -1464,7 +1473,7 @@ func (s Service) Thread(ctx pluginbinding.Context, input ThreadInput) (ThreadRes
 	for i := range messages {
 		messages[i].renderText(format)
 	}
-	return ThreadResult{Channel: ref.Channel, TS: ref.TS, Role: slackRoleFromPurpose(usedPurpose), Count: len(messages), Messages: messages}, nil
+	return ThreadResult{Channel: ref.Channel, TS: ref.TS, Role: slackRoleFromPurpose(usedPurpose), Count: len(messages), Messages: nonNilSlice(messages)}, nil
 }
 
 // MessageList reads recent messages from a channel (conversations.history), the
@@ -1489,7 +1498,7 @@ func (s Service) MessageList(ctx pluginbinding.Context, input MessageListInput) 
 	for i := range history.Messages {
 		history.Messages[i].renderText(format)
 	}
-	return MessageListResult{Channel: channel, Role: slackRoleFromPurpose(usedPurpose), Count: len(history.Messages), NextCursor: history.NextCursor, HasMore: history.HasMore, Messages: history.Messages}, nil
+	return MessageListResult{Channel: channel, Role: slackRoleFromPurpose(usedPurpose), Count: len(history.Messages), NextCursor: history.NextCursor, HasMore: history.HasMore, Messages: nonNilSlice(history.Messages)}, nil
 }
 
 func (s Service) ThreadMessagesDatasource(ctx pluginbinding.Context, input ThreadMessagesInput) (ThreadMessagesDatasourceResult, error) {

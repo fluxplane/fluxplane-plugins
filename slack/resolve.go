@@ -1,6 +1,7 @@
 package slack
 
 import (
+	"context"
 	"net/url"
 	"strings"
 
@@ -96,11 +97,33 @@ func (s Service) resolveChannel(ctx pluginbinding.Context, raw string) (string, 
 	if id, ok := slackChannelID(raw); ok {
 		return id, nil
 	}
+	// A user reference means a DM: open (or fetch) the IM conversation and
+	// address that — agents target people; the D… channel is an
+	// implementation detail.
+	if userID, ok := slackUserID(raw); ok {
+		return s.openIM(ctx, userID)
+	}
 	id, err := resolveIndexedID(ctx, EntityChannel, strings.TrimPrefix(raw, "#"), raw)
 	if err != nil {
+		// "@name" style references resolve through the user index to a DM.
+		if strings.HasPrefix(raw, "@") {
+			if userID, userErr := resolveIndexedID(ctx, EntityUser, strings.TrimPrefix(raw, "@"), raw); userErr == nil {
+				return s.openIM(ctx, userID)
+			}
+		}
 		return "", err
 	}
 	return id, nil
+}
+
+func (s Service) openIM(ctx pluginbinding.Context, userID string) (string, error) {
+	channel, _, err := pluginbinding.ReadWithPreferredAuthPurposes[Client, string]([]string{AuthPurposeBot, AuthPurposeUser}, s.openClientForContext(ctx), func(client Client, _ string) (string, error) {
+		return client.OpenIM(context.Background(), userID)
+	}, fallbackableSlackError)
+	if err != nil {
+		return "", pluginbinding.Errorf("slack", "opening a DM with %s failed: %s", userID, err)
+	}
+	return channel, nil
 }
 
 func (s Service) resolveMessageText(ctx pluginbinding.Context, text string) string {

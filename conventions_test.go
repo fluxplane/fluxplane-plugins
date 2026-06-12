@@ -90,7 +90,6 @@ func TestProbeOperationNaming(t *testing.T) {
 	allowed := map[string]bool{
 		`gitlab: "gitlab.auth.test"`:            true,
 		`kubernetes: "kubernetes.cluster.test"`: true,
-		`slack: "slack.auth.test"`:              true,
 	}
 	var found []string
 	walkGoFiles(t, func(plugin, path string, file *ast.File) {
@@ -256,19 +255,5 @@ func seededOmitemptyAllowlist() map[string]bool {
 		"kubernetes: PortForwardResult.Command":      true,
 		"prometheus: QueryResult.Samples":            true,
 		"prometheus: QueryResult.Series":             true,
-		"slack: AuthTestResult.Tokens":               true,
-		"slack: BookmarkListResult.Bookmarks":        true,
-		"slack: ChannelListResult.Channels":          true,
-		"slack: EmojiListResult.Emojis":              true,
-		"slack: FileListResult.Files":                true,
-		"slack: InfoResult.Tokens":                   true,
-		"slack: MentionsResult.Mentions":             true,
-		"slack: MentionsResult.Tickets":              true,
-		"slack: MessageListResult.Messages":          true,
-		"slack: SearchResult.Messages":               true,
-		"slack: SearchResult.Tickets":                true,
-		"slack: ThreadResult.Messages":               true,
-		"slack: UnreadsResult.Channels":              true,
-		"slack: UserListResult.Users":                true,
 	}
 }
