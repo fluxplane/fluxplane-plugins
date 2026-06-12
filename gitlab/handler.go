@@ -11,7 +11,7 @@ func NewPlugin() *pluginbinding.Plugin {
 
 func NewPluginWithService(service Service) *pluginbinding.Plugin {
 	options := []pluginbinding.PluginOption{
-		pluginbinding.WithAuthTestOperation(OperationAuthTest),
+		pluginbinding.WithAuthTestOperation(OperationTest),
 		pluginbinding.WithIndexBuildOperation(OperationIndexBuild),
 		pluginbinding.WithHostOwnedIndexStatus("GitLab"),
 		pluginbinding.RegisterOperation(authTestSpec(), service.AuthTest),

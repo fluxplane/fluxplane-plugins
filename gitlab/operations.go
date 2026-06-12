@@ -64,15 +64,21 @@ func (input *ProjectShowInput) UnmarshalJSON(raw []byte) error {
 
 type MergeRequestListInput struct {
 	pluginbinding.ListInput
-	Project   string `json:"project,omitempty" jsonschema:"description=Project path or numeric ID"`
-	ProjectID string `json:"project_id,omitempty" jsonschema:"description=Alias for project"`
-	Path      string `json:"path,omitempty" jsonschema:"description=Alias for project"`
-	State     string `json:"state,omitempty" jsonschema:"description=Merge request state"`
+	Project      string `json:"project,omitempty" jsonschema:"description=Project path or numeric ID"`
+	ProjectID    string `json:"project_id,omitempty" jsonschema:"description=Alias for project"`
+	Path         string `json:"path,omitempty" jsonschema:"description=Alias for project"`
+	State        string `json:"state,omitempty" jsonschema:"description=Merge request state"`
+	SourceBranch string `json:"source_branch,omitempty" jsonschema:"description=Only merge requests from this source branch"`
+	TargetBranch string `json:"target_branch,omitempty" jsonschema:"description=Only merge requests into this target branch"`
 }
 
 type MergeRequestShowInput struct {
-	Ref string `json:"ref,omitempty" jsonschema:"description=Merge request reference as PROJECT!IID"`
-	ID  string `json:"id,omitempty" jsonschema:"description=Alias for ref"`
+	Ref       string `json:"ref,omitempty" jsonschema:"description=Merge request reference as PROJECT!IID"`
+	ID        string `json:"id,omitempty" jsonschema:"description=Alias for ref"`
+	Project   string `json:"project,omitempty" jsonschema:"description=Project path or numeric ID (with iid; alternative to ref)"`
+	ProjectID string `json:"project_id,omitempty" jsonschema:"description=Alias for project"`
+	Path      string `json:"path,omitempty" jsonschema:"description=Alias for project"`
+	IID       int64  `json:"iid,omitempty" jsonschema:"description=Merge request IID (with project; alternative to ref)"`
 }
 
 type MergeRequestCreateInput struct {
@@ -227,8 +233,7 @@ func (s Service) MergeRequestShow(ctx pluginbinding.Context, input MergeRequestS
 	if err != nil {
 		return pluginbinding.ShowResult[MergeRequest]{}, pluginbinding.Errorf("secret", "%s", err)
 	}
-	ref := strings.TrimSpace(pluginbinding.FirstString(pluginbinding.InputMap(input), "ref", "id"))
-	project, iid, err := parseMergeRequestRef(ref)
+	project, iid, err := mergeRequestAddressFromInput(pluginbinding.InputMap(input))
 	if err != nil {
 		return pluginbinding.ShowResult[MergeRequest]{}, pluginbinding.Errorf("bad_input", "%s", err)
 	}
@@ -236,7 +241,7 @@ func (s Service) MergeRequestShow(ctx pluginbinding.Context, input MergeRequestS
 	if err != nil {
 		return pluginbinding.ShowResult[MergeRequest]{}, pluginbinding.Errorf("gitlab", "%s", err)
 	}
-	return pluginbinding.NewShowResult(mr, map[string]any{"ref": ref}), nil
+	return pluginbinding.NewShowResult(mr, map[string]any{"ref": fmt.Sprintf("%s!%d", project, iid)}), nil
 }
 
 func (s Service) MergeRequestCreate(ctx pluginbinding.Context, input MergeRequestCreateInput) (MergeRequest, error) {
@@ -534,12 +539,14 @@ func issueListOptions(input map[string]any, defaultLimit int) IssueListOptions {
 
 func mergeRequestListOptionsFromInput(input map[string]any) MergeRequestListOptions {
 	return MergeRequestListOptions{
-		Project: pluginbinding.StringFromInput(input, "project", "project_id", "path"),
-		Limit:   pluginbinding.BoundedIntFromInput(input, "limit", 20, 100),
-		State:   pluginbinding.DefaultStringFromInput(input, "opened", "state"),
-		Search:  pluginbinding.StringFromInput(input, "search", "query"),
-		OrderBy: pluginbinding.DefaultStringFromInput(input, "updated_at", "order_by"),
-		Sort:    pluginbinding.DefaultStringFromInput(input, "desc", "sort"),
+		Project:      pluginbinding.StringFromInput(input, "project", "project_id", "path"),
+		Limit:        pluginbinding.BoundedIntFromInput(input, "limit", 20, 100),
+		State:        pluginbinding.DefaultStringFromInput(input, "opened", "state"),
+		Search:       pluginbinding.StringFromInput(input, "search", "query"),
+		OrderBy:      pluginbinding.DefaultStringFromInput(input, "updated_at", "order_by"),
+		Sort:         pluginbinding.DefaultStringFromInput(input, "desc", "sort"),
+		SourceBranch: pluginbinding.StringFromInput(input, "source_branch"),
+		TargetBranch: pluginbinding.StringFromInput(input, "target_branch"),
 	}
 }
 

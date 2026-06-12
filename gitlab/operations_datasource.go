@@ -28,7 +28,7 @@ type datasourceBatchGetResult struct {
 	Entity  string                    `json:"entity,omitempty"`
 	Count   int                       `json:"count"`
 	Records []any                     `json:"records"`
-	Errors  []datasourceBatchGetError `json:"errors,omitempty"`
+	Errors  []datasourceBatchGetError `json:"errors"`
 }
 
 type datasourceBatchGetError struct {
@@ -347,7 +347,7 @@ func (s Service) DatasourceBatchGet(ctx pluginbinding.Context, input pluginbindi
 		}
 		records = append(records, record)
 	}
-	return datasourceBatchGetResult{Source: PluginName, Entity: entity, Count: len(records), Records: records, Errors: errors}, nil
+	return datasourceBatchGetResult{Source: PluginName, Entity: entity, Count: len(records), Records: records, Errors: nonNilGitlab(errors)}, nil
 }
 
 func datasourceLimit(limit, fallback int) int {

@@ -88,7 +88,6 @@ func assertAllowlisted(t *testing.T, rule string, found []string, allowed map[st
 // two segments.
 func TestProbeOperationNaming(t *testing.T) {
 	allowed := map[string]bool{
-		`gitlab: "gitlab.auth.test"`:            true,
 		`kubernetes: "kubernetes.cluster.test"`: true,
 	}
 	var found []string
@@ -241,15 +240,6 @@ func seededOmitemptyAllowlist() map[string]bool {
 		"docker: SystemDFResult.Containers":          true,
 		"docker: SystemDFResult.Images":              true,
 		"docker: SystemDFResult.Volumes":             true,
-		"gitlab: BlobSearchResult.Matches":           true,
-		"gitlab: CompareResult.Commits":              true,
-		"gitlab: CompareResult.Files":                true,
-		"gitlab: MRChangesResult.Files":              true,
-		"gitlab: MRDiffLinesResult.Lines":            true,
-		"gitlab: MRDiscussionCreateResult.Lines":     true,
-		"gitlab: MRDiscussionListResult.Discussions": true,
-		"gitlab: RepositoryTreeResult.Entries":       true,
-		"gitlab: datasourceBatchGetResult.Errors":    true,
 		"grafana: DashboardGetResult.Panels":         true,
 		"grafana: DashboardGetResult.Queries":        true,
 		"grafana: PromQueryResult.Samples":           true,

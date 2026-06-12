@@ -10,7 +10,7 @@ import (
 
 const (
 	PluginName        = "gitlab"
-	PluginVersion     = "0.22.1"
+	PluginVersion     = "0.23.0"
 	PluginDescription = "GitLab operations, datasources, indexes, and reverse lookups."
 
 	AuthMethodPersonalAccessToken = "personal_access_token"
@@ -26,7 +26,7 @@ const (
 	EnvGitLabEndpoint            = "GITLAB_ENDPOINT"
 	EnvCIServerURL               = "CI_SERVER_URL"
 
-	OperationAuthTest           = "gitlab.auth.test"
+	OperationTest               = "gitlab.test"
 	OperationIndexBuild         = "gitlab.index.build"
 	OperationProjectList        = "gitlab.project.list"
 	OperationProjectShow        = "gitlab.project.show"
@@ -247,7 +247,7 @@ func withInputExamples(spec core.OperationSpec, examples ...map[string]any) core
 }
 
 func authTestSpec() core.OperationSpec {
-	return gitlabReadOperation[NoInput, AuthTestResult](OperationAuthTest, "Test GitLab authentication by fetching the current user.")
+	return gitlabReadOperation[NoInput, AuthTestResult](OperationTest, "Test GitLab authentication by fetching the current user.")
 }
 
 func indexBuildSpec() core.OperationSpec {
@@ -271,7 +271,11 @@ func mergeRequestListSpec() core.OperationSpec {
 }
 
 func mergeRequestShowSpec() core.OperationSpec {
-	return gitlabReadOperation[MergeRequestShowInput, pluginbinding.ShowResult[MergeRequest]](OperationMRShow, "Show one GitLab merge request.")
+	return withInputExamples(
+		gitlabReadOperation[MergeRequestShowInput, pluginbinding.ShowResult[MergeRequest]](OperationMRShow, "Show one GitLab merge request. Address it as ref (PROJECT!IID) or as project + iid — the same two forms every mr.* operation accepts."),
+		map[string]any{"ref": "group/app!42"},
+		map[string]any{"project": "group/app", "iid": 42},
+	)
 }
 
 func mergeRequestCreateSpec() core.OperationSpec {

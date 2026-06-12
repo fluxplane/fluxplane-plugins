@@ -19,6 +19,15 @@ const (
 	maximumFileMaxBytes    = 256 * 1024
 )
 
+// nonNilGitlab keeps empty collections present in JSON output — `[]`, never
+// `null`.
+func nonNilGitlab[T any](s []T) []T {
+	if s == nil {
+		return []T{}
+	}
+	return s
+}
+
 // reviewMRAddress resolves a merge request target from ref (PROJECT!IID) or
 // project+iid inputs.
 func reviewMRAddress(ref, project string, iid int64) (string, int64, error) {
@@ -67,7 +76,7 @@ type MRChangesResult struct {
 	Project   string     `json:"project"`
 	IID       int64      `json:"iid"`
 	DiffRefs  DiffRefs   `json:"diff_refs"`
-	Files     []FileDiff `json:"files,omitempty"`
+	Files     []FileDiff `json:"files"`
 	Count     int        `json:"count"`
 	Truncated bool       `json:"truncated,omitempty"`
 }
@@ -93,7 +102,7 @@ func (s Service) MRChanges(ctx pluginbinding.Context, input MRChangesInput) (MRC
 	if err != nil {
 		return MRChangesResult{}, pluginbinding.Errorf("gitlab", "diff refs: %s", err)
 	}
-	out := MRChangesResult{Project: project, IID: iid, DiffRefs: refs, Truncated: truncated}
+	out := MRChangesResult{Project: project, IID: iid, DiffRefs: refs, Truncated: truncated, Files: []FileDiff{}}
 	fileFilter := strings.TrimSpace(input.File)
 	for _, file := range files {
 		if fileFilter != "" && file.NewPath != fileFilter && file.OldPath != fileFilter {
@@ -133,7 +142,7 @@ type MRDiffLinesResult struct {
 	File      string         `json:"file"`
 	OldPath   string         `json:"old_path,omitempty"`
 	NewPath   string         `json:"new_path,omitempty"`
-	Lines     []DiffLineInfo `json:"lines,omitempty"`
+	Lines     []DiffLineInfo `json:"lines"`
 	Count     int            `json:"count"`
 	Truncated bool           `json:"truncated,omitempty"`
 	Hint      string         `json:"hint,omitempty"`
@@ -171,7 +180,7 @@ func (s Service) MRDiffLines(ctx pluginbinding.Context, input MRDiffLinesInput) 
 		return MRDiffLinesResult{}, err
 	}
 	parsed := ParseUnifiedDiff(fileDiff.Diff)
-	out := MRDiffLinesResult{Project: project, IID: iid, File: file, OldPath: fileDiff.OldPath, NewPath: fileDiff.NewPath}
+	out := MRDiffLinesResult{Project: project, IID: iid, File: file, OldPath: fileDiff.OldPath, NewPath: fileDiff.NewPath, Lines: []DiffLineInfo{}}
 	limit := clampInt(input.Limit, 200, 2000)
 	switch {
 	case input.Line > 0:
@@ -250,9 +259,9 @@ type CompareResult struct {
 	From        string          `json:"from"`
 	To          string          `json:"to"`
 	WebURL      string          `json:"web_url,omitempty"`
-	Commits     []CompareCommit `json:"commits,omitempty"`
+	Commits     []CompareCommit `json:"commits"`
 	CommitCount int             `json:"commit_count"`
-	Files       []FileDiff      `json:"files,omitempty"`
+	Files       []FileDiff      `json:"files"`
 	FileCount   int             `json:"file_count"`
 	Truncated   bool            `json:"truncated,omitempty"`
 }
@@ -275,7 +284,7 @@ func (s Service) Compare(ctx pluginbinding.Context, input CompareInput) (Compare
 	}
 	maxFiles := clampInt(input.MaxFiles, defaultChangesMaxFiles, maximumChangesMaxFiles)
 	maxDiffBytes := clampInt(input.MaxDiffBytes, defaultDiffMaxBytes, maximumDiffMaxBytes)
-	out := CompareResult{Project: project, From: from, To: to, WebURL: webURL, Commits: commits, CommitCount: len(commits)}
+	out := CompareResult{Project: project, From: from, To: to, WebURL: webURL, Commits: nonNilGitlab(commits), CommitCount: len(commits), Files: []FileDiff{}}
 	for _, file := range files {
 		if len(out.Files) >= maxFiles {
 			out.Truncated = true
@@ -300,7 +309,7 @@ type MRDiscussionListInput struct {
 type MRDiscussionListResult struct {
 	Project     string           `json:"project"`
 	IID         int64            `json:"iid"`
-	Discussions []DiscussionInfo `json:"discussions,omitempty"`
+	Discussions []DiscussionInfo `json:"discussions"`
 	Count       int              `json:"count"`
 	Truncated   bool             `json:"truncated,omitempty"`
 }
@@ -321,7 +330,7 @@ func (s Service) MRDiscussionList(ctx pluginbinding.Context, input MRDiscussionL
 	if err != nil {
 		return MRDiscussionListResult{}, pluginbinding.Errorf("gitlab", "%s", err)
 	}
-	return MRDiscussionListResult{Project: project, IID: iid, Discussions: discussions, Count: len(discussions), Truncated: truncated}, nil
+	return MRDiscussionListResult{Project: project, IID: iid, Discussions: nonNilGitlab(discussions), Count: len(discussions), Truncated: truncated}, nil
 }
 
 // ---- gitlab.mr.note.create ----
@@ -373,7 +382,7 @@ type MRDiscussionCreateResult struct {
 	DryRun     bool            `json:"dry_run,omitempty"`
 	Discussion *DiscussionInfo `json:"discussion,omitempty"`
 	Position   *PositionInput  `json:"position,omitempty"`
-	Lines      []DiffLineInfo  `json:"lines,omitempty"` // target line with context (dry run)
+	Lines      []DiffLineInfo  `json:"lines"` // target line with context (dry run)
 }
 
 // MRDiscussionCreate opens a discussion thread, optionally anchored to a diff
@@ -393,7 +402,7 @@ func (s Service) MRDiscussionCreate(ctx pluginbinding.Context, input MRDiscussio
 	if strings.TrimSpace(input.Body) == "" {
 		return MRDiscussionCreateResult{}, pluginbinding.Fail("bad_input", "body is required")
 	}
-	out := MRDiscussionCreateResult{Project: project, IID: iid, DryRun: input.DryRun}
+	out := MRDiscussionCreateResult{Project: project, IID: iid, DryRun: input.DryRun, Lines: []DiffLineInfo{}}
 
 	positioned := strings.TrimSpace(input.Path) != "" || input.NewLine > 0 || input.OldLine > 0
 	var position *PositionInput
@@ -601,7 +610,7 @@ type RepositoryTreeResult struct {
 	Project   string      `json:"project"`
 	Ref       string      `json:"ref,omitempty"`
 	Path      string      `json:"path,omitempty"`
-	Entries   []TreeEntry `json:"entries,omitempty"`
+	Entries   []TreeEntry `json:"entries"`
 	Count     int         `json:"count"`
 	Truncated bool        `json:"truncated,omitempty"`
 }
@@ -626,7 +635,7 @@ func (s Service) RepositoryTree(ctx pluginbinding.Context, input RepositoryTreeI
 	if err != nil {
 		return RepositoryTreeResult{}, pluginbinding.Errorf("gitlab", "%s", err)
 	}
-	return RepositoryTreeResult{Project: project, Ref: input.Ref, Path: input.Path, Entries: entries, Count: len(entries), Truncated: truncated}, nil
+	return RepositoryTreeResult{Project: project, Ref: input.Ref, Path: input.Path, Entries: nonNilGitlab(entries), Count: len(entries), Truncated: truncated}, nil
 }
 
 // ---- gitlab.repository.file.show ----
@@ -859,7 +868,7 @@ type BlobSearchResult struct {
 	Query     string      `json:"query"`
 	Project   string      `json:"project,omitempty"`
 	Group     string      `json:"group,omitempty"`
-	Matches   []BlobMatch `json:"matches,omitempty"`
+	Matches   []BlobMatch `json:"matches"`
 	Count     int         `json:"count"`
 	Truncated bool        `json:"truncated,omitempty"`
 }
@@ -896,7 +905,7 @@ func (s Service) SearchBlobs(ctx pluginbinding.Context, input BlobSearchInput) (
 		}
 		return BlobSearchResult{}, pluginbinding.Errorf("gitlab", "%s", err)
 	}
-	out := BlobSearchResult{Query: query, Project: strings.TrimSpace(input.Project), Group: strings.TrimSpace(input.Group), Truncated: truncated}
+	out := BlobSearchResult{Query: query, Project: strings.TrimSpace(input.Project), Group: strings.TrimSpace(input.Group), Truncated: truncated, Matches: []BlobMatch{}}
 	for _, match := range matches {
 		if len(match.Data) > maxData {
 			match.Data = match.Data[:maxData] + "\n[snippet truncated]"

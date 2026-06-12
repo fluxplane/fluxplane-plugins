@@ -849,14 +849,25 @@ func snippetFromAPI(snippet *gitlabapi.Snippet) Snippet {
 
 func mergeRequestListOptions(input MergeRequestListOptions) *gitlabapi.ListMergeRequestsOptions {
 	opt := &gitlabapi.ListMergeRequestsOptions{}
+	applyMergeRequestBranchFilters(&opt.SourceBranch, &opt.TargetBranch, input)
 	applyMergeRequestListOptions(&opt.ListOptions, &opt.State, &opt.Search, &opt.OrderBy, &opt.Sort, input)
 	return opt
 }
 
 func projectMergeRequestListOptions(input MergeRequestListOptions) *gitlabapi.ListProjectMergeRequestsOptions {
 	opt := &gitlabapi.ListProjectMergeRequestsOptions{}
+	applyMergeRequestBranchFilters(&opt.SourceBranch, &opt.TargetBranch, input)
 	applyMergeRequestListOptions(&opt.ListOptions, &opt.State, &opt.Search, &opt.OrderBy, &opt.Sort, input)
 	return opt
+}
+
+func applyMergeRequestBranchFilters(sourceField, targetField **string, input MergeRequestListOptions) {
+	if branch := strings.TrimSpace(input.SourceBranch); branch != "" {
+		*sourceField = &branch
+	}
+	if branch := strings.TrimSpace(input.TargetBranch); branch != "" {
+		*targetField = &branch
+	}
 }
 
 func applyMergeRequestListOptions(list *gitlabapi.ListOptions, stateField, searchField, orderByField, sortField **string, input MergeRequestListOptions) {

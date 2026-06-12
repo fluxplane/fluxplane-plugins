@@ -17,7 +17,7 @@ func TestNewLiveClientUsesEndpointRefHostHTTP(t *testing.T) {
 		t.Fatal(err)
 	}
 	ctx := pluginbinding.Context{
-		Call: protocol.OperationCall{Name: OperationAuthTest, Input: input},
+		Call: protocol.OperationCall{Name: OperationTest, Input: input},
 		Host: host,
 	}
 	client, err := NewLiveClient(ctx)

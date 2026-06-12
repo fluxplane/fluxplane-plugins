@@ -705,7 +705,7 @@ func TestServiceBuildsClientFromHostContext(t *testing.T) {
 		},
 	})
 
-	plugintest.RunOK[AuthTestResult](t, plugin, OperationAuthTest, map[string]any{}, plugintest.WithInstance("work"))
+	plugintest.RunOK[AuthTestResult](t, plugin, OperationTest, map[string]any{}, plugintest.WithInstance("work"))
 	if captured.Request.Instance != "work" || captured.Host == nil {
 		t.Fatalf("captured context = %#v", captured)
 	}
@@ -1147,5 +1147,28 @@ func TestServiceIssueOperations(t *testing.T) {
 	note := plugintest.RunOK[Note](t, plugin, OperationIssueNoteCreate, map[string]any{"ref": "group/app#42", "body": "Confirmed"})
 	if note.ID != 9 || client.noteCreateOptions.Body != "Confirmed" {
 		t.Fatalf("note create = %#v opts=%#v", note, client.noteCreateOptions)
+	}
+}
+
+func TestMergeRequestShowAcceptsProjectAndIID(t *testing.T) {
+	client := &fakeClient{mergeRequest: MergeRequest{IID: 42, Title: "Fix"}}
+	plugin := testPlugin(client)
+	out := plugintest.RunOK[pluginbinding.ShowResult[MergeRequest]](t, plugin, OperationMRShow, map[string]any{"project": "group/app", "iid": 42})
+	if out.Record.IID != 42 || client.mrProject != "group/app" || client.mrIID != 42 {
+		t.Fatalf("out = %#v project=%v iid=%d", out.Record, client.mrProject, client.mrIID)
+	}
+	// And the original ref form keeps working.
+	out = plugintest.RunOK[pluginbinding.ShowResult[MergeRequest]](t, plugin, OperationMRShow, map[string]any{"ref": "group/app!42"})
+	if out.Record.IID != 42 {
+		t.Fatalf("ref form failed: %#v", out.Record)
+	}
+}
+
+func TestMergeRequestListFiltersBySourceBranch(t *testing.T) {
+	client := &fakeClient{}
+	plugin := testPlugin(client)
+	_ = plugintest.RunOK[pluginbinding.ListResult[MergeRequest]](t, plugin, OperationMRList, map[string]any{"project": "group/app", "source_branch": "feat/x"})
+	if client.mrListOptions.SourceBranch != "feat/x" {
+		t.Fatalf("list options = %#v", client.mrListOptions)
 	}
 }

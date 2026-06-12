@@ -1,5 +1,24 @@
 # Changelog
 
+## v0.23.0
+
+Addresses the gitlab section of the #12 field report. Manifest 0.23.0.
+
+### Added
+- **`mr.show` accepts `project` + `iid`** alongside `ref` (PROJECT!IID) —
+  the same two address forms every sibling mr.* operation takes; runnable
+  examples show both.
+- **`mr.list` filters by `source_branch` / `target_branch`** — "find the MR
+  I just created from this branch" is one call now.
+
+### Changed
+- **Breaking: probe renamed** — `gitlab.auth.test` → `gitlab.test`.
+- **Empty collections are `[]`, never omitted** across review/compare/tree/
+  blob-search/discussion results (matches, commits, files, lines,
+  discussions, entries, errors).
+- SDK bump to `fluxplane-plugin` v0.18.0.
+
+
 ## v0.22.1
 
 ### Fixed

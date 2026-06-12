@@ -207,13 +207,15 @@ type MergeRequestRecord struct {
 }
 
 type MergeRequestListOptions struct {
-	Project string `json:"project,omitempty"`
-	Limit   int    `json:"limit,omitempty"`
-	All     bool   `json:"all,omitempty"`
-	State   string `json:"state,omitempty"`
-	Search  string `json:"search,omitempty"`
-	OrderBy string `json:"order_by,omitempty"`
-	Sort    string `json:"sort,omitempty"`
+	Project      string `json:"project,omitempty"`
+	Limit        int    `json:"limit,omitempty"`
+	All          bool   `json:"all,omitempty"`
+	State        string `json:"state,omitempty"`
+	Search       string `json:"search,omitempty"`
+	OrderBy      string `json:"order_by,omitempty"`
+	Sort         string `json:"sort,omitempty"`
+	SourceBranch string `json:"source_branch,omitempty"`
+	TargetBranch string `json:"target_branch,omitempty"`
 }
 
 type MergeRequestCreateOptions struct {
