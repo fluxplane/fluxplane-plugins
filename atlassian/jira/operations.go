@@ -766,7 +766,9 @@ func (s Service) IssueLinkAdd(ctx pluginbinding.Context, input IssueLinkAddInput
 	if key == "" || toKey == "" || linkType == "" {
 		return IssueLinkAddResult{}, pluginbinding.Fail("bad_input", "key, to_key, and type are required")
 	}
-	if err := client.LinkIssues(context.Background(), IssueLinkRequest{Type: linkType, OutwardKey: key, InwardKey: toKey}); err != nil {
+	// Jira Cloud's create semantics (verified live): the inward issue performs
+	// the outward verb, so "key <verb> to_key" posts inward=key, outward=to_key.
+	if err := client.LinkIssues(context.Background(), IssueLinkRequest{Type: linkType, InwardKey: key, OutwardKey: toKey}); err != nil {
 		if types, typesErr := client.ListIssueLinkTypes(context.Background()); typesErr == nil && len(types) > 0 {
 			names := make([]string, 0, len(types))
 			for _, t := range types {
@@ -782,10 +784,29 @@ func (s Service) IssueLinkAdd(ctx pluginbinding.Context, input IssueLinkAddInput
 		return IssueLinkAddResult{}, pluginbinding.Errorf("jira", "link created but reading it back failed: %s", err)
 	}
 	result.Links = append(result.Links, issue.Fields.IssueLinks...)
+	// Direction check: when the link types are fetchable, the new link's verb
+	// must be the type's OUTWARD verb (key acting on to_key), not the inverse.
+	outwardVerb := ""
+	if types, typesErr := client.ListIssueLinkTypes(context.Background()); typesErr == nil {
+		for _, t := range types {
+			if strings.EqualFold(t.Name, linkType) {
+				outwardVerb = t.Outward
+				break
+			}
+		}
+	}
+	wrongDirection := false
 	for _, link := range result.Links {
-		if strings.EqualFold(link.OtherKey, toKey) {
+		if !strings.EqualFold(link.OtherKey, toKey) || !strings.EqualFold(link.Type, linkType) {
+			continue
+		}
+		if outwardVerb == "" || strings.EqualFold(link.Verb, outwardVerb) {
 			return result, nil
 		}
+		wrongDirection = true
+	}
+	if wrongDirection {
+		return IssueLinkAddResult{}, pluginbinding.Errorf("jira", "the link was created in the WRONG direction: %s should read %q toward %s but does not — delete it in Jira and report this as a plugin bug", key, outwardVerb, toKey)
 	}
 	return IssueLinkAddResult{}, pluginbinding.Errorf("jira", "Jira accepted the link request but no link to %s is visible on %s — nothing was created", toKey, key)
 }

@@ -332,8 +332,10 @@ type IssueTransitionRequest struct {
 	TransitionID string `json:"-"`
 }
 
-// IssueLinkRequest links outward "<verb>" inward — e.g. type Blocks with
-// outward DEV-1 and inward DEV-2 records "DEV-1 blocks DEV-2".
+// IssueLinkRequest mirrors Jira's issueLink POST body. Direction gotcha,
+// verified live against Jira Cloud: the INWARD issue performs the link
+// type's OUTWARD verb — inward DEV-1 + outward DEV-2 + type Blocks records
+// "DEV-1 blocks DEV-2" (DEV-1's view shows outwardIssue DEV-2).
 type IssueLinkRequest struct {
 	Type       string
 	OutwardKey string

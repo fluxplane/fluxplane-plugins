@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.8.1
+
+### Fixed
+- **`jira.issue.link.add` created links in the inverse direction.** Jira
+  Cloud's issueLink create semantics (verified live): the *inward* issue
+  performs the link type's outward verb. The first live drill produced
+  "A is blocked by B" for a requested "A blocks B"; the mapping is fixed
+  and the read-back now also verifies the *direction* (a backwards link is
+  an error naming the expected verb), not just the link's existence. Jira
+  manifest 0.23.1.
+
+
 ## v0.8.0
 
 Addresses the jira section of the #12 field report — the silent-write class.

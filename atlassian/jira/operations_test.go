@@ -973,16 +973,37 @@ func TestIssueLinkUnmarshalFlattensJiraWire(t *testing.T) {
 }
 
 func TestIssueLinkAddVerifiesReadBack(t *testing.T) {
-	client := &fakeClient{issue: Issue{Key: "DEX-1", Fields: IssueFields{
-		IssueLinks: []IssueLink{{Type: "Blocks", Verb: "blocks", OtherKey: "DEX-2"}},
-	}}}
+	client := &fakeClient{
+		issue: Issue{Key: "DEX-1", Fields: IssueFields{
+			IssueLinks: []IssueLink{{Type: "Blocks", Verb: "blocks", OtherKey: "DEX-2"}},
+		}},
+		linkTypes: []IssueLinkType{{Name: "Blocks", Inward: "is blocked by", Outward: "blocks"}},
+	}
 	plugin := testPlugin(client)
 	out := plugintest.RunOK[IssueLinkAddResult](t, plugin, OperationIssueLinkAdd, map[string]any{"key": "DEX-1", "to_key": "DEX-2", "type": "Blocks"})
 	if !out.OK || len(out.Links) != 1 || out.Links[0].OtherKey != "DEX-2" {
 		t.Fatalf("out = %#v", out)
 	}
-	if len(client.linkRequests) != 1 || client.linkRequests[0].OutwardKey != "DEX-1" || client.linkRequests[0].InwardKey != "DEX-2" {
+	// Jira Cloud's verified create semantics: the INWARD issue performs the
+	// outward verb, so "DEX-1 blocks DEX-2" posts inward=DEX-1, outward=DEX-2.
+	if len(client.linkRequests) != 1 || client.linkRequests[0].InwardKey != "DEX-1" || client.linkRequests[0].OutwardKey != "DEX-2" {
 		t.Fatalf("link requests = %#v", client.linkRequests)
+	}
+}
+
+func TestIssueLinkAddDetectsWrongDirection(t *testing.T) {
+	// The read-back shows the inverse verb: the link landed backwards and the
+	// operation must say so instead of reporting success.
+	client := &fakeClient{
+		issue: Issue{Key: "DEX-1", Fields: IssueFields{
+			IssueLinks: []IssueLink{{Type: "Blocks", Verb: "is blocked by", OtherKey: "DEX-2"}},
+		}},
+		linkTypes: []IssueLinkType{{Name: "Blocks", Inward: "is blocked by", Outward: "blocks"}},
+	}
+	plugin := testPlugin(client)
+	perr := plugintest.RunError(t, plugin, OperationIssueLinkAdd, map[string]any{"key": "DEX-1", "to_key": "DEX-2", "type": "Blocks"})
+	if !strings.Contains(perr.Message, "WRONG direction") {
+		t.Fatalf("error = %#v", perr)
 	}
 }
 
