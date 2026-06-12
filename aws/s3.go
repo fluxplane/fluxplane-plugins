@@ -21,9 +21,8 @@ type S3Bucket struct {
 
 type S3BucketsResult struct {
 	Region  string     `json:"region"`
-	Buckets []S3Bucket `json:"buckets,omitempty"`
-	Count   int        `json:"count"`
-}
+	Buckets []S3Bucket `json:"buckets"`
+	Count   int        `json:"count"`}
 
 // S3Buckets lists the account's buckets.
 func (s Service) S3Buckets(ctx pluginbinding.Context, input S3BucketsInput) (S3BucketsResult, error) {
@@ -38,7 +37,7 @@ func (s Service) S3Buckets(ctx pluginbinding.Context, input S3BucketsInput) (S3B
 		return S3BucketsResult{}, mapAWSError("s3 list-buckets", err)
 	}
 	prefix := strings.TrimSpace(input.Prefix)
-	out := S3BucketsResult{Region: cfg.Region}
+	out := S3BucketsResult{Region: cfg.Region, Buckets: []S3Bucket{}}
 	for _, bucket := range listed.Buckets {
 		name := str(bucket.Name)
 		if prefix != "" && !strings.HasPrefix(name, prefix) {
@@ -72,11 +71,10 @@ type S3Object struct {
 type S3ObjectsResult struct {
 	Region    string     `json:"region"`
 	Bucket    string     `json:"bucket"`
-	Objects   []S3Object `json:"objects,omitempty"`
+	Objects   []S3Object `json:"objects"`
 	Count     int        `json:"count"`
 	Truncated bool       `json:"truncated,omitempty"`
-	NextToken string     `json:"next_token,omitempty"`
-}
+	NextToken string     `json:"next_token,omitempty"`}
 
 // S3Objects lists objects under a prefix with pagination.
 func (s Service) S3Objects(ctx pluginbinding.Context, input S3ObjectsInput) (S3ObjectsResult, error) {
@@ -108,7 +106,7 @@ func (s Service) S3Objects(ctx pluginbinding.Context, input S3ObjectsInput) (S3O
 	if err != nil {
 		return S3ObjectsResult{}, mapAWSError("s3 list-objects-v2", err)
 	}
-	out := S3ObjectsResult{Region: cfg.Region, Bucket: bucket}
+	out := S3ObjectsResult{Region: cfg.Region, Bucket: bucket, Objects: []S3Object{}}
 	for _, object := range listed.Contents {
 		mapped := S3Object{Key: str(object.Key), StorageClass: string(object.StorageClass)}
 		if object.Size != nil {

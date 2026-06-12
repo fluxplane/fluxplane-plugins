@@ -107,7 +107,7 @@ func (s Service) VisionAnalyze(ctx pluginbinding.Context, input vision.AnalyzeIn
 	if input.Temperature != nil {
 		body["temperature"] = *input.Temperature
 	}
-	var out responsesOutput
+	var out responsesWire
 	if err := client.post("/responses", body, &out); err != nil {
 		return vision.AnalyzeOutput{}, pluginbinding.Errorf("openai", "%s", err)
 	}
@@ -180,7 +180,7 @@ func openAIVisionImageURL(ctx pluginbinding.Context, image vision.ImageInput) (s
 	return vision.DataURLFromBytes(blob.Content, mediaType, filename), nil
 }
 
-func responseOutputText(out responsesOutput) string {
+func responseOutputText(out responsesWire) string {
 	if strings.TrimSpace(out.OutputText) != "" {
 		return strings.TrimSpace(out.OutputText)
 	}

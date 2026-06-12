@@ -34,7 +34,7 @@ func withInputExamples(spec core.OperationSpec, examples ...map[string]any) core
 
 const (
 	PluginName        = "asterisk"
-	PluginVersion     = "0.19.0"
+	PluginVersion     = "0.19.1"
 	PluginDescription = "Asterisk endpoint discovery and AMI telephony operations: channels, peers, queues, device states, CLI commands, originate, and hangup."
 
 	EnvAsteriskAMIUsername = "ASTERISK_AMI_USERNAME"

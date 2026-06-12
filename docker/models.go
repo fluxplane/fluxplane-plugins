@@ -135,8 +135,8 @@ type NetIO struct {
 
 type ContainerTopResult struct {
 	Container string     `json:"container"`
-	Titles    []string   `json:"titles,omitempty"`
-	Processes [][]string `json:"processes,omitempty"`
+	Titles    []string   `json:"titles"`
+	Processes [][]string `json:"processes"`
 	Count     int        `json:"count"`
 }
 
@@ -157,7 +157,7 @@ type ContainerCreateResult struct {
 	Name     string   `json:"name,omitempty"`
 	Image    string   `json:"image,omitempty"`
 	Started  bool     `json:"started,omitempty"`
-	Warnings []string `json:"warnings,omitempty"`
+	Warnings []string `json:"warnings"`
 	OK       bool     `json:"ok"`
 }
 
@@ -165,7 +165,7 @@ type ContainerCopyResult struct {
 	Container       string   `json:"container"`
 	SourcePath      string   `json:"source_path"`
 	DestinationPath string   `json:"destination_path"`
-	Files           []string `json:"files,omitempty"`
+	Files           []string `json:"files"`
 	Bytes           int64    `json:"bytes,omitempty"`
 	OK              bool     `json:"ok"`
 }
@@ -197,7 +197,7 @@ type ResourceActionResult struct {
 type ImagePullResult struct {
 	Reference string           `json:"reference"`
 	Platform  string           `json:"platform,omitempty"`
-	Events    []map[string]any `json:"events,omitempty"`
+	Events    []map[string]any `json:"events"`
 	Count     int              `json:"count"`
 	OK        bool             `json:"ok"`
 }
@@ -205,24 +205,24 @@ type ImagePullResult struct {
 type ImagePushResult struct {
 	Reference string           `json:"reference"`
 	Platform  string           `json:"platform,omitempty"`
-	Events    []map[string]any `json:"events,omitempty"`
+	Events    []map[string]any `json:"events"`
 	Count     int              `json:"count"`
 	OK        bool             `json:"ok"`
 }
 
 type ImageBuildResult struct {
 	ContextPath string           `json:"context_path"`
-	Tags        []string         `json:"tags,omitempty"`
+	Tags        []string         `json:"tags"`
 	ImageID     string           `json:"image_id,omitempty"`
-	Events      []map[string]any `json:"events,omitempty"`
+	Events      []map[string]any `json:"events"`
 	Count       int              `json:"count"`
 	OK          bool             `json:"ok"`
 }
 
 type ImageRemoveResult struct {
 	ID       string   `json:"id"`
-	Deleted  []string `json:"deleted,omitempty"`
-	Untagged []string `json:"untagged,omitempty"`
+	Deleted  []string `json:"deleted"`
+	Untagged []string `json:"untagged"`
 	OK       bool     `json:"ok"`
 }
 
@@ -234,7 +234,7 @@ type RawInspectResult struct {
 
 type PruneResult struct {
 	Kind                string   `json:"kind"`
-	Deleted             []string `json:"deleted,omitempty"`
+	Deleted             []string `json:"deleted"`
 	SpaceReclaimedBytes uint64   `json:"space_reclaimed_bytes,omitempty"`
 	Count               int      `json:"count"`
 	OK                  bool     `json:"ok"`
@@ -242,8 +242,8 @@ type PruneResult struct {
 
 type ImagePruneResult struct {
 	Kind                string   `json:"kind"`
-	Deleted             []string `json:"deleted,omitempty"`
-	Untagged            []string `json:"untagged,omitempty"`
+	Deleted             []string `json:"deleted"`
+	Untagged            []string `json:"untagged"`
 	SpaceReclaimedBytes uint64   `json:"space_reclaimed_bytes,omitempty"`
 	Count               int      `json:"count"`
 	OK                  bool     `json:"ok"`
@@ -262,9 +262,9 @@ type SystemPruneResult struct {
 
 type SystemDFResult struct {
 	LayersSizeBytes int64       `json:"layers_size_bytes,omitempty"`
-	Images          []Image     `json:"images,omitempty"`
-	Containers      []Container `json:"containers,omitempty"`
-	Volumes         []Volume    `json:"volumes,omitempty"`
+	Images          []Image     `json:"images"`
+	Containers      []Container `json:"containers"`
+	Volumes         []Volume    `json:"volumes"`
 	BuildCacheCount int         `json:"build_cache_count,omitempty"`
 	ImageCount      int         `json:"image_count"`
 	ContainerCount  int         `json:"container_count"`

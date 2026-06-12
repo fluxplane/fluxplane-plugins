@@ -13,7 +13,7 @@ import (
 
 const (
 	PluginName            = "vision"
-	PluginVersion         = "0.19.0"
+	PluginVersion         = "0.19.1"
 	PluginDescription     = "Generic image understanding aggregator over vision provider plugins."
 	OperationAnalyze      = "vision.analyze"
 	OperationProviderList = "vision.provider.list"
@@ -38,7 +38,7 @@ type ProviderAnalyzeRequest struct {
 
 type ProviderAnalyzeResponse struct {
 	Result AnalysisResult `json:"result"`
-	Errors []AnalyzeError `json:"errors,omitempty"`
+	Errors []AnalyzeError `json:"errors"`
 }
 
 type HostProviderRuntime struct{}
@@ -182,14 +182,14 @@ func (s Service) Analyze(ctx pluginbinding.Context, input AnalyzeInput) (Analyze
 
 func (s Service) run(ctx pluginbinding.Context, input AnalyzeInput) AnalyzeOutput {
 	if err := ValidateImages(input.Images); err != nil {
-		return AnalyzeOutput{Errors: []AnalyzeError{{Message: err.Error()}}}
+		return AnalyzeOutput{Errors: []AnalyzeError{{Message: err.Error()}}, Results: []AnalysisResult{}}
 	}
 	available, err := s.runtime().Providers(ctx)
 	if err != nil {
-		return AnalyzeOutput{Errors: []AnalyzeError{{Message: err.Error()}}}
+		return AnalyzeOutput{Errors: []AnalyzeError{{Message: err.Error()}}, Results: []AnalysisResult{}}
 	}
 	providers, errors := SelectProviders(available, input.Providers)
-	output := AnalyzeOutput{Errors: errors}
+	output := AnalyzeOutput{Errors: errors, Results: []AnalysisResult{}}
 	if len(providers) == 0 {
 		if len(output.Errors) == 0 {
 			output.Errors = append(output.Errors, AnalyzeError{Message: "no vision provider is available"})

@@ -31,9 +31,8 @@ type CloudWatchMetricsResult struct {
 	Metric     string            `json:"metric"`
 	Stat       string            `json:"stat"`
 	Label      string            `json:"label,omitempty"`
-	Datapoints []MetricDatapoint `json:"datapoints,omitempty"`
-	Count      int               `json:"count"`
-}
+	Datapoints []MetricDatapoint `json:"datapoints"`
+	Count      int               `json:"count"`}
 
 // CloudWatchMetrics fetches one metric series via GetMetricData.
 func (s Service) CloudWatchMetrics(ctx pluginbinding.Context, input CloudWatchMetricsInput) (CloudWatchMetricsResult, error) {
@@ -77,7 +76,7 @@ func (s Service) CloudWatchMetrics(ctx pluginbinding.Context, input CloudWatchMe
 	}
 	callCtx, cancel := opContext()
 	defer cancel()
-	out := CloudWatchMetricsResult{Region: cfg.Region, Namespace: namespace, Metric: metric, Stat: stat}
+	out := CloudWatchMetricsResult{Region: cfg.Region, Namespace: namespace, Metric: metric, Stat: stat, Datapoints: []MetricDatapoint{}}
 	client := cloudwatch.NewFromConfig(cfg)
 	paginator := cloudwatch.NewGetMetricDataPaginator(client, request)
 	for paginator.HasMorePages() {

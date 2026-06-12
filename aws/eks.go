@@ -29,10 +29,9 @@ type EKSCluster struct {
 
 type EKSClustersResult struct {
 	Region    string       `json:"region"`
-	Clusters  []EKSCluster `json:"clusters,omitempty"`
+	Clusters  []EKSCluster `json:"clusters"`
 	Count     int          `json:"count"`
-	Truncated bool         `json:"truncated,omitempty"`
-}
+	Truncated bool         `json:"truncated,omitempty"`}
 
 // EKSClusters lists EKS clusters and describes each (bounded).
 func (s Service) EKSClusters(ctx pluginbinding.Context, input EKSClustersInput) (EKSClustersResult, error) {
@@ -56,7 +55,7 @@ func (s Service) EKSClusters(ctx pluginbinding.Context, input EKSClustersInput) 
 			names = append(names, page.Clusters...)
 		}
 	}
-	out := EKSClustersResult{Region: cfg.Region}
+	out := EKSClustersResult{Region: cfg.Region, Clusters: []EKSCluster{}}
 	if len(names) > maxEKSDescribes {
 		names = names[:maxEKSDescribes]
 		out.Truncated = true

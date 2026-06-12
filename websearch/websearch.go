@@ -34,8 +34,8 @@ type SearchInput struct {
 }
 
 type SearchOutput struct {
-	Results []ResultSet   `json:"results,omitempty"`
-	Errors  []SearchError `json:"errors,omitempty"`
+	Results []ResultSet   `json:"results"`
+	Errors  []SearchError `json:"errors"`
 }
 
 type ResultSet struct {

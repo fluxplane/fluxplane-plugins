@@ -39,8 +39,8 @@ type ImageInput struct {
 }
 
 type AnalyzeOutput struct {
-	Results []AnalysisResult `json:"results,omitempty"`
-	Errors  []AnalyzeError   `json:"errors,omitempty"`
+	Results []AnalysisResult `json:"results"`
+	Errors  []AnalyzeError   `json:"errors"`
 }
 
 type AnalysisResult struct {

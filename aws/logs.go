@@ -25,10 +25,9 @@ type LogGroup struct {
 
 type LogsGroupsResult struct {
 	Region    string     `json:"region"`
-	Groups    []LogGroup `json:"groups,omitempty"`
+	Groups    []LogGroup `json:"groups"`
 	Count     int        `json:"count"`
-	Truncated bool       `json:"truncated,omitempty"`
-}
+	Truncated bool       `json:"truncated,omitempty"`}
 
 // LogsGroups lists CloudWatch log groups.
 func (s Service) LogsGroups(ctx pluginbinding.Context, input LogsGroupsInput) (LogsGroupsResult, error) {
@@ -50,7 +49,7 @@ func (s Service) LogsGroups(ctx pluginbinding.Context, input LogsGroupsInput) (L
 	callCtx, cancel := opContext()
 	defer cancel()
 	client := cloudwatchlogs.NewFromConfig(cfg)
-	out := LogsGroupsResult{Region: cfg.Region}
+	out := LogsGroupsResult{Region: cfg.Region, Groups: []LogGroup{}}
 	paginator := cloudwatchlogs.NewDescribeLogGroupsPaginator(client, request)
 	for paginator.HasMorePages() {
 		page, err := paginator.NextPage(callCtx)
@@ -99,10 +98,9 @@ type LogEvent struct {
 type LogsTailResult struct {
 	Region    string     `json:"region"`
 	Group     string     `json:"group"`
-	Events    []LogEvent `json:"events,omitempty"`
+	Events    []LogEvent `json:"events"`
 	Count     int        `json:"count"`
-	Truncated bool       `json:"truncated,omitempty"`
-}
+	Truncated bool       `json:"truncated,omitempty"`}
 
 // LogsTail reads recent events from a log group via FilterLogEvents.
 func (s Service) LogsTail(ctx pluginbinding.Context, input LogsTailInput) (LogsTailResult, error) {
@@ -136,7 +134,7 @@ func (s Service) LogsTail(ctx pluginbinding.Context, input LogsTailInput) (LogsT
 	callCtx, cancel := opContext()
 	defer cancel()
 	client := cloudwatchlogs.NewFromConfig(cfg)
-	out := LogsTailResult{Region: cfg.Region, Group: group}
+	out := LogsTailResult{Region: cfg.Region, Group: group, Events: []LogEvent{}}
 	paginator := cloudwatchlogs.NewFilterLogEventsPaginator(client, request)
 	for paginator.HasMorePages() {
 		page, err := paginator.NextPage(callCtx)
@@ -174,11 +172,10 @@ type LogsQueryResult struct {
 	Region         string              `json:"region"`
 	Status         string              `json:"status"`
 	QueryID        string              `json:"query_id,omitempty"`
-	Columns        []string            `json:"columns,omitempty"`
-	Rows           []map[string]string `json:"rows,omitempty"`
+	Columns        []string            `json:"columns"`
+	Rows           []map[string]string `json:"rows"`
 	RecordsMatched float64             `json:"records_matched,omitempty"`
-	RecordsScanned float64             `json:"records_scanned,omitempty"`
-}
+	RecordsScanned float64             `json:"records_scanned,omitempty"`}
 
 // LogsQuery runs a bounded CloudWatch Logs Insights query: StartQuery, poll
 // until complete or timeout (best-effort StopQuery on deadline).
@@ -217,7 +214,7 @@ func (s Service) LogsQuery(ctx pluginbinding.Context, input LogsQueryInput) (Log
 	if err != nil {
 		return LogsQueryResult{}, mapAWSError("logs start-query", err)
 	}
-	out := LogsQueryResult{Region: cfg.Region, QueryID: str(started.QueryId)}
+	out := LogsQueryResult{Region: cfg.Region, QueryID: str(started.QueryId), Columns: []string{}, Rows: []map[string]string{}}
 	deadline := time.Now().Add(time.Duration(timeout) * time.Second)
 	for {
 		results, err := client.GetQueryResults(callCtx, &cloudwatchlogs.GetQueryResultsInput{QueryId: started.QueryId})

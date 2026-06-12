@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.3.2
+
+### Changed
+- **Empty collections always serialize as `[]`** instead of dropping the
+  key (fluxplane-plugins#12 sweep; the repo-wide conformance allowlist is
+  now empty — the rule is enforced for every plugin).
+- SDK bump to `fluxplane-plugin` v0.18.0 (unknown-operation errors carry
+  did-you-mean suggestions).
+
+
 ## v0.3.1
 
 ### Fixed

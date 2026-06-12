@@ -217,7 +217,7 @@ func (c liveClient) ContainerTop(ctx context.Context, input ContainerTopInput) (
 	if err != nil {
 		return ContainerTopResult{}, err
 	}
-	return ContainerTopResult{Container: id, Titles: out.Titles, Processes: out.Processes, Count: len(out.Processes)}, nil
+	return ContainerTopResult{Container: id, Titles: nonNilDocker(out.Titles), Processes: nonNilDocker(out.Processes), Count: len(out.Processes)}, nil
 }
 
 func (c liveClient) ContainerExec(ctx context.Context, input ContainerExecInput) (ContainerExecResult, error) {
@@ -300,7 +300,7 @@ func (c liveClient) ContainerCopyFrom(ctx context.Context, input ContainerCopyFr
 	if err != nil {
 		return ContainerCopyResult{}, err
 	}
-	return ContainerCopyResult{Container: id, SourcePath: source, DestinationPath: destination, Files: files, Bytes: bytes, OK: true}, nil
+	return ContainerCopyResult{Container: id, SourcePath: source, DestinationPath: destination, Files: nonNilDocker(files), Bytes: bytes, OK: true}, nil
 }
 
 func (c liveClient) ContainerCopyTo(ctx context.Context, input ContainerCopyToInput) (ContainerCopyResult, error) {
@@ -328,7 +328,7 @@ func (c liveClient) ContainerCopyTo(ctx context.Context, input ContainerCopyToIn
 	if err != nil {
 		return ContainerCopyResult{}, err
 	}
-	return ContainerCopyResult{Container: id, SourcePath: source, DestinationPath: destination, Files: files, Bytes: bytes, OK: true}, nil
+	return ContainerCopyResult{Container: id, SourcePath: source, DestinationPath: destination, Files: nonNilDocker(files), Bytes: bytes, OK: true}, nil
 }
 
 func (c liveClient) ContainerCreate(ctx context.Context, input ContainerCreateInput) (ContainerCreateResult, error) {
@@ -340,7 +340,7 @@ func (c liveClient) ContainerCreate(ctx context.Context, input ContainerCreateIn
 	if err != nil {
 		return ContainerCreateResult{}, err
 	}
-	return ContainerCreateResult{ID: created.ID, Name: strings.TrimSpace(input.Name), Image: strings.TrimSpace(input.Image), Warnings: created.Warnings, OK: true}, nil
+	return ContainerCreateResult{ID: created.ID, Name: strings.TrimSpace(input.Name), Image: strings.TrimSpace(input.Image), Warnings: nonNilDocker(created.Warnings), OK: true}, nil
 }
 
 func (c liveClient) ContainerRun(ctx context.Context, input ContainerCreateInput) (ContainerCreateResult, error) {
@@ -417,7 +417,7 @@ func (c liveClient) ContainerPrune(ctx context.Context, input PruneInput) (Prune
 	if err != nil {
 		return PruneResult{}, err
 	}
-	return PruneResult{Kind: "container", Deleted: report.ContainersDeleted, SpaceReclaimedBytes: report.SpaceReclaimed, Count: len(report.ContainersDeleted), OK: true}, nil
+	return PruneResult{Kind: "container", Deleted: nonNilDocker(report.ContainersDeleted), SpaceReclaimedBytes: report.SpaceReclaimed, Count: len(report.ContainersDeleted), OK: true}, nil
 }
 
 func (c liveClient) ListImages(ctx context.Context, input ImageListInput) ([]Image, error) {
@@ -465,7 +465,7 @@ func (c liveClient) ImagePull(ctx context.Context, input ImagePullInput) (ImageP
 	if err != nil {
 		return ImagePullResult{}, err
 	}
-	return ImagePullResult{Reference: ref, Platform: strings.TrimSpace(input.Platform), Events: events, Count: len(events), OK: true}, nil
+	return ImagePullResult{Reference: ref, Platform: strings.TrimSpace(input.Platform), Events: nonNilDocker(events), Count: len(events), OK: true}, nil
 }
 
 func (c liveClient) ImageTag(ctx context.Context, input ImageTagInput) (ResourceActionResult, error) {
@@ -505,7 +505,7 @@ func (c liveClient) ImagePush(ctx context.Context, input ImagePushInput) (ImageP
 	if err != nil {
 		return ImagePushResult{}, err
 	}
-	return ImagePushResult{Reference: ref, Platform: strings.TrimSpace(input.Platform), Events: events, Count: len(events), OK: true}, nil
+	return ImagePushResult{Reference: ref, Platform: strings.TrimSpace(input.Platform), Events: nonNilDocker(events), Count: len(events), OK: true}, nil
 }
 
 func (c liveClient) ImageBuild(ctx context.Context, input ImageBuildInput) (ImageBuildResult, error) {
@@ -543,7 +543,7 @@ func (c liveClient) ImageBuild(ctx context.Context, input ImageBuildInput) (Imag
 	if err != nil {
 		return ImageBuildResult{}, err
 	}
-	return ImageBuildResult{ContextPath: contextPath, Tags: append([]string(nil), input.Tags...), ImageID: imageIDFromEvents(events), Events: events, Count: len(events), OK: true}, nil
+	return ImageBuildResult{ContextPath: contextPath, Tags: nonNilDocker(input.Tags), ImageID: imageIDFromEvents(events), Events: nonNilDocker(events), Count: len(events), OK: true}, nil
 }
 
 func (c liveClient) ImageRemove(ctx context.Context, input ImageRemoveInput) (ImageRemoveResult, error) {
@@ -555,7 +555,7 @@ func (c liveClient) ImageRemove(ctx context.Context, input ImageRemoveInput) (Im
 	if err != nil {
 		return ImageRemoveResult{}, err
 	}
-	result := ImageRemoveResult{ID: id, OK: true}
+	result := ImageRemoveResult{ID: id, Deleted: []string{}, Untagged: []string{}, OK: true}
 	for _, response := range responses {
 		if strings.TrimSpace(response.Deleted) != "" {
 			result.Deleted = append(result.Deleted, response.Deleted)
@@ -588,7 +588,7 @@ func (c liveClient) ImagePrune(ctx context.Context, input ImagePruneInput) (Imag
 	if err != nil {
 		return ImagePruneResult{}, err
 	}
-	result := ImagePruneResult{Kind: "image", SpaceReclaimedBytes: report.SpaceReclaimed, OK: true}
+	result := ImagePruneResult{Kind: "image", Deleted: []string{}, Untagged: []string{}, SpaceReclaimedBytes: report.SpaceReclaimed, OK: true}
 	for _, deleted := range report.ImagesDeleted {
 		if strings.TrimSpace(deleted.Deleted) != "" {
 			result.Deleted = append(result.Deleted, deleted.Deleted)
@@ -678,7 +678,7 @@ func (c liveClient) NetworkPrune(ctx context.Context, input PruneInput) (PruneRe
 	if err != nil {
 		return PruneResult{}, err
 	}
-	return PruneResult{Kind: "network", Deleted: report.NetworksDeleted, Count: len(report.NetworksDeleted), OK: true}, nil
+	return PruneResult{Kind: "network", Deleted: nonNilDocker(report.NetworksDeleted), Count: len(report.NetworksDeleted), OK: true}, nil
 }
 
 func (c liveClient) SystemDF(ctx context.Context, input SystemDFInput) (SystemDFResult, error) {
@@ -827,7 +827,7 @@ func (c liveClient) VolumePrune(ctx context.Context, input PruneInput) (PruneRes
 	if err != nil {
 		return PruneResult{}, err
 	}
-	return PruneResult{Kind: "volume", Deleted: report.VolumesDeleted, SpaceReclaimedBytes: report.SpaceReclaimed, Count: len(report.VolumesDeleted), OK: true}, nil
+	return PruneResult{Kind: "volume", Deleted: nonNilDocker(report.VolumesDeleted), SpaceReclaimedBytes: report.SpaceReclaimed, Count: len(report.VolumesDeleted), OK: true}, nil
 }
 
 func (c liveClient) BuildCachePrune(ctx context.Context, input BuildCachePruneInput) (PruneResult, error) {
@@ -844,7 +844,7 @@ func (c liveClient) BuildCachePrune(ctx context.Context, input BuildCachePruneIn
 		return PruneResult{}, err
 	}
 	if report == nil {
-		return PruneResult{Kind: "build_cache", OK: true}, nil
+		return PruneResult{Kind: "build_cache", Deleted: []string{}, OK: true}, nil
 	}
 	return PruneResult{Kind: "build_cache", Deleted: report.CachesDeleted, SpaceReclaimedBytes: report.SpaceReclaimed, Count: len(report.CachesDeleted), OK: true}, nil
 }
@@ -1042,6 +1042,7 @@ func normalizeContainerStats(id, osType string, stats container.StatsResponse) C
 
 func normalizeSystemDF(usage dockertypes.DiskUsage) SystemDFResult {
 	result := SystemDFResult{LayersSizeBytes: usage.LayersSize, BuildCacheCount: len(usage.BuildCache)}
+	result.Images, result.Containers, result.Volumes = []Image{}, []Container{}, []Volume{}
 	for _, item := range usage.Images {
 		if item != nil {
 			result.Images = append(result.Images, normalizeImageSummary(*item))
@@ -2084,3 +2085,12 @@ func limitVolumes(items []Volume, limit int) []Volume {
 
 // shortID, firstString, firstNonEmpty, and cloneStringMap are shared helpers
 // defined in models.go.
+
+// nonNilDocker keeps empty collections present in JSON output — `[]`, never
+// `null`.
+func nonNilDocker[T any](s []T) []T {
+	if s == nil {
+		return []T{}
+	}
+	return s
+}

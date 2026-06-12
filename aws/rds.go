@@ -40,11 +40,10 @@ type RDSInstance struct {
 
 type RDSInstancesResult struct {
 	Region    string        `json:"region"`
-	Clusters  []RDSCluster  `json:"clusters,omitempty"`
-	Instances []RDSInstance `json:"instances,omitempty"`
+	Clusters  []RDSCluster  `json:"clusters"`
+	Instances []RDSInstance `json:"instances"`
 	Count     int           `json:"count"`
-	Truncated bool          `json:"truncated,omitempty"`
-}
+	Truncated bool          `json:"truncated,omitempty"`}
 
 // RDSInstances lists RDS/Aurora clusters and database instances.
 func (s Service) RDSInstances(ctx pluginbinding.Context, input RDSInstancesInput) (RDSInstancesResult, error) {
@@ -63,7 +62,7 @@ func (s Service) RDSInstances(ctx pluginbinding.Context, input RDSInstancesInput
 	callCtx, cancel := opContext()
 	defer cancel()
 	client := rds.NewFromConfig(cfg)
-	out := RDSInstancesResult{Region: cfg.Region}
+	out := RDSInstancesResult{Region: cfg.Region, Instances: []RDSInstance{}, Clusters: []RDSCluster{}}
 
 	clusterPaginator := rds.NewDescribeDBClustersPaginator(client, &rds.DescribeDBClustersInput{})
 	for clusterPaginator.HasMorePages() {

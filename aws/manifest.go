@@ -12,7 +12,7 @@ import (
 
 const (
 	PluginName        = "aws"
-	PluginVersion     = "0.3.0"
+	PluginVersion     = "0.3.1"
 	PluginDescription = "Read-only AWS operations (STS, EC2, EKS, RDS, S3, CloudWatch logs and metrics) plus environment inspection."
 
 	AuthMethodAccessKeys = "access_keys"

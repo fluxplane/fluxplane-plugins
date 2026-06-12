@@ -34,10 +34,9 @@ type EC2Instance struct {
 
 type EC2InstancesResult struct {
 	Region    string        `json:"region"`
-	Instances []EC2Instance `json:"instances,omitempty"`
+	Instances []EC2Instance `json:"instances"`
 	Count     int           `json:"count"`
-	Truncated bool          `json:"truncated,omitempty"`
-}
+	Truncated bool          `json:"truncated,omitempty"`}
 
 // EC2Instances lists EC2 instances with Name-tag and state filters.
 func (s Service) EC2Instances(ctx pluginbinding.Context, input EC2InstancesInput) (EC2InstancesResult, error) {
@@ -65,7 +64,7 @@ func (s Service) EC2Instances(ctx pluginbinding.Context, input EC2InstancesInput
 	callCtx, cancel := opContext()
 	defer cancel()
 	client := ec2.NewFromConfig(cfg)
-	out := EC2InstancesResult{Region: cfg.Region}
+	out := EC2InstancesResult{Region: cfg.Region, Instances: []EC2Instance{}}
 	paginator := ec2.NewDescribeInstancesPaginator(client, request)
 	for paginator.HasMorePages() {
 		page, err := paginator.NextPage(callCtx)

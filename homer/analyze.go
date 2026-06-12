@@ -44,10 +44,10 @@ type CallAnalyzeResult struct {
 	URL               string      `json:"url"`
 	SeedCallID        string      `json:"seed_call_id"`
 	CorrelationHeader string      `json:"correlation_header"`
-	CorrelationValues []string    `json:"correlation_values,omitempty"`
+	CorrelationValues []string    `json:"correlation_values"`
 	Legs              []CallLeg   `json:"legs"`
 	LegCount          int         `json:"leg_count"`
-	Events            []FlowEvent `json:"events,omitempty"`
+	Events            []FlowEvent `json:"events"`
 	EventCount        int         `json:"event_count"`
 	Ladder            string      `json:"ladder,omitempty"`
 	// LadderBlob is the rendered merged sequence diagram (render: svg).

@@ -128,7 +128,7 @@ type CommandInput struct {
 type CommandResult struct {
 	Command string   `json:"command"`
 	Output  string   `json:"output,omitempty"`
-	Lines   []string `json:"lines,omitempty"`
+	Lines   []string `json:"lines"`
 }
 
 type OriginateInput struct {
@@ -388,6 +388,9 @@ func (s Service) Command(ctx pluginbinding.Context, input CommandInput) (Command
 	var lines []string
 	if output != "" {
 		lines = strings.Split(output, "\n")
+	}
+	if lines == nil {
+		lines = []string{}
 	}
 	return CommandResult{Command: commandLine, Output: output, Lines: lines}, nil
 }

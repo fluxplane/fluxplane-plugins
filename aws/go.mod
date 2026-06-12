@@ -16,7 +16,7 @@ require (
 	github.com/fluxplane/fluxplane-context v0.1.0
 	github.com/fluxplane/fluxplane-endpoint v0.3.0
 	github.com/fluxplane/fluxplane-evidence v0.1.0
-	github.com/fluxplane/fluxplane-plugin v0.11.1
+	github.com/fluxplane/fluxplane-plugin v0.18.0
 )
 
 require (

@@ -34,7 +34,7 @@ func withInputExamples(spec core.OperationSpec, examples ...map[string]any) core
 
 const (
 	PluginName        = "homer"
-	PluginVersion     = "0.4.0"
+	PluginVersion     = "0.4.1"
 	PluginDescription = "Homer 7 SIP capture: call search, message flows, QoS/MOS metrics, multi-leg analysis, PCAP export, and aliases."
 
 	EnvHomerURL      = "HOMER_URL"

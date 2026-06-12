@@ -18,8 +18,8 @@ github.com/fluxplane/fluxplane-evidence v0.1.0 h1:8aRwuGBEUh651VO3g3V+Uu/GwLb8hK
 github.com/fluxplane/fluxplane-evidence v0.1.0/go.mod h1:QEfiJqSaToePh98xpzeZUiV7eqBwVzoYxFkndoCxhmA=
 github.com/fluxplane/fluxplane-operation v0.2.0 h1:7FB8JWZJOKgEiaTPBzzirNVQe2xVpZZ2aTyrGv/SEdA=
 github.com/fluxplane/fluxplane-operation v0.2.0/go.mod h1:6olgIlsHg3GxmoDqB64zme4BDmbsTR+V7pSAK4F0eO0=
-github.com/fluxplane/fluxplane-plugin v0.11.1 h1:ZFkSV+nGkRJGuPLJocsJBcpmvG07dNCNB+WE7sgt5Oc=
-github.com/fluxplane/fluxplane-plugin v0.11.1/go.mod h1:NuFzDYH97iEuAs99qNdXXSHWbDuZQZkC//SwUIPOrRk=
+github.com/fluxplane/fluxplane-plugin v0.18.0 h1:nBGD5CpTTKmvUTgZaH+g3Rd3Vm28LvEZAXWFVkEy6+w=
+github.com/fluxplane/fluxplane-plugin v0.18.0/go.mod h1:NuFzDYH97iEuAs99qNdXXSHWbDuZQZkC//SwUIPOrRk=
 github.com/fluxplane/fluxplane-plugins/vision v0.2.1 h1:+5uxNpslgWbQHJJL+79u2vO6xZKlW1B/bHGul29bnYw=
 github.com/fluxplane/fluxplane-plugins/vision v0.2.1/go.mod h1:BunX5OGxnLRNoc6WR6grWrJM4b/KQm7I8M89X3fQ/kk=
 github.com/fluxplane/fluxplane-policy v0.2.0 h1:q1qxqR5XzjxemRMxu7Y1GmZgMAf+YFm5Vcnbxpjj7RU=

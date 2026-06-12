@@ -14,7 +14,7 @@ import (
 
 const (
 	PluginName            = "websearch"
-	PluginVersion         = "0.19.0"
+	PluginVersion         = "0.19.1"
 	PluginDescription     = "Generic web search aggregator over provider plugins."
 	OperationSearch       = "websearch.search"
 	OperationProviderList = "websearch.provider.list"
@@ -41,7 +41,7 @@ type ProviderSearchRequest struct {
 
 type ProviderSearchResponse struct {
 	Set    ResultSet     `json:"set"`
-	Errors []SearchError `json:"errors,omitempty"`
+	Errors []SearchError `json:"errors"`
 }
 
 type HostProviderRuntime struct{}
@@ -199,14 +199,14 @@ func (s Service) DatasourceSearch(ctx pluginbinding.Context, input SearchInput) 
 func (s Service) run(ctx pluginbinding.Context, input SearchInput) SearchOutput {
 	queries := NormalizeQueries(input)
 	if len(queries) == 0 {
-		return SearchOutput{Errors: []SearchError{{Message: "at least one query is required"}}}
+		return SearchOutput{Errors: []SearchError{{Message: "at least one query is required"}}, Results: []ResultSet{}}
 	}
 	available, err := s.runtime().Providers(ctx)
 	if err != nil {
-		return SearchOutput{Errors: []SearchError{{Message: err.Error()}}}
+		return SearchOutput{Errors: []SearchError{{Message: err.Error()}}, Results: []ResultSet{}}
 	}
 	providers, errors := SelectProviders(available, input.Providers)
-	output := SearchOutput{Errors: errors}
+	output := SearchOutput{Errors: errors, Results: []ResultSet{}}
 	if len(providers) == 0 {
 		if len(output.Errors) == 0 {
 			output.Errors = append(output.Errors, SearchError{Message: "no web search provider is available"})

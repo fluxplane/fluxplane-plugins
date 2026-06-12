@@ -195,41 +195,5 @@ func TestTimeRangeFieldNaming(t *testing.T) {
 // seededOmitemptyAllowlist is the omitempty-slice state when the rule landed.
 // Entries are deleted as plugins fix them — never added.
 func seededOmitemptyAllowlist() map[string]bool {
-	return map[string]bool{
-		"asterisk: CommandResult.Lines":              true,
-		"aws: CloudWatchMetricsResult.Datapoints":    true,
-		"aws: EC2InstancesResult.Instances":          true,
-		"aws: EKSClustersResult.Clusters":            true,
-		"aws: LogsGroupsResult.Groups":               true,
-		"aws: LogsQueryResult.Columns":               true,
-		"aws: LogsQueryResult.Rows":                  true,
-		"aws: LogsTailResult.Events":                 true,
-		"aws: RDSInstancesResult.Clusters":           true,
-		"aws: RDSInstancesResult.Instances":          true,
-		"aws: S3BucketsResult.Buckets":               true,
-		"aws: S3ObjectsResult.Objects":               true,
-		"docker: ContainerCopyResult.Files":          true,
-		"openai: responsesOutput.Output":             true,
-		"vision: AnalyzeOutput.Errors":               true,
-		"vision: AnalyzeOutput.Results":              true,
-		"websearch: SearchOutput.Errors":             true,
-		"websearch: SearchOutput.Results":            true,
-		"docker: ContainerCreateResult.Warnings":     true,
-		"docker: ContainerTopResult.Processes":       true,
-		"docker: ContainerTopResult.Titles":          true,
-		"docker: ImageBuildResult.Events":            true,
-		"docker: ImageBuildResult.Tags":              true,
-		"docker: ImagePruneResult.Deleted":           true,
-		"docker: ImagePruneResult.Untagged":          true,
-		"docker: ImagePullResult.Events":             true,
-		"docker: ImagePushResult.Events":             true,
-		"docker: ImageRemoveResult.Deleted":          true,
-		"docker: ImageRemoveResult.Untagged":         true,
-		"docker: PruneResult.Deleted":                true,
-		"docker: SystemDFResult.Containers":          true,
-		"docker: SystemDFResult.Images":              true,
-		"docker: SystemDFResult.Volumes":             true,
-		"homer: CallAnalyzeResult.CorrelationValues": true,
-		"homer: CallAnalyzeResult.Events":            true,
-	}
+	return map[string]bool{}
 }
