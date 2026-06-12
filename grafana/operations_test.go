@@ -285,10 +285,10 @@ func TestPrometheusRangeRejectsStartAfterEnd(t *testing.T) {
 		"endpoint_ref": "grafana-dev",
 		"cluster":      "alpha",
 		"query":        "up",
-		"start":        "0s",
-		"end":          "1h",
+		"since":        "0s",
+		"until":        "1h",
 	}, plugintest.WithHost(host))
-	if err == nil || err.Code != "bad_input" || !strings.Contains(err.Message, "start must be before end") {
+	if err == nil || err.Code != "bad_input" || !strings.Contains(err.Message, "since must be before until") {
 		t.Fatalf("err = %#v", err)
 	}
 }
@@ -600,4 +600,34 @@ func operationInputSchema(t *testing.T, raw json.RawMessage) string {
 		t.Fatal(err)
 	}
 	return compacted.String()
+}
+
+func TestLokiQueryResultParsesMatrixResponses(t *testing.T) {
+	// Metric queries (sum(count_over_time(...))) return resultType matrix with
+	// NUMERIC timestamps — this crashed the proxy path before v0.4.0.
+	raw := json.RawMessage(`{"status":"success","data":{"resultType":"matrix","result":[
+		{"metric":{"cluster":"alpha"},"values":[[1718031600,"42"],[1718031660,"43"]]}
+	]}}`)
+	out, err := lokiQueryResult("http://g", "loki-alpha", "alpha", `sum(count_over_time({app="x"}[5m]))`, 100, raw)
+	if err != nil {
+		t.Fatalf("matrix parse: %v", err)
+	}
+	if out.ResultType != "matrix" || len(out.Series) != 1 || len(out.Series[0].Points) != 2 {
+		t.Fatalf("out = %#v", out)
+	}
+	if len(out.Entries) != 0 || out.Count != 1 {
+		t.Fatalf("entries/count = %#v", out)
+	}
+	// And the streams shape keeps working, with [] for the metric collections.
+	logs := json.RawMessage(`{"status":"success","data":{"resultType":"streams","result":[
+		{"stream":{"app":"x"},"values":[["1718031600000000000","hello"]]}
+	]}}`)
+	out, err = lokiQueryResult("http://g", "loki-alpha", "alpha", `{app="x"}`, 100, logs)
+	if err != nil || len(out.Entries) != 1 || out.Entries[0].Line != "hello" {
+		t.Fatalf("streams parse: %v %#v", err, out)
+	}
+	data, _ := json.Marshal(out)
+	if !strings.Contains(string(data), `"samples":[]`) || !strings.Contains(string(data), `"series":[]`) {
+		t.Fatalf("metric collections must stay present: %s", data)
+	}
 }

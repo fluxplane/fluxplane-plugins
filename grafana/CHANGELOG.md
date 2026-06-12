@@ -1,5 +1,26 @@
 # Changelog
 
+## v0.4.0
+
+Addresses the grafana section of the #12 field report. Manifest 0.21.0.
+
+### Fixed
+- **Metric queries through `grafana.loki.query` no longer crash.** Loki
+  matrix/vector/scalar responses (numeric timestamps —
+  `sum(count_over_time(...))` and friends) are decoded with the shared
+  PromQL decoder into `samples`/`series` (`result_type` says which shape
+  came back); log queries keep landing in `entries`. Previously the
+  streams-only decoder failed with `cannot unmarshal number into … string`.
+
+### Changed
+- **Breaking: time ranges are `since`/`until`** on `prometheus.range` and
+  `tempo.search` (were `start`/`end`) — one time vocabulary across all
+  query plugins.
+- Empty collections always serialize (`[]`): dashboard panels/queries,
+  prom samples/series, tempo services.
+- SDK bump to `fluxplane-plugin` v0.18.0.
+
+
 ## v0.3.0
 
 ### Added

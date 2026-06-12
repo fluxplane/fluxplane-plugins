@@ -156,8 +156,8 @@ type DashboardGetResult struct {
 	URL       string           `json:"url"`
 	UID       string           `json:"uid"`
 	Title     string           `json:"title,omitempty"`
-	Panels    []DashboardPanel `json:"panels,omitempty"`
-	Queries   []DashboardQuery `json:"queries,omitempty"`
+	Panels    []DashboardPanel `json:"panels"`
+	Queries   []DashboardQuery `json:"queries"`
 	Dashboard json.RawMessage  `json:"dashboard,omitempty"`
 }
 
@@ -204,14 +204,20 @@ type LogEntry struct {
 }
 
 type LokiQueryResult struct {
-	URL             string     `json:"url"`
-	UID             string     `json:"uid"`
-	Cluster         string     `json:"cluster,omitempty"`
-	NormalizedQuery string     `json:"normalized_query"`
-	Entries         []LogEntry `json:"entries"`
-	Count           int        `json:"count"`
-	Limit           int        `json:"limit"`
-	Truncated       bool       `json:"truncated,omitempty" jsonschema:"description=True when the page is full; older entries likely exist — narrow the window or raise limit."`
+	URL             string `json:"url"`
+	UID             string `json:"uid"`
+	Cluster         string `json:"cluster,omitempty"`
+	NormalizedQuery string `json:"normalized_query"`
+	// ResultType mirrors Loki: streams for log queries; matrix/vector/scalar
+	// for metric (range/instant aggregation) queries, whose data lands in
+	// samples/series instead of entries.
+	ResultType string     `json:"result_type,omitempty"`
+	Entries    []LogEntry `json:"entries"`
+	Samples    []Sample   `json:"samples"`
+	Series     []Series   `json:"series"`
+	Count      int        `json:"count"`
+	Limit      int        `json:"limit"`
+	Truncated  bool       `json:"truncated,omitempty" jsonschema:"description=True when the page is full; older entries likely exist — narrow the window or raise limit."`
 }
 
 type LokiQueryInput struct {
@@ -249,8 +255,8 @@ type PrometheusRangeInput struct {
 	Cluster string `json:"cluster,omitempty" jsonschema:"required,description=Datasource cluster alias from datasource.list or exact datasource UID suffix."`
 	UID     string `json:"uid,omitempty" jsonschema:"description=Grafana datasource UID override."`
 	Query   string `json:"query,omitempty" jsonschema:"required,description=PromQL query."`
-	Start   string `json:"start,omitempty" jsonschema:"description=Start time as RFC3339\\, unix timestamp\\, or duration ago."`
-	End     string `json:"end,omitempty" jsonschema:"description=End time as RFC3339\\, unix timestamp\\, or duration ago."`
+	Since   string `json:"since,omitempty" jsonschema:"description=Start time as RFC3339\\, unix timestamp\\, or duration ago. Defaults to 1h."`
+	Until   string `json:"until,omitempty" jsonschema:"description=End time as RFC3339\\, unix timestamp\\, or duration ago. Defaults to now."`
 	Step    string `json:"step,omitempty" jsonschema:"description=Range step duration."`
 }
 
@@ -313,8 +319,8 @@ type TempoSearchInput struct {
 	GrafanaTargetInput
 	UID   string `json:"uid,omitempty" jsonschema:"description=Grafana Tempo datasource UID override."`
 	Query string `json:"query,omitempty" jsonschema:"description=Tempo search query."`
-	Start string `json:"start,omitempty" jsonschema:"description=Start time as RFC3339\\, unix timestamp\\, or duration ago."`
-	End   string `json:"end,omitempty" jsonschema:"description=End time as RFC3339\\, unix timestamp\\, or duration ago."`
+	Since string `json:"since,omitempty" jsonschema:"description=Start time as RFC3339\\, unix timestamp\\, or duration ago."`
+	Until string `json:"until,omitempty" jsonschema:"description=End time as RFC3339\\, unix timestamp\\, or duration ago."`
 	Limit int    `json:"limit,omitempty" jsonschema:"description=Maximum traces."`
 }
 
@@ -333,8 +339,8 @@ type PromQueryResult struct {
 	Cluster    string   `json:"cluster,omitempty"`
 	Query      string   `json:"query"`
 	ResultType string   `json:"result_type"`
-	Samples    []Sample `json:"samples,omitempty" jsonschema:"description=Vector/scalar/string results: one value per metric."`
-	Series     []Series `json:"series,omitempty" jsonschema:"description=Matrix results: points over time per metric."`
+	Samples    []Sample `json:"samples" jsonschema:"description=Vector/scalar/string results: one value per metric."`
+	Series     []Series `json:"series" jsonschema:"description=Matrix results: points over time per metric."`
 	Count      int      `json:"count"`
 	Truncated  bool     `json:"truncated,omitempty" jsonschema:"description=True when series or points were dropped to stay within output caps."`
 }
@@ -444,7 +450,7 @@ type TempoTraceResult struct {
 	UID        string        `json:"uid"`
 	TraceID    string        `json:"trace_id"`
 	RootSpan   string        `json:"root_span,omitempty"`
-	Services   []string      `json:"services,omitempty"`
+	Services   []string      `json:"services"`
 	SpanCount  int           `json:"span_count"`
 	DurationMS int64         `json:"duration_ms,omitempty"`
 	Spans      []SpanSummary `json:"spans"`
@@ -776,16 +782,16 @@ func (s Service) PrometheusRange(ctx pluginbinding.Context, input PrometheusRang
 		return PromQueryResult{}, err
 	}
 	now := time.Now()
-	end, err := parseTimeValue(firstNonEmpty(input.End, "0s"), now)
+	end, err := parseTimeValue(firstNonEmpty(input.Until, "0s"), now)
 	if err != nil {
 		return PromQueryResult{}, pluginbinding.Errorf("bad_input", "%s", err)
 	}
-	start, err := parseTimeValue(firstNonEmpty(input.Start, "1h"), now)
+	start, err := parseTimeValue(firstNonEmpty(input.Since, "1h"), now)
 	if err != nil {
 		return PromQueryResult{}, pluginbinding.Errorf("bad_input", "%s", err)
 	}
 	if !start.Before(end) {
-		return PromQueryResult{}, pluginbinding.Fail("bad_input", "start must be before end")
+		return PromQueryResult{}, pluginbinding.Fail("bad_input", "since must be before until")
 	}
 	step := firstNonEmpty(input.Step, "1m")
 	values := url.Values{"query": {strings.TrimSpace(input.Query)}}
@@ -916,15 +922,15 @@ func (s Service) TempoSearch(ctx pluginbinding.Context, input TempoSearchInput) 
 		values.Set("q", strings.TrimSpace(input.Query))
 	}
 	now := time.Now()
-	if strings.TrimSpace(input.Start) != "" {
-		start, err := parseTimeValue(input.Start, now)
+	if strings.TrimSpace(input.Since) != "" {
+		start, err := parseTimeValue(input.Since, now)
 		if err != nil {
 			return TempoSearchResult{}, pluginbinding.Errorf("bad_input", "%s", err)
 		}
 		values.Set("start", strconv.FormatInt(start.Unix(), 10))
 	}
-	if strings.TrimSpace(input.End) != "" {
-		end, err := parseTimeValue(input.End, now)
+	if strings.TrimSpace(input.Until) != "" {
+		end, err := parseTimeValue(input.Until, now)
 		if err != nil {
 			return TempoSearchResult{}, pluginbinding.Errorf("bad_input", "%s", err)
 		}
@@ -963,9 +969,18 @@ func (s Service) TempoTraceGet(ctx pluginbinding.Context, input TempoTraceGetInp
 	}
 	return TempoTraceResult{
 		URL: target.URL, UID: uid, TraceID: traceID,
-		RootSpan: rootSpan, Services: services, SpanCount: len(spans),
+		RootSpan: rootSpan, Services: nonNilGrafana(services), SpanCount: len(spans),
 		DurationMS: durationMS, Spans: spans, Truncated: truncated,
 	}, nil
+}
+
+// nonNilGrafana keeps empty collections present in JSON output — `[]`, never
+// `null`.
+func nonNilGrafana[T any](s []T) []T {
+	if s == nil {
+		return []T{}
+	}
+	return s
 }
 
 func (s Service) client(ctx pluginbinding.Context, input GrafanaTargetInput) (target, Client, error) {
@@ -1046,7 +1061,7 @@ func promProxyResult(ctx context.Context, client Client, baseURL, uid, cluster, 
 	if err != nil {
 		return PromQueryResult{}, pluginbinding.Errorf("grafana", "%s", err)
 	}
-	out := PromQueryResult{URL: baseURL, UID: uid, Cluster: cluster, Query: strings.TrimSpace(query), ResultType: wrapped.ResultType, Samples: samples, Series: series, Truncated: truncated}
+	out := PromQueryResult{URL: baseURL, UID: uid, Cluster: cluster, Query: strings.TrimSpace(query), ResultType: wrapped.ResultType, Samples: nonNilGrafana(samples), Series: nonNilGrafana(series), Truncated: truncated}
 	out.Count = len(samples) + len(series)
 	return out, nil
 }
@@ -1058,10 +1073,8 @@ func lokiQueryResult(baseURL, uid, cluster, query string, limit int, raw json.Ra
 	var response struct {
 		Status string `json:"status"`
 		Data   struct {
-			Result []struct {
-				Stream map[string]string `json:"stream"`
-				Values [][]string        `json:"values"`
-			} `json:"result"`
+			ResultType string          `json:"resultType"`
+			Result     json.RawMessage `json:"result"`
 		} `json:"data"`
 		ErrorType string `json:"errorType,omitempty"`
 		Error     string `json:"error,omitempty"`
@@ -1072,8 +1085,30 @@ func lokiQueryResult(baseURL, uid, cluster, query string, limit int, raw json.Ra
 	if response.Status != "" && response.Status != "success" {
 		return LokiQueryResult{}, fmt.Errorf("datasource error %s: %s", response.ErrorType, response.Error)
 	}
+	resultType := strings.ToLower(strings.TrimSpace(response.Data.ResultType))
+	base := LokiQueryResult{URL: baseURL, UID: uid, Cluster: cluster, NormalizedQuery: strings.TrimSpace(query), ResultType: resultType, Entries: []LogEntry{}, Samples: []Sample{}, Series: []Series{}, Limit: limit}
+	if resultType != "" && resultType != "streams" {
+		// Metric query (matrix/vector/scalar): values carry numeric
+		// timestamps, exactly the PromQL wire shape — reuse its decoder.
+		samples, series, truncated, err := parsePromQLData(resultType, response.Data.Result)
+		if err != nil {
+			return LokiQueryResult{}, err
+		}
+		base.Samples = append(base.Samples, samples...)
+		base.Series = append(base.Series, series...)
+		base.Count = len(samples) + len(series)
+		base.Truncated = truncated
+		return base, nil
+	}
+	var streams []struct {
+		Stream map[string]string `json:"stream"`
+		Values [][]string        `json:"values"`
+	}
+	if err := json.Unmarshal(response.Data.Result, &streams); err != nil {
+		return LokiQueryResult{}, err
+	}
 	var entries []LogEntry
-	for _, stream := range response.Data.Result {
+	for _, stream := range streams {
 		for _, value := range stream.Values {
 			if len(value) < 2 {
 				continue
@@ -1088,7 +1123,10 @@ func lokiQueryResult(baseURL, uid, cluster, query string, limit int, raw json.Ra
 		}
 	}
 	sort.Slice(entries, func(i, j int) bool { return entries[i].Timestamp > entries[j].Timestamp })
-	return LokiQueryResult{URL: baseURL, UID: uid, Cluster: cluster, NormalizedQuery: strings.TrimSpace(query), Entries: entries, Count: len(entries), Limit: limit, Truncated: len(entries) >= limit}, nil
+	base.Entries = append(base.Entries, entries...)
+	base.Count = len(entries)
+	base.Truncated = len(entries) >= limit
+	return base, nil
 }
 
 func unwrapDatasourceData(raw json.RawMessage) (json.RawMessage, error) {
@@ -1130,8 +1168,8 @@ func dashboardGetResult(baseURL, uid string, raw json.RawMessage) (DashboardGetR
 		URL:       baseURL,
 		UID:       firstNonEmpty(dashboard.UID, uid),
 		Title:     dashboard.Title,
-		Panels:    panels,
-		Queries:   queries,
+		Panels:    nonNilGrafana(panels),
+		Queries:   nonNilGrafana(queries),
 		Dashboard: envelope.Dashboard,
 	}, nil
 }

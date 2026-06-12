@@ -161,14 +161,10 @@ var timeRangeDescription = regexp.MustCompile(`(?i)time|rfc3339|timestamp`)
 // a vocabulary fork that costs agents an invalid-input round trip.
 func TestTimeRangeFieldNaming(t *testing.T) {
 	allowed := map[string]bool{
-		"grafana: PrometheusRangeInput.End":   true,
-		"grafana: PrometheusRangeInput.Start": true,
-		"grafana: TempoSearchInput.End":       true,
-		"grafana: TempoSearchInput.Start":     true,
-		"prometheus: QueryRangeInput.End":     true,
-		"prometheus: QueryRangeInput.Start":   true,
-		"prometheus: SeriesInput.End":         true,
-		"prometheus: SeriesInput.Start":       true,
+		"prometheus: QueryRangeInput.End":   true,
+		"prometheus: QueryRangeInput.Start": true,
+		"prometheus: SeriesInput.End":       true,
+		"prometheus: SeriesInput.Start":     true,
 	}
 	var found []string
 	walkGoFiles(t, func(plugin, path string, file *ast.File) {
@@ -240,11 +236,6 @@ func seededOmitemptyAllowlist() map[string]bool {
 		"docker: SystemDFResult.Containers":          true,
 		"docker: SystemDFResult.Images":              true,
 		"docker: SystemDFResult.Volumes":             true,
-		"grafana: DashboardGetResult.Panels":         true,
-		"grafana: DashboardGetResult.Queries":        true,
-		"grafana: PromQueryResult.Samples":           true,
-		"grafana: PromQueryResult.Series":            true,
-		"grafana: TempoTraceResult.Services":         true,
 		"homer: CallAnalyzeResult.CorrelationValues": true,
 		"homer: CallAnalyzeResult.Events":            true,
 		"kubernetes: PortForwardResult.Command":      true,

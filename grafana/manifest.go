@@ -33,7 +33,7 @@ func withInputExamples(spec core.OperationSpec, examples ...map[string]any) core
 
 const (
 	PluginName        = "grafana"
-	PluginVersion     = "0.20.0"
+	PluginVersion     = "0.21.0"
 	PluginDescription = "Grafana datasource catalog and proxy operations for Loki, Prometheus, Alertmanager, and Tempo."
 
 	EnvGrafanaAPIToken = "GRAFANA_API_TOKEN"
