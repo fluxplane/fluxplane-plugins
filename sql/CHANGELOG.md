@@ -1,5 +1,29 @@
 # Changelog
 
+## v0.4.0
+
+Addresses the sql section of the #12 field report. Manifest 0.20.0.
+
+### Added
+- **`sql.test`** — the standard `<plugin>.test` connectivity probe (a
+  `SELECT 1` round trip with the resolved endpoint echoed back). sql was
+  the one query plugin without a probe.
+
+### Fixed
+- **`SELECT REPLACE(...)` no longer rejected by the read-only guard.**
+  Write keywords that double as string functions (`REPLACE`, `INSERT`) are
+  allowed in function-call position (immediately followed by `(`), while
+  their statement forms stay blocked — `REPLACE INTO`, `INSERT INTO`,
+  multi-statement, and write-CTE rejection are unchanged.
+- **Empty results keep their collections**: `rows`, `columns`, `databases`,
+  `tables`, `indexes`, `primary_key`, `foreign_keys` always serialize
+  (`[]`, never a missing key) — zero-row queries stop crashing naive
+  consumers.
+
+### Changed
+- SDK bump to `fluxplane-plugin` v0.18.0.
+
+
 ## v0.3.0
 
 ### Added

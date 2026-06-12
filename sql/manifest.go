@@ -10,7 +10,7 @@ import (
 
 const (
 	PluginName        = "sql"
-	PluginVersion     = "0.19.0"
+	PluginVersion     = "0.20.0"
 	PluginDescription = "Read-only SQL query and schema introspection operations for MySQL, PostgreSQL, SQLite, and compatible endpoints."
 
 	AuthMethodSQL         = "sql"
@@ -20,6 +20,7 @@ const (
 	EnvSQLPassword        = "SQL_PASSWORD"
 	EnvMySQLUsername      = "MYSQL_USERNAME"
 	EnvMySQLPassword      = "MYSQL_PASSWORD"
+	OperationTest         = "sql.test"
 	OperationQuery        = "sql.query"
 	OperationDatabaseList = "sql.database.list"
 	OperationTableList    = "sql.table.list"
@@ -74,6 +75,7 @@ func manifestSpec() pluginbinding.ManifestSpec {
 			},
 		}},
 		Operations: []core.OperationSpec{
+			testSpec(),
 			querySpec(),
 			databaseListSpec(),
 			tableListSpec(),
@@ -95,6 +97,14 @@ func sqlReadSpecOptions() []pluginbinding.OperationSpecOption {
 		pluginbinding.Risk(core.OperationRiskLow),
 		pluginbinding.Idempotency(core.OperationIdempotent),
 	}
+}
+
+func testSpec() core.OperationSpec {
+	return pluginbinding.TypedOperationSpec[TestInput, TestResult](
+		OperationTest,
+		"Test SQL endpoint connectivity with a SELECT 1 round trip.",
+		sqlReadSpecOptions()...,
+	)
 }
 
 func querySpec() core.OperationSpec {

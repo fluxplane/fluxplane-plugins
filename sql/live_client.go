@@ -61,6 +61,7 @@ func runSQLQuery(ctx pluginbinding.Context, input QueryInput) (QueryOutput, erro
 	out.Driver = sqlFirstNonEmpty(target.Dialect, target.Driver)
 	out.Database = target.Database
 	out.DurationMS = duration
+	out.Columns, out.Rows = nonNil(out.Columns), nonNil(out.Rows)
 	return out, nil
 }
 

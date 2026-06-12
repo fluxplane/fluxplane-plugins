@@ -1,7 +1,9 @@
 package sql
 
 import (
+	"context"
 	"crypto/sha1"
+	stdsql "database/sql"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -18,6 +20,14 @@ func NewService() Service {
 	return Service{}
 }
 
+// nonNil keeps empty collections present in JSON output — `[]`, never `null`.
+func nonNil[T any](s []T) []T {
+	if s == nil {
+		return []T{}
+	}
+	return s
+}
+
 type QueryInput struct {
 	EndpointRef string `json:"endpoint_ref,omitempty" jsonschema:"required,description=Registered SQL endpoint ref resolved by the host."`
 	Driver      string `json:"driver,omitempty" jsonschema:"description=SQL driver or dialect.,enum=mysql,enum=postgres,enum=sqlite"`
@@ -32,8 +42,8 @@ type QueryOutput struct {
 	EndpointURL string           `json:"endpoint_url,omitempty"`
 	Driver      string           `json:"driver,omitempty"`
 	Database    string           `json:"database,omitempty"`
-	Columns     []string         `json:"columns,omitempty"`
-	Rows        []map[string]any `json:"rows,omitempty"`
+	Columns     []string         `json:"columns"`
+	Rows        []map[string]any `json:"rows"`
 	RowCount    int              `json:"row_count"`
 	Truncated   bool             `json:"truncated,omitempty"`
 	DurationMS  int64            `json:"duration_ms,omitempty"`
@@ -128,17 +138,24 @@ func readOnlyQuery(query string) bool {
 	if hasStatementSeparator || len(tokens) == 0 {
 		return false
 	}
-	switch tokens[0] {
+	switch tokens[0].text {
 	case "select", "show", "describe", "desc", "explain", "with":
 	default:
 		return false
 	}
 	for i, token := range tokens {
-		switch token {
-		case "insert", "update", "delete", "drop", "create", "alter", "truncate", "replace", "grant", "revoke", "call", "do", "load", "copy", "execute", "merge":
+		switch token.text {
+		case "insert", "replace":
+			// REPLACE(str, from, to) and INSERT(str, pos, len, new) are plain
+			// string functions in a SELECT — only the statement form writes.
+			if token.call && i > 0 {
+				continue
+			}
+			return false
+		case "update", "delete", "drop", "create", "alter", "truncate", "grant", "revoke", "call", "do", "load", "copy", "execute", "merge":
 			return false
 		case "outfile", "dumpfile":
-			if i > 0 && tokens[i-1] == "into" {
+			if i > 0 && tokens[i-1].text == "into" {
 				return false
 			}
 		}
@@ -146,14 +163,28 @@ func readOnlyQuery(query string) bool {
 	return true
 }
 
-func sqlTokens(query string) ([]string, bool) {
-	tokens := []string{}
+// sqlToken is one lowercased word with whether it is immediately followed by
+// an opening parenthesis (function-call form).
+type sqlToken struct {
+	text string
+	call bool
+}
+
+func sqlTokens(query string) ([]sqlToken, bool) {
+	tokens := []sqlToken{}
 	var current strings.Builder
 	flush := func() {
 		if current.Len() == 0 {
 			return
 		}
-		tokens = append(tokens, current.String())
+		tokens = append(tokens, sqlToken{text: current.String()})
+		current.Reset()
+	}
+	flushCall := func(next byte) {
+		if current.Len() == 0 {
+			return
+		}
+		tokens = append(tokens, sqlToken{text: current.String(), call: next == '('})
 		current.Reset()
 	}
 	for i := 0; i < len(query); i++ {
@@ -202,7 +233,7 @@ func sqlTokens(query string) ([]string, bool) {
 		case ch == '_' || ch >= '0' && ch <= '9' || ch >= 'a' && ch <= 'z' || ch >= 'A' && ch <= 'Z':
 			current.WriteByte(byte(strings.ToLower(string(ch))[0]))
 		default:
-			flush()
+			flushCall(ch)
 		}
 	}
 	flush()
@@ -232,4 +263,39 @@ func sqlRowTitle(index int, row map[string]any, columns []string) string {
 		}
 	}
 	return fmt.Sprintf("row %d", index+1)
+}
+
+type TestInput struct {
+	EndpointRef string `json:"endpoint_ref,omitempty" jsonschema:"required,description=Registered SQL endpoint ref resolved by the host."`
+	Driver      string `json:"driver,omitempty" jsonschema:"description=SQL driver or dialect.,enum=mysql,enum=postgres,enum=sqlite"`
+	Database    string `json:"database,omitempty" jsonschema:"description=Database override."`
+}
+
+type TestResult struct {
+	Status      string `json:"status"`
+	EndpointRef string `json:"endpoint_ref,omitempty"`
+	EndpointURL string `json:"endpoint_url,omitempty"`
+	Driver      string `json:"driver,omitempty"`
+	Database    string `json:"database,omitempty"`
+	DurationMS  int64  `json:"duration_ms"`
+}
+
+// Test answers "can this endpoint serve a query right now" with a SELECT 1
+// round trip — the same connectivity probe every other plugin calls
+// <plugin>.test.
+func (s Service) Test(ctx pluginbinding.Context, input TestInput) (TestResult, error) {
+	out := TestResult{EndpointRef: input.EndpointRef}
+	target, duration, err := withReadOnlySQL(ctx, input.EndpointRef, input.Driver, input.Database, "", func(queryCtx context.Context, tx *stdsql.Tx, _ sqlTarget) error {
+		var one int
+		return tx.QueryRowContext(queryCtx, "select 1").Scan(&one)
+	})
+	if err != nil {
+		return TestResult{}, err
+	}
+	out.Status = "ok"
+	out.EndpointURL = target.SafeURL
+	out.Driver = sqlFirstNonEmpty(target.Dialect, target.Driver)
+	out.Database = target.Database
+	out.DurationMS = duration
+	return out, nil
 }

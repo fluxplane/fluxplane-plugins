@@ -44,7 +44,7 @@ type DatabaseListOutput struct {
 	EndpointRef string         `json:"endpoint_ref,omitempty"`
 	EndpointURL string         `json:"endpoint_url,omitempty"`
 	Driver      string         `json:"driver,omitempty"`
-	Databases   []DatabaseInfo `json:"databases,omitempty"`
+	Databases   []DatabaseInfo `json:"databases"`
 	Count       int            `json:"count"`
 	DurationMS  int64          `json:"duration_ms,omitempty"`
 }
@@ -69,7 +69,7 @@ type TableListOutput struct {
 	EndpointURL string      `json:"endpoint_url,omitempty"`
 	Driver      string      `json:"driver,omitempty"`
 	Database    string      `json:"database,omitempty"`
-	Tables      []TableInfo `json:"tables,omitempty"`
+	Tables      []TableInfo `json:"tables"`
 	Count       int         `json:"count"`
 	Truncated   bool        `json:"truncated,omitempty"`
 	DurationMS  int64       `json:"duration_ms,omitempty"`
@@ -105,9 +105,9 @@ type TableShowOutput struct {
 	Database    string           `json:"database,omitempty"`
 	Schema      string           `json:"schema,omitempty"`
 	Table       string           `json:"table"`
-	Columns     []ColumnInfo     `json:"columns,omitempty"`
-	PrimaryKey  []string         `json:"primary_key,omitempty"`
-	ForeignKeys []ForeignKeyInfo `json:"foreign_keys,omitempty"`
+	Columns     []ColumnInfo     `json:"columns"`
+	PrimaryKey  []string         `json:"primary_key"`
+	ForeignKeys []ForeignKeyInfo `json:"foreign_keys"`
 	DurationMS  int64            `json:"duration_ms,omitempty"`
 }
 
@@ -133,7 +133,7 @@ type IndexListOutput struct {
 	EndpointURL string      `json:"endpoint_url,omitempty"`
 	Driver      string      `json:"driver,omitempty"`
 	Database    string      `json:"database,omitempty"`
-	Indexes     []IndexInfo `json:"indexes,omitempty"`
+	Indexes     []IndexInfo `json:"indexes"`
 	Count       int         `json:"count"`
 	DurationMS  int64       `json:"duration_ms,omitempty"`
 }
@@ -202,6 +202,7 @@ func (s Service) DatabaseList(ctx pluginbinding.Context, input DatabaseListInput
 	out.Driver = sqlFirstNonEmpty(target.Dialect, target.Driver)
 	out.Count = len(out.Databases)
 	out.DurationMS = duration
+	out.Databases = nonNil(out.Databases)
 	return out, nil
 }
 
@@ -252,6 +253,7 @@ func (s Service) TableList(ctx pluginbinding.Context, input TableListInput) (Tab
 	out.Database = target.Database
 	out.Count = len(out.Tables)
 	out.DurationMS = duration
+	out.Tables = nonNil(out.Tables)
 	return out, nil
 }
 
@@ -330,6 +332,7 @@ func (s Service) TableShow(ctx pluginbinding.Context, input TableShowInput) (Tab
 	out.Driver = sqlFirstNonEmpty(target.Dialect, target.Driver)
 	out.Database = target.Database
 	out.DurationMS = duration
+	out.Columns, out.PrimaryKey, out.ForeignKeys = nonNil(out.Columns), nonNil(out.PrimaryKey), nonNil(out.ForeignKeys)
 	return out, nil
 }
 
@@ -377,6 +380,7 @@ func (s Service) IndexList(ctx pluginbinding.Context, input IndexListInput) (Ind
 	out.Database = target.Database
 	out.Count = len(out.Indexes)
 	out.DurationMS = duration
+	out.Indexes = nonNil(out.Indexes)
 	return out, nil
 }
 

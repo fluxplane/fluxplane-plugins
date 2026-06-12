@@ -124,7 +124,7 @@ func TestResultSlicesAreNeverOmitted(t *testing.T) {
 	walkGoFiles(t, func(plugin, path string, file *ast.File) {
 		ast.Inspect(file, func(n ast.Node) bool {
 			spec, ok := n.(*ast.TypeSpec)
-			if !ok || !strings.HasSuffix(spec.Name.Name, "Result") {
+			if !ok || (!strings.HasSuffix(spec.Name.Name, "Result") && !strings.HasSuffix(spec.Name.Name, "Output")) {
 				return true
 			}
 			structType, ok := spec.Type.(*ast.StructType)
@@ -221,6 +221,11 @@ func seededOmitemptyAllowlist() map[string]bool {
 		"aws: S3BucketsResult.Buckets":               true,
 		"aws: S3ObjectsResult.Objects":               true,
 		"docker: ContainerCopyResult.Files":          true,
+		"openai: responsesOutput.Output":             true,
+		"vision: AnalyzeOutput.Errors":               true,
+		"vision: AnalyzeOutput.Results":              true,
+		"websearch: SearchOutput.Errors":             true,
+		"websearch: SearchOutput.Results":            true,
 		"docker: ContainerCreateResult.Warnings":     true,
 		"docker: ContainerTopResult.Processes":       true,
 		"docker: ContainerTopResult.Titles":          true,

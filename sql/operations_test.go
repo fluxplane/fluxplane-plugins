@@ -2,7 +2,9 @@ package sql
 
 import (
 	stdsql "database/sql"
+	"encoding/json"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	fpdatasource "github.com/fluxplane/fluxplane-datasource"
@@ -182,4 +184,57 @@ func TestDatasourceDeclaresProviderAccess(t *testing.T) {
 		}
 	}
 	t.Fatalf("sql datasource access = %v, want provider", spec.Access)
+}
+
+func TestReadOnlyQueryAllowsWriteKeywordFunctionForms(t *testing.T) {
+	allowed := []string{
+		"SELECT REPLACE(name, 'a', 'b') FROM users",
+		"select insert('abcdef', 2, 3, 'xy')",
+		"SELECT id, REPLACE(`path`, '/old/', '/new/') AS p FROM files WHERE p LIKE '%x%'",
+	}
+	for _, query := range allowed {
+		if !readOnlyQuery(query) {
+			t.Fatalf("readOnlyQuery(%q) = false, want true (function form)", query)
+		}
+	}
+	rejected := []string{
+		"REPLACE INTO users VALUES (1, 'x')",
+		"REPLACE(users) INTO something", // statement-leading stays rejected
+		"INSERT INTO users VALUES (1)",
+		"SELECT 1; REPLACE INTO users VALUES (1, 'x')",
+		"WITH x AS (SELECT 1) DELETE FROM users",
+		"SELECT * FROM t INTO OUTFILE '/tmp/x'",
+	}
+	for _, query := range rejected {
+		if readOnlyQuery(query) {
+			t.Fatalf("readOnlyQuery(%q) = true, want false", query)
+		}
+	}
+}
+
+func TestQueryEmptyResultKeepsCollectionsPresent(t *testing.T) {
+	host := sqlTestHost{t: t, url: newSQLiteUsersDB(t)}
+	plugin := NewPluginWithService(Service{})
+	out := plugintest.RunOK[QueryOutput](t, plugin, OperationQuery, QueryInput{
+		EndpointRef: "warehouse",
+		Query:       "select id, name from users where id < 0",
+	}, plugintest.WithHost(host))
+	raw, err := json.Marshal(out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, key := range []string{`"rows":[]`, `"columns":[`} {
+		if !strings.Contains(string(raw), key) {
+			t.Fatalf("empty result must keep %s present: %s", key, raw)
+		}
+	}
+}
+
+func TestSQLTestProbe(t *testing.T) {
+	host := sqlTestHost{t: t, url: newSQLiteUsersDB(t)}
+	plugin := NewPluginWithService(Service{})
+	out := plugintest.RunOK[TestResult](t, plugin, OperationTest, TestInput{EndpointRef: "warehouse"}, plugintest.WithHost(host))
+	if out.Status != "ok" || out.Driver != "sqlite" {
+		t.Fatalf("out = %#v", out)
+	}
 }
