@@ -20,7 +20,7 @@ func TestServiceBuildsClientFromEndpointRef(t *testing.T) {
 		},
 	})
 
-	out := plugintest.RunOK[AuthTestResult](t, plugin, OperationAuthTest, map[string]any{"endpoint_ref": "confluence-dev"})
+	out := plugintest.RunOK[AuthTestResult](t, plugin, OperationTest, map[string]any{"endpoint_ref": "confluence-dev"})
 	if out.Status != "ok" || out.User.AccountID != "acct-1" {
 		t.Fatalf("auth output = %#v", out)
 	}
@@ -39,7 +39,7 @@ func TestServiceBuildsClientFromStoredEndpointConfig(t *testing.T) {
 		},
 	})
 
-	out := plugintest.RunOK[AuthTestResult](t, plugin, OperationAuthTest, nil, plugintest.WithRequest(protocol.Request{
+	out := plugintest.RunOK[AuthTestResult](t, plugin, OperationTest, nil, plugintest.WithRequest(protocol.Request{
 		Plugin: PluginName, Instance: "default", Config: map[string]any{"endpoint_refs": map[string]any{EndpointName: "confluence-stored"}},
 	}))
 	if out.Status != "ok" || capturedEndpointRef != "confluence-stored" {

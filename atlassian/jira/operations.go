@@ -126,8 +126,9 @@ type IssueSearchInput struct {
 type IssueShowInput struct {
 	JiraTargetInput
 	BodyFormatInput
-	Key string `json:"key,omitempty" jsonschema:"description=Issue key"`
-	ID  string `json:"id,omitempty" jsonschema:"description=Alias for key"`
+	Key      string `json:"key,omitempty" jsonschema:"description=Issue key"`
+	ID       string `json:"id,omitempty" jsonschema:"description=Alias for key"`
+	IssueKey string `json:"issue_key,omitempty" jsonschema:"description=Alias for key"`
 }
 
 type IssueCreateMetaInput struct {
@@ -145,6 +146,7 @@ type IssueEditMetaInput struct {
 type IssueCreateInput struct {
 	JiraTargetInput
 	ProjectKey          string         `json:"project_key,omitempty" jsonschema:"required,description=Project key such as DEV."`
+	Project             string         `json:"project,omitempty" jsonschema:"description=Alias for project_key"`
 	IssueType           string         `json:"issue_type,omitempty" jsonschema:"required,description=Issue type name such as Task or Bug."`
 	Summary             string         `json:"summary,omitempty" jsonschema:"required,description=Issue summary."`
 	DescriptionMarkdown string         `json:"description_markdown,omitempty" jsonschema:"description=Issue description as Markdown converted to Jira ADF."`
@@ -305,7 +307,7 @@ func (s Service) IssueShow(ctx pluginbinding.Context, input IssueShowInput) (plu
 	if err != nil {
 		return pluginbinding.ShowResult[Issue]{}, pluginbinding.Errorf("secret", "%s", err)
 	}
-	key := strings.TrimSpace(pluginbinding.FirstString(pluginbinding.InputMap(input), "key", "id"))
+	key := strings.TrimSpace(pluginbinding.FirstString(pluginbinding.InputMap(input), "key", "id", "issue_key"))
 	if key == "" {
 		return pluginbinding.ShowResult[Issue]{}, pluginbinding.Fail("bad_input", "issue key is required")
 	}
@@ -386,6 +388,7 @@ func (s Service) TransitionRun(ctx pluginbinding.Context, input IssueTransitionR
 		InitialStatus:        state.CurrentStatus,
 		CurrentStatus:        state.CurrentStatus,
 		TargetStatus:         targetStatus,
+		AppliedTransitions:   []IssueTransition{},
 		AvailableTransitions: state.Transitions,
 	}
 	if targetStatus != "" && statusMatches(state.CurrentStatus, targetStatus) {
@@ -406,17 +409,17 @@ func (s Service) TransitionRun(ctx pluginbinding.Context, input IssueTransitionR
 		transition, ok := selectTransition(state, input, result.Steps > 0 || input.AutoTransition, tried)
 		if !ok {
 			if input.AutoTransition && targetStatus != "" && result.Steps > 0 {
-				return IssueTransitionRunResult{}, pluginbinding.Errorf("jira", "target status %q was not reachable after %d transition(s); current status is %q", targetStatus, result.Steps, result.CurrentStatus.Name)
+				return IssueTransitionRunResult{}, transitionRunFailure(result, "target status %q was not reachable after %d transition(s); current status is %q", targetStatus, result.Steps, result.CurrentStatus.Name)
 			}
-			return IssueTransitionRunResult{}, pluginbinding.Errorf("jira", "no currently available transition matches the request; available transitions: %s", transitionSummary(state.Transitions))
+			return IssueTransitionRunResult{}, transitionRunFailure(result, "no currently available transition matches the request; available transitions: %s", transitionSummary(state.Transitions))
 		}
 		if tried[transitionKey(transition)] {
-			return IssueTransitionRunResult{}, pluginbinding.Errorf("jira", "transition walk repeated %q before reaching target status %q", transition.Name, targetStatus)
+			return IssueTransitionRunResult{}, transitionRunFailure(result, "transition walk repeated %q before reaching target status %q", transition.Name, targetStatus)
 		}
 		tried[transitionKey(transition)] = true
 		mutation, err := client.TransitionIssue(context.Background(), key, IssueTransitionRequest{TransitionID: transition.ID})
 		if err != nil {
-			return IssueTransitionRunResult{}, pluginbinding.Errorf("jira", "%s", err)
+			return IssueTransitionRunResult{}, transitionRunFailure(result, "%s", err)
 		}
 		result.AppliedTransitions = append(result.AppliedTransitions, transition)
 		result.Steps++
@@ -430,7 +433,7 @@ func (s Service) TransitionRun(ctx pluginbinding.Context, input IssueTransitionR
 		}
 		state, err = client.ListTransitions(context.Background(), key)
 		if err != nil {
-			return IssueTransitionRunResult{}, pluginbinding.Errorf("jira", "%s", err)
+			return IssueTransitionRunResult{}, transitionRunFailure(result, "%s", err)
 		}
 		result.CurrentStatus = state.CurrentStatus
 		result.AvailableTransitions = state.Transitions
@@ -441,7 +444,25 @@ func (s Service) TransitionRun(ctx pluginbinding.Context, input IssueTransitionR
 			return result, nil
 		}
 	}
-	return IssueTransitionRunResult{}, pluginbinding.Errorf("jira", "target status %q was not reached within max_steps=%d; current status is %q", targetStatus, maxSteps, result.CurrentStatus.Name)
+	return IssueTransitionRunResult{}, transitionRunFailure(result, "target status %q was not reached within max_steps=%d; current status is %q", targetStatus, maxSteps, result.CurrentStatus.Name)
+}
+
+// transitionRunFailure reports a walker failure WITHOUT hiding what already
+// happened: any transitions applied before the failure mutated the issue, and
+// the error details say exactly which ones and where the issue stands now.
+func transitionRunFailure(result IssueTransitionRunResult, format string, args ...any) error {
+	message := fmt.Sprintf(format, args...)
+	if len(result.AppliedTransitions) == 0 {
+		return pluginbinding.Fail("jira", message)
+	}
+	applied := make([]string, 0, len(result.AppliedTransitions))
+	for _, transition := range result.AppliedTransitions {
+		applied = append(applied, transition.Name)
+	}
+	return pluginbinding.FieldError("jira", message, nil,
+		fmt.Sprintf("issue %s WAS mutated before the failure: applied %d transition(s): %s", result.IssueKey, len(applied), strings.Join(applied, " → ")),
+		fmt.Sprintf("status is now %q (was %q); run jira.issue.transition.run with a reachable target_status to correct it", result.CurrentStatus.Name, result.InitialStatus.Name),
+	)
 }
 
 func (s Service) IssueCreate(ctx pluginbinding.Context, input IssueCreateInput) (IssueMutationResult, error) {
@@ -505,6 +526,7 @@ func (s Service) CommentAdd(ctx pluginbinding.Context, input CommentAddInput) (C
 		return CommentResult{}, pluginbinding.Errorf("jira", "%s", err)
 	}
 	result.Comment.render(bodyFormatMarkdown)
+	result.CommentID = result.Comment.ID
 	return result, nil
 }
 
@@ -535,6 +557,10 @@ func (s Service) CommentEdit(ctx pluginbinding.Context, input CommentEditInput) 
 		return CommentResult{}, pluginbinding.Errorf("jira", "%s", err)
 	}
 	result.Comment.render(bodyFormatMarkdown)
+	result.CommentID = result.Comment.ID
+	if result.CommentID == "" {
+		result.CommentID = commentID
+	}
 	return result, nil
 }
 
@@ -691,7 +717,77 @@ func (s Service) IssueEdit(ctx pluginbinding.Context, input IssueEditInput) (Iss
 	}
 	result.Issue.render(bodyFormatMarkdown)
 	verifyTypedFieldsApplied(&result, input.Summary, input.AssigneeAccountID, input.ParentKey)
+	verifyRawIssueLinksApplied(&result, input.Update)
 	return result, nil
+}
+
+// verifyRawIssueLinksApplied guards the raw update.issuelinks passthrough:
+// Jira accepts and silently drops link instructions it cannot apply, so an
+// edit that requested links but left the issue link-less must say so instead
+// of returning a clean ok:true.
+func verifyRawIssueLinksApplied(result *IssueMutationResult, update map[string]any) {
+	if result == nil || result.Issue == nil {
+		return
+	}
+	if _, requested := update["issuelinks"]; !requested {
+		return
+	}
+	if len(result.Issue.Fields.IssueLinks) > 0 {
+		return
+	}
+	appendWarning(result, "update.issuelinks was accepted but the issue has no visible links — Jira silently drops malformed link instructions. Use jira.issue.link.add instead.")
+}
+
+type IssueLinkAddInput struct {
+	JiraTargetInput
+	Key   string `json:"key,omitempty" jsonschema:"required,description=Issue key on the verb side of the link (the blocker in Blocks)."`
+	ToKey string `json:"to_key,omitempty" jsonschema:"required,description=Issue key the verb points at (the blocked issue in Blocks)."`
+	Type  string `json:"type,omitempty" jsonschema:"required,description=Link type name such as Blocks or Relates. An unknown type fails with the site's available types listed."`
+}
+
+type IssueLinkAddResult struct {
+	OK    bool   `json:"ok"`
+	Key   string `json:"key,omitempty"`
+	ToKey string `json:"to_key,omitempty"`
+	Type  string `json:"type,omitempty"`
+	// Links are the issue's links AFTER the add, read back from Jira — the
+	// link you asked for is verifiably in this list, not assumed.
+	Links []IssueLink `json:"links"`
+}
+
+func (s Service) IssueLinkAdd(ctx pluginbinding.Context, input IssueLinkAddInput) (IssueLinkAddResult, error) {
+	client, _, err := s.client(ctx, input)
+	if err != nil {
+		return IssueLinkAddResult{}, pluginbinding.Errorf("secret", "%s", err)
+	}
+	key := strings.TrimSpace(input.Key)
+	toKey := strings.TrimSpace(input.ToKey)
+	linkType := strings.TrimSpace(input.Type)
+	if key == "" || toKey == "" || linkType == "" {
+		return IssueLinkAddResult{}, pluginbinding.Fail("bad_input", "key, to_key, and type are required")
+	}
+	if err := client.LinkIssues(context.Background(), IssueLinkRequest{Type: linkType, OutwardKey: key, InwardKey: toKey}); err != nil {
+		if types, typesErr := client.ListIssueLinkTypes(context.Background()); typesErr == nil && len(types) > 0 {
+			names := make([]string, 0, len(types))
+			for _, t := range types {
+				names = append(names, fmt.Sprintf("%s (outward %q, inward %q)", t.Name, t.Outward, t.Inward))
+			}
+			return IssueLinkAddResult{}, pluginbinding.FieldError("jira", err.Error(), nil, "available link types: "+strings.Join(names, ", "))
+		}
+		return IssueLinkAddResult{}, pluginbinding.Errorf("jira", "%s", err)
+	}
+	result := IssueLinkAddResult{OK: true, Key: key, ToKey: toKey, Type: linkType, Links: []IssueLink{}}
+	issue, err := client.GetIssue(context.Background(), key)
+	if err != nil {
+		return IssueLinkAddResult{}, pluginbinding.Errorf("jira", "link created but reading it back failed: %s", err)
+	}
+	result.Links = append(result.Links, issue.Fields.IssueLinks...)
+	for _, link := range result.Links {
+		if strings.EqualFold(link.OtherKey, toKey) {
+			return result, nil
+		}
+	}
+	return IssueLinkAddResult{}, pluginbinding.Errorf("jira", "Jira accepted the link request but no link to %s is visible on %s — nothing was created", toKey, key)
 }
 
 func (s Service) IssueDelete(ctx pluginbinding.Context, input IssueDeleteInput) (IssueMutationResult, error) {
@@ -1008,11 +1104,11 @@ func transitionSummary(transitions []IssueTransition) string {
 }
 
 func issueCreateRequest(input IssueCreateInput) (IssueCreateRequest, error) {
-	projectKey := strings.TrimSpace(input.ProjectKey)
+	projectKey := strings.TrimSpace(pluginbinding.FirstString(pluginbinding.InputMap(input), "project_key", "project"))
 	issueType := strings.TrimSpace(input.IssueType)
 	summary := strings.TrimSpace(input.Summary)
 	if projectKey == "" || issueType == "" || summary == "" {
-		return IssueCreateRequest{}, fmt.Errorf("project_key, issue_type, and summary are required")
+		return IssueCreateRequest{}, fmt.Errorf("project_key (or project), issue_type, and summary are required")
 	}
 	fields := cloneAnyMap(input.Fields)
 	fields["project"] = map[string]string{"key": projectKey}

@@ -109,9 +109,13 @@ type IssueFields struct {
 	Priority       NamedValue      `json:"priority,omitempty"`
 	Labels         []string        `json:"labels,omitempty"`
 	Parent         *IssueReference `json:"parent,omitempty"`
-	Updated        string          `json:"updated,omitempty"`
-	Created        string          `json:"created,omitempty"`
-	Raw            interface{}     `json:"-"`
+	// IssueLinks are the issue's links flattened to one record per link
+	// (direction-aware verb + the other issue), so link state is visible
+	// without JQL.
+	IssueLinks []IssueLink `json:"issuelinks,omitempty"`
+	Updated    string      `json:"updated,omitempty"`
+	Created    string      `json:"created,omitempty"`
+	Raw        interface{} `json:"-"`
 
 	// rawDescription holds the description ADF as received from Jira until
 	// render decides which representation(s) to expose.
@@ -160,6 +164,76 @@ type IssueReference struct {
 	ID     string               `json:"id,omitempty"`
 	Key    string               `json:"key,omitempty"`
 	Fields *IssueReferenceField `json:"fields,omitempty"`
+}
+
+// IssueLink is one issue link flattened to this issue's point of view: the
+// direction-aware verb plus the linked issue, instead of Jira's nested
+// type/inwardIssue/outwardIssue shape.
+type IssueLink struct {
+	ID string `json:"id,omitempty"`
+	// Type is the link type name (e.g. "Blocks", "Relates").
+	Type string `json:"type,omitempty"`
+	// Verb reads from this issue toward the other one (e.g. "blocks",
+	// "is blocked by", "relates to").
+	Verb         string `json:"verb,omitempty"`
+	OtherKey     string `json:"other_key,omitempty"`
+	OtherSummary string `json:"other_summary,omitempty"`
+	OtherStatus  string `json:"other_status,omitempty"`
+}
+
+// UnmarshalJSON accepts both Jira's wire shape (type object + inwardIssue/
+// outwardIssue) and the flattened form above, so Issue round-trips through
+// its own output like the rest of the model.
+func (l *IssueLink) UnmarshalJSON(data []byte) error {
+	type flat IssueLink
+	var wire struct {
+		flat
+		// TypeRaw shadows flat.Type: a string in the flattened form, an
+		// object ({name, inward, outward}) on Jira's wire.
+		TypeRaw      json.RawMessage `json:"type"`
+		InwardIssue  *IssueReference `json:"inwardIssue"`
+		OutwardIssue *IssueReference `json:"outwardIssue"`
+	}
+	if err := json.Unmarshal(data, &wire); err != nil {
+		return err
+	}
+	*l = IssueLink(wire.flat)
+	var linkType struct {
+		Name    string `json:"name"`
+		Inward  string `json:"inward"`
+		Outward string `json:"outward"`
+	}
+	if len(wire.TypeRaw) > 0 {
+		if err := json.Unmarshal(wire.TypeRaw, &linkType); err != nil {
+			// Flattened round-trip: type is a plain string.
+			var name string
+			if err := json.Unmarshal(wire.TypeRaw, &name); err != nil {
+				return err
+			}
+			linkType.Name = name
+		}
+	}
+	if linkType.Name != "" {
+		l.Type = linkType.Name
+	}
+	// On Jira's wire exactly one side is present: the other issue. The link's
+	// outward issue is read through the outward verb, the inward issue through
+	// the inward verb.
+	other, verb := wire.OutwardIssue, linkType.Outward
+	if other == nil {
+		other, verb = wire.InwardIssue, linkType.Inward
+	}
+	if other != nil {
+		l.OtherKey = other.Key
+		if other.Fields != nil {
+			l.OtherSummary = other.Fields.Summary
+			l.OtherStatus = other.Fields.Status.Name
+		}
+		if verb != "" {
+			l.Verb = verb
+		}
+	}
+	return nil
 }
 
 type IssueReferenceField struct {
@@ -258,14 +332,30 @@ type IssueTransitionRequest struct {
 	TransitionID string `json:"-"`
 }
 
+// IssueLinkRequest links outward "<verb>" inward — e.g. type Blocks with
+// outward DEV-1 and inward DEV-2 records "DEV-1 blocks DEV-2".
+type IssueLinkRequest struct {
+	Type       string
+	OutwardKey string
+	InwardKey  string
+}
+
+// IssueLinkType is one of the site's configured link types.
+type IssueLinkType struct {
+	ID      string `json:"id,omitempty"`
+	Name    string `json:"name,omitempty"`
+	Inward  string `json:"inward,omitempty"`
+	Outward string `json:"outward,omitempty"`
+}
+
 type IssueTransitionRunResult struct {
 	OK                   bool              `json:"ok"`
 	IssueKey             string            `json:"issue_key,omitempty"`
 	InitialStatus        NamedValue        `json:"initial_status,omitempty"`
 	CurrentStatus        NamedValue        `json:"current_status,omitempty"`
 	TargetStatus         string            `json:"target_status,omitempty"`
-	AppliedTransitions   []IssueTransition `json:"applied_transitions,omitempty"`
-	AvailableTransitions []IssueTransition `json:"available_transitions,omitempty"`
+	AppliedTransitions   []IssueTransition `json:"applied_transitions"`
+	AvailableTransitions []IssueTransition `json:"available_transitions"`
 	Steps                int               `json:"steps"`
 	Issue                *Issue            `json:"issue,omitempty"`
 }
@@ -322,9 +412,13 @@ func (c *Comment) render(format bodyFormat) {
 }
 
 type CommentResult struct {
-	OK       bool    `json:"ok"`
-	IssueKey string  `json:"issue_key,omitempty"`
-	Comment  Comment `json:"comment"`
+	OK       bool   `json:"ok"`
+	IssueKey string `json:"issue_key,omitempty"`
+	// CommentID repeats the new/edited comment's id at the top level: the
+	// unambiguous write confirmation that makes a blind retry (and the
+	// duplicate comment it creates) unnecessary.
+	CommentID string  `json:"comment_id,omitempty"`
+	Comment   Comment `json:"comment"`
 }
 
 type CommentMutationResult struct {

@@ -24,6 +24,8 @@ type Client interface {
 	DeleteIssue(context.Context, string, bool) (IssueMutationResult, error)
 	ListTransitions(context.Context, string) (IssueTransitionListResult, error)
 	TransitionIssue(context.Context, string, IssueTransitionRequest) (IssueMutationResult, error)
+	LinkIssues(context.Context, IssueLinkRequest) error
+	ListIssueLinkTypes(context.Context) ([]IssueLinkType, error)
 	AddComment(context.Context, string, CommentRequest) (CommentResult, error)
 	EditComment(context.Context, string, string, CommentRequest) (CommentResult, error)
 	DeleteComment(context.Context, string, string) (CommentMutationResult, error)
@@ -181,6 +183,28 @@ func (c liveClient) TransitionIssue(ctx context.Context, key string, request Iss
 		out.Issue = &issue
 	}
 	return out, nil
+}
+
+func (c liveClient) LinkIssues(ctx context.Context, request IssueLinkRequest) error {
+	payload, err := json.Marshal(map[string]any{
+		"type":         map[string]string{"name": strings.TrimSpace(request.Type)},
+		"outwardIssue": map[string]string{"key": strings.TrimSpace(request.OutwardKey)},
+		"inwardIssue":  map[string]string{"key": strings.TrimSpace(request.InwardKey)},
+	})
+	if err != nil {
+		return err
+	}
+	return c.doJSON(ctx, "POST", "/rest/api/3/issueLink", nil, bytes.NewReader(payload), nil)
+}
+
+func (c liveClient) ListIssueLinkTypes(ctx context.Context) ([]IssueLinkType, error) {
+	var out struct {
+		IssueLinkTypes []IssueLinkType `json:"issueLinkTypes"`
+	}
+	if err := c.getJSON(ctx, "/rest/api/3/issueLinkType", nil, &out); err != nil {
+		return nil, err
+	}
+	return out.IssueLinkTypes, nil
 }
 
 func (c liveClient) AddComment(ctx context.Context, key string, request CommentRequest) (CommentResult, error) {
@@ -524,7 +548,7 @@ func issueFields(fields []string) []string {
 	if len(fields) > 0 {
 		return fields
 	}
-	return []string{"summary", "description", "attachment", "status", "assignee", "reporter", "creator", "updated", "created", "project", "issuetype", "priority", "labels", "parent"}
+	return []string{"summary", "description", "attachment", "status", "assignee", "reporter", "creator", "updated", "created", "project", "issuetype", "priority", "labels", "parent", "issuelinks"}
 }
 
 func clamp(value, fallback, max int) int {

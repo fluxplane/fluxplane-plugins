@@ -34,7 +34,7 @@ func withInputExamples(spec core.OperationSpec, examples ...map[string]any) core
 
 const (
 	PluginName        = "jira"
-	PluginVersion     = "0.22.0"
+	PluginVersion     = "0.23.0"
 	PluginDescription = "Jira Cloud issue operations, comments, attachments, transitions, datasources, indexes, and reverse lookups."
 
 	AuthMethodAtlassianCloud = "atlassian_cloud_basic"
@@ -48,7 +48,7 @@ const (
 	EnvAtlassianSiteURL  = "ATLASSIAN_SITE_URL"
 	EnvJiraURL           = "JIRA_URL"
 
-	OperationAuthTest         = "jira.auth.test"
+	OperationTest             = "jira.test"
 	OperationIndexBuild       = "jira.index.build"
 	OperationCreateMeta       = "jira.issue.create_meta"
 	OperationEditMeta         = "jira.issue.edit_meta"
@@ -67,6 +67,7 @@ const (
 	OperationIssueDelete      = "jira.issue.delete"
 	OperationIssueSearch      = "jira.issue.search"
 	OperationIssueShow        = "jira.issue.show"
+	OperationIssueLinkAdd     = "jira.issue.link.add"
 	OperationUserSearch       = "jira.user.search"
 
 	DatasourceIssues = "jira.issues"
@@ -145,12 +146,20 @@ func operationSpecs() []core.OperationSpec {
 		issueDeleteSpec(),
 		issueSearchSpec(),
 		issueShowSpec(),
+		issueLinkAddSpec(),
 		userSearchSpec(),
 	}
 }
 
 func authTestSpec() core.OperationSpec {
-	return jiraReadOperation[AuthTestInput, AuthTestResult](OperationAuthTest, "Test Jira authentication by fetching the current user.")
+	return jiraReadOperation[AuthTestInput, AuthTestResult](OperationTest, "Test Jira authentication by fetching the current user.")
+}
+
+func issueLinkAddSpec() core.OperationSpec {
+	return withInputExamples(
+		pluginbinding.TypedOperationSpec[IssueLinkAddInput, IssueLinkAddResult](OperationIssueLinkAdd, "Link two Jira issues (key <type-verb> to_key, e.g. DEV-1 blocks DEV-2 with type Blocks). The result echoes the issue's links read back from Jira, so the new link is verified, never assumed.", jiraWriteOptions(core.OperationNonIdempotent)...),
+		map[string]any{"key": "DEV-123", "to_key": "DEV-456", "type": "Blocks"},
+	)
 }
 
 func indexBuildSpec() core.OperationSpec {

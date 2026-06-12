@@ -11,7 +11,7 @@ func NewPlugin() *pluginbinding.Plugin {
 
 func NewPluginWithService(service Service) *pluginbinding.Plugin {
 	return pluginbinding.Define(manifestSpec(),
-		pluginbinding.WithAuthTestOperation(OperationAuthTest),
+		pluginbinding.WithAuthTestOperation(OperationTest),
 		pluginbinding.WithIndexBuildOperation(OperationIndexBuild),
 		pluginbinding.WithHostOwnedIndexStatus("Jira"),
 		pluginbinding.RegisterOperation(authTestSpec(), service.AuthTest),
@@ -33,6 +33,7 @@ func NewPluginWithService(service Service) *pluginbinding.Plugin {
 		pluginbinding.RegisterOperation(issueDeleteSpec(), service.IssueDelete),
 		pluginbinding.RegisterOperation(issueSearchSpec(), service.IssueSearch),
 		pluginbinding.RegisterOperation(issueShowSpec(), service.IssueShow),
+		pluginbinding.RegisterOperation(issueLinkAddSpec(), service.IssueLinkAdd),
 		pluginbinding.RegisterOperation(userSearchSpec(), service.UserSearch),
 		pluginbinding.RegisterDatasourceSearch(jiraIssuesDatasourceSpec(), service.IssueDatasource),
 		pluginbinding.RegisterDatasourceSearch(jiraUsersDatasourceSpec(), service.UserDatasource),

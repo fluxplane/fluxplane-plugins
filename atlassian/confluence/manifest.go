@@ -34,7 +34,7 @@ func withInputExamples(spec core.OperationSpec, examples ...map[string]any) core
 
 const (
 	PluginName        = "confluence"
-	PluginVersion     = "0.19.0"
+	PluginVersion     = "0.20.0"
 	PluginDescription = "Confluence Cloud page/user operations, comments, attachments, datasources, indexes, and reverse lookups."
 
 	AuthMethodAtlassianCloud = "atlassian_cloud_basic"
@@ -47,7 +47,7 @@ const (
 	EnvAtlassianSiteURL   = "ATLASSIAN_SITE_URL"
 	EnvConfluenceURL      = "CONFLUENCE_URL"
 
-	OperationAuthTest         = "confluence.auth.test"
+	OperationTest             = "confluence.test"
 	OperationIndexBuild       = "confluence.index.build"
 	OperationAttachmentAdd    = "confluence.page.attachment.add"
 	OperationAttachmentList   = "confluence.page.attachment.list"
@@ -138,7 +138,7 @@ func operationSpecs() []core.OperationSpec {
 }
 
 func authTestSpec() core.OperationSpec {
-	return confluenceReadOperation[AuthTestInput, AuthTestResult](OperationAuthTest, "Test Confluence authentication by fetching the current user.")
+	return confluenceReadOperation[AuthTestInput, AuthTestResult](OperationTest, "Test Confluence authentication by fetching the current user.")
 }
 
 func indexBuildSpec() core.OperationSpec {

@@ -1,5 +1,43 @@
 # Changelog
 
+## v0.8.0
+
+Addresses the jira section of the #12 field report — the silent-write class.
+Jira manifest 0.23.0, Confluence manifest 0.20.0.
+
+### Added
+- **`jira.issue.link.add`** — link two issues (`key` *type-verb* `to_key`,
+  e.g. DEV-1 blocks DEV-2 with type `Blocks`). The result echoes the issue's
+  links **read back from Jira** — the new link is verified, never assumed;
+  an accepted-but-invisible link is an error. Unknown link types fail with
+  the site's available types listed.
+- **`issue.show` returns `issuelinks`** — each link flattened to this
+  issue's point of view (`verb`, `other_key`, `other_summary`,
+  `other_status`), so link state is visible without JQL.
+- `comment.add`/`comment.edit` results carry a top-level `comment_id` — the
+  unambiguous write confirmation that makes blind retries (and duplicate
+  comments) unnecessary.
+- Input aliases: `issue.show` accepts `issue_key`, `issue.create` accepts
+  `project` (alias for `project_key`).
+
+### Changed
+- **Breaking: probe operations renamed** — `jira.auth.test` → `jira.test`,
+  `confluence.auth.test` → `confluence.test` (one probe name across all
+  plugins; pre-1.0, no aliases kept).
+- **`transition.run` failures disclose mutations**: when the auto walker
+  applies transitions and then fails, the error details state that the
+  issue WAS mutated, list the applied transitions, and give the
+  current-vs-initial status — no more wrong terminal state hiding behind a
+  flat error.
+- `issue.edit` with a raw `update.issuelinks` payload that leaves the issue
+  link-less appends a warning naming `jira.issue.link.add` instead of
+  returning a clean `ok:true` (Jira silently drops malformed link
+  instructions).
+- `transition.run`'s `applied_transitions`/`available_transitions` always
+  serialize as arrays (`[]`, never `null`/omitted).
+- SDK bump to `fluxplane-plugin` v0.18.0 (unknown-operation responses now
+  carry did-you-mean suggestions).
+
 ## v0.7.0
 
 ### Added

@@ -35,7 +35,7 @@ func TestServiceBuildsClientFromEndpointRef(t *testing.T) {
 		},
 	})
 
-	out := plugintest.RunOK[AuthTestResult](t, plugin, OperationAuthTest, map[string]any{"endpoint_ref": "jira-dev"}, plugintest.WithInstance("work"))
+	out := plugintest.RunOK[AuthTestResult](t, plugin, OperationTest, map[string]any{"endpoint_ref": "jira-dev"}, plugintest.WithInstance("work"))
 	if out.Status != "ok" || out.User.AccountID != "acct-1" {
 		t.Fatalf("auth output = %#v", out)
 	}
@@ -54,7 +54,7 @@ func TestServiceBuildsClientFromStoredEndpointConfig(t *testing.T) {
 		},
 	})
 
-	out := plugintest.RunOK[AuthTestResult](t, plugin, OperationAuthTest, nil, plugintest.WithRequest(protocolRequestWithConfig(map[string]any{
+	out := plugintest.RunOK[AuthTestResult](t, plugin, OperationTest, nil, plugintest.WithRequest(protocolRequestWithConfig(map[string]any{
 		"endpoint_refs": map[string]any{EndpointName: "jira-stored"},
 	})))
 	if out.Status != "ok" || capturedEndpointRef != "jira-stored" {
@@ -787,6 +787,9 @@ type fakeClient struct {
 	commentRequest         CommentRequest
 	commentList            CommentListResult
 	commentListOptions     CommentListOptions
+	linkRequests           []IssueLinkRequest
+	linkErr                error
+	linkTypes              []IssueLinkType
 }
 
 func (c *fakeClient) CurrentUser(context.Context) (User, error) {
@@ -801,6 +804,15 @@ func (c *fakeClient) SearchIssues(_ context.Context, options IssueSearchOptions)
 func (c *fakeClient) GetIssue(_ context.Context, key string) (Issue, error) {
 	c.issueKey = key
 	return c.issue, nil
+}
+
+func (c *fakeClient) LinkIssues(_ context.Context, request IssueLinkRequest) error {
+	c.linkRequests = append(c.linkRequests, request)
+	return c.linkErr
+}
+
+func (c *fakeClient) ListIssueLinkTypes(context.Context) ([]IssueLinkType, error) {
+	return c.linkTypes, nil
 }
 
 func (c *fakeClient) CreateIssue(_ context.Context, request IssueCreateRequest) (IssueMutationResult, error) {
@@ -922,4 +934,159 @@ func (c *fakeClient) GetUser(_ context.Context, accountID string) (User, error) 
 		return c.users[0], nil
 	}
 	return User{}, nil
+}
+
+func TestIssueLinkUnmarshalFlattensJiraWire(t *testing.T) {
+	wire := `{
+		"id": "10500",
+		"type": {"name": "Blocks", "inward": "is blocked by", "outward": "blocks"},
+		"outwardIssue": {"key": "DEX-2", "fields": {"summary": "Downstream", "status": {"name": "To Do"}}}
+	}`
+	var link IssueLink
+	if err := json.Unmarshal([]byte(wire), &link); err != nil {
+		t.Fatalf("unmarshal wire: %v", err)
+	}
+	if link.Type != "Blocks" || link.Verb != "blocks" || link.OtherKey != "DEX-2" || link.OtherSummary != "Downstream" || link.OtherStatus != "To Do" {
+		t.Fatalf("link = %#v", link)
+	}
+	// Inward side reads through the inward verb.
+	inward := `{"type": {"name": "Blocks", "inward": "is blocked by", "outward": "blocks"}, "inwardIssue": {"key": "DEX-1"}}`
+	var blocked IssueLink
+	if err := json.Unmarshal([]byte(inward), &blocked); err != nil {
+		t.Fatalf("unmarshal inward: %v", err)
+	}
+	if blocked.Verb != "is blocked by" || blocked.OtherKey != "DEX-1" {
+		t.Fatalf("inward link = %#v", blocked)
+	}
+	// The flattened output round-trips through its own shape.
+	flattened, err := json.Marshal(link)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var again IssueLink
+	if err := json.Unmarshal(flattened, &again); err != nil {
+		t.Fatalf("round-trip: %v", err)
+	}
+	if again != link {
+		t.Fatalf("round-trip mismatch: %#v != %#v", again, link)
+	}
+}
+
+func TestIssueLinkAddVerifiesReadBack(t *testing.T) {
+	client := &fakeClient{issue: Issue{Key: "DEX-1", Fields: IssueFields{
+		IssueLinks: []IssueLink{{Type: "Blocks", Verb: "blocks", OtherKey: "DEX-2"}},
+	}}}
+	plugin := testPlugin(client)
+	out := plugintest.RunOK[IssueLinkAddResult](t, plugin, OperationIssueLinkAdd, map[string]any{"key": "DEX-1", "to_key": "DEX-2", "type": "Blocks"})
+	if !out.OK || len(out.Links) != 1 || out.Links[0].OtherKey != "DEX-2" {
+		t.Fatalf("out = %#v", out)
+	}
+	if len(client.linkRequests) != 1 || client.linkRequests[0].OutwardKey != "DEX-1" || client.linkRequests[0].InwardKey != "DEX-2" {
+		t.Fatalf("link requests = %#v", client.linkRequests)
+	}
+}
+
+func TestIssueLinkAddFailsWhenLinkNotVisible(t *testing.T) {
+	// Jira accepted the POST but the read-back shows no link: the silent
+	// write failure must surface as an error, not ok:true.
+	client := &fakeClient{issue: Issue{Key: "DEX-1"}}
+	plugin := testPlugin(client)
+	perr := plugintest.RunError(t, plugin, OperationIssueLinkAdd, map[string]any{"key": "DEX-1", "to_key": "DEX-2", "type": "Blocks"})
+	if !strings.Contains(perr.Message, "no link to DEX-2 is visible") {
+		t.Fatalf("error = %#v", perr)
+	}
+}
+
+func TestIssueLinkAddUnknownTypeListsAvailableTypes(t *testing.T) {
+	client := &fakeClient{
+		linkErr:   fmt.Errorf("No issue link type with name 'Blcks' found"),
+		linkTypes: []IssueLinkType{{Name: "Blocks", Inward: "is blocked by", Outward: "blocks"}},
+	}
+	plugin := testPlugin(client)
+	perr := plugintest.RunError(t, plugin, OperationIssueLinkAdd, map[string]any{"key": "DEX-1", "to_key": "DEX-2", "type": "Blcks"})
+	if len(perr.Details) == 0 || !strings.Contains(perr.Details[0], "Blocks") {
+		t.Fatalf("error details = %#v", perr)
+	}
+}
+
+func TestCommentAddSurfacesCommentID(t *testing.T) {
+	client := &fakeClient{commentResult: CommentResult{OK: true, Comment: Comment{ID: "10042", Body: "done"}}}
+	plugin := testPlugin(client)
+	out := plugintest.RunOK[CommentResult](t, plugin, OperationCommentAdd, map[string]any{"key": "DEX-1", "body_markdown": "done"})
+	if out.CommentID != "10042" {
+		t.Fatalf("comment_id = %q (out = %#v)", out.CommentID, out)
+	}
+}
+
+func TestTransitionRunFailureDisclosesAppliedTransitions(t *testing.T) {
+	// One transition applies, then the walker dead-ends: the error must say
+	// the issue was mutated and where it stands.
+	client := &fakeClient{
+		transitions: []IssueTransitionListResult{
+			{IssueKey: "DEX-9", CurrentStatus: NamedValue{Name: "Backlog"}, Transitions: []IssueTransition{{ID: "11", Name: "Start progress", To: NamedValue{Name: "In Progress"}}}},
+			{IssueKey: "DEX-9", CurrentStatus: NamedValue{Name: "In Progress"}, Transitions: nil},
+		},
+		transitionResults: []IssueMutationResult{
+			{OK: true, Key: "DEX-9", Issue: &Issue{Key: "DEX-9", Fields: IssueFields{Status: NamedValue{Name: "In Progress"}}}},
+		},
+	}
+	plugin := testPlugin(client)
+	perr := plugintest.RunError(t, plugin, OperationTransitionRun, map[string]any{"key": "DEX-9", "target_status": "Done", "auto_transition": true})
+	if len(perr.Details) < 2 || !strings.Contains(perr.Details[0], "WAS mutated") || !strings.Contains(perr.Details[0], "Start progress") {
+		t.Fatalf("error details = %#v", perr)
+	}
+	if !strings.Contains(perr.Details[1], `"In Progress"`) || !strings.Contains(perr.Details[1], `"Backlog"`) {
+		t.Fatalf("status detail = %#v", perr.Details)
+	}
+}
+
+func TestIssueShowAcceptsIssueKeyAlias(t *testing.T) {
+	client := &fakeClient{issue: Issue{Key: "DEX-1", Fields: IssueFields{Summary: "Hello"}}}
+	plugin := testPlugin(client)
+	out := plugintest.RunOK[pluginbinding.ShowResult[Issue]](t, plugin, OperationIssueShow, map[string]any{"issue_key": "DEX-1"})
+	if out.Record.Key != "DEX-1" || client.issueKey != "DEX-1" {
+		t.Fatalf("out = %#v issueKey = %q", out, client.issueKey)
+	}
+}
+
+func TestIssueCreateAcceptsProjectAlias(t *testing.T) {
+	client := &fakeClient{createResult: IssueMutationResult{OK: true, Key: "DEX-10"}}
+	plugin := testPlugin(client)
+	out := plugintest.RunOK[IssueMutationResult](t, plugin, OperationIssueCreate, map[string]any{"project": "DEX", "issue_type": "Task", "summary": "From alias"})
+	if !out.OK {
+		t.Fatalf("out = %#v", out)
+	}
+	project, _ := client.createRequest.Fields["project"].(map[string]string)
+	if project["key"] != "DEX" {
+		t.Fatalf("create request project = %#v", client.createRequest.Fields["project"])
+	}
+}
+
+func TestIssueEditWarnsWhenRawIssueLinksVanish(t *testing.T) {
+	client := &fakeClient{editResult: IssueMutationResult{OK: true, Key: "DEX-1", Issue: &Issue{Key: "DEX-1"}}}
+	plugin := testPlugin(client)
+	out := plugintest.RunOK[IssueMutationResult](t, plugin, OperationIssueEdit, map[string]any{
+		"key":    "DEX-1",
+		"update": map[string]any{"issuelinks": []map[string]any{{"add": map[string]any{"type": map[string]any{"name": "Blocks"}}}}},
+	})
+	if !strings.Contains(out.Warning, "issuelinks") || !strings.Contains(out.Warning, "jira.issue.link.add") {
+		t.Fatalf("warning = %q", out.Warning)
+	}
+}
+
+func TestTransitionRunResultCollectionsAreNeverNull(t *testing.T) {
+	client := &fakeClient{
+		transitions: []IssueTransitionListResult{
+			{IssueKey: "DEX-9", CurrentStatus: NamedValue{Name: "Done"}, Transitions: nil},
+		},
+	}
+	plugin := testPlugin(client)
+	run := plugintest.RunOK[IssueTransitionRunResult](t, plugin, OperationTransitionRun, map[string]any{"key": "DEX-9", "target_status": "Done"})
+	raw, err := json.Marshal(run)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(raw), `"applied_transitions":null`) || !strings.Contains(string(raw), `"applied_transitions":[`) {
+		t.Fatalf("applied_transitions must serialize as []: %s", raw)
+	}
 }
