@@ -10,7 +10,7 @@ import (
 
 const (
 	PluginName        = "gitlab"
-	PluginVersion     = "0.23.0"
+	PluginVersion     = "0.24.0"
 	PluginDescription = "GitLab operations, datasources, indexes, and reverse lookups."
 
 	AuthMethodPersonalAccessToken = "personal_access_token"
@@ -82,6 +82,20 @@ const (
 	OperationReleaseList     = "gitlab.release.list"
 	OperationTagList         = "gitlab.repository.tag.list"
 	OperationCommitList      = "gitlab.repository.commit.list"
+
+	// Release management.
+	OperationReleaseCreate     = "gitlab.release.create"
+	OperationReleaseShow       = "gitlab.release.show"
+	OperationReleaseUpdate     = "gitlab.release.update"
+	OperationReleaseDelete     = "gitlab.release.delete"
+	OperationChangelogGenerate = "gitlab.repository.changelog.generate"
+	OperationChangelogAdd      = "gitlab.repository.changelog.add"
+	OperationTagShow           = "gitlab.repository.tag.show"
+	OperationTagDelete         = "gitlab.repository.tag.delete"
+	OperationReleaseLinkList   = "gitlab.release.link.list"
+	OperationReleaseLinkCreate = "gitlab.release.link.create"
+	OperationReleaseLinkUpdate = "gitlab.release.link.update"
+	OperationReleaseLinkDelete = "gitlab.release.link.delete"
 
 	DatasourceProjects      = "gitlab.projects"
 	DatasourceUsers         = "gitlab.users"
@@ -188,7 +202,7 @@ func operationSpecs() []core.OperationSpec {
 		issueUpdateSpec(),
 		issueNoteListSpec(),
 		issueNoteCreateSpec(),
-	}, append(reviewOperationSpecs(), cicdOperationSpecs()...)...)
+	}, append(reviewOperationSpecs(), append(cicdOperationSpecs(), releaseOperationSpecs()...)...)...)
 }
 
 func issueListSpec() core.OperationSpec {

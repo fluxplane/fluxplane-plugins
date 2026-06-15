@@ -74,6 +74,7 @@ func NewPluginWithService(service Service) *pluginbinding.Plugin {
 	}
 	options = append(options, registerReviewOperations(service)...)
 	options = append(options, registerCICDOperations(service)...)
+	options = append(options, registerReleaseOperations(service)...)
 	return pluginbinding.Define(manifestSpec(), options...)
 }
 

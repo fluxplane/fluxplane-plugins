@@ -798,6 +798,24 @@ type fakeClient struct {
 	pipelineRetryProj         any
 	pipelineCancelProj        any
 	snippetDeleted            int64
+	releaseDetail             ReleaseDetail
+	releaseCreateProject      any
+	releaseCreateOptions      ReleaseCreateOptions
+	releaseUpdateOptions      ReleaseUpdateOptions
+	releaseTag                string
+	releaseDeletedTag         string
+	tagShowName               string
+	tagDeletedName            string
+	changelogNotes            string
+	changelogGenerateOptions  ChangelogGenerateOptions
+	changelogAddOptions       ChangelogAddOptions
+	releaseLinks              []ReleaseLink
+	releaseLink               ReleaseLink
+	releaseLinkTag            string
+	releaseLinkCreateOptions  ReleaseLinkCreateOptions
+	releaseLinkUpdateOptions  ReleaseLinkUpdateOptions
+	releaseLinkUpdateID       int64
+	releaseLinkDeletedID      int64
 }
 
 func (c *fakeClient) CurrentUser() (User, error) {

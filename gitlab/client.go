@@ -66,6 +66,19 @@ type Client interface {
 	ListReleases(project any, limit int) ([]ReleaseInfo, bool, error)
 	ListRepositoryTags(project any, search string, limit int) ([]RepositoryTag, bool, error)
 	ListCommits(project any, input CommitListOptions) ([]Commit, bool, error)
+	// Release management: releases, changelog, links, tag show/delete.
+	GetRelease(project any, tag string) (ReleaseDetail, error)
+	CreateRelease(project any, input ReleaseCreateOptions) (ReleaseDetail, error)
+	UpdateRelease(project any, tag string, input ReleaseUpdateOptions) (ReleaseDetail, error)
+	DeleteRelease(project any, tag string) error
+	GetRepositoryTag(project any, tag string) (RepositoryTag, error)
+	DeleteRepositoryTag(project any, tag string) error
+	GenerateChangelog(project any, input ChangelogGenerateOptions) (string, error)
+	AddChangelog(project any, input ChangelogAddOptions) error
+	ListReleaseLinks(project any, tag string, limit int) ([]ReleaseLink, bool, error)
+	CreateReleaseLink(project any, tag string, input ReleaseLinkCreateOptions) (ReleaseLink, error)
+	UpdateReleaseLink(project any, tag string, linkID int64, input ReleaseLinkUpdateOptions) (ReleaseLink, error)
+	DeleteReleaseLink(project any, tag string, linkID int64) error
 }
 
 type ClientFactory func(pluginbinding.Context) (Client, error)

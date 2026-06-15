@@ -1,5 +1,27 @@
 # Changelog
 
+## v0.24.0
+
+Full GitLab release management. Manifest 0.24.0.
+
+### Added
+- **Release lifecycle**: `gitlab.release.create` (binds a release to `tag_name`,
+  cutting the tag from `ref` — annotated when `tag_message` is set — with
+  `name`, `description`, `milestones`, `released_at`, and asset `assets_links`),
+  `gitlab.release.show`, `gitlab.release.update` (title/notes/milestones/date),
+  and `gitlab.release.delete` (leaves the git tag in place).
+- **Changelog**: `gitlab.repository.changelog.generate` builds Markdown release
+  notes from the commits between two refs (`version`/`from`/`to`/`date`/
+  `trailer`/`config_file`) — drop the result into a release `description`;
+  `gitlab.repository.changelog.add` generates and commits a section into the
+  repo's changelog file (default `CHANGELOG.md`).
+- **Tags**: `gitlab.repository.tag.show` and `gitlab.repository.tag.delete`
+  round out the existing `tag.create` / `tag.list`.
+- **Release asset links**: `gitlab.release.link.list` / `.create` / `.update` /
+  `.delete` manage the download/related-URL links attached to a release.
+- Single-release reads/writes return the richer `ReleaseDetail` (web URL,
+  milestones, asset links); `gitlab.release.list` keeps the compact shape.
+
 ## v0.23.0
 
 Addresses the gitlab section of the #12 field report. Manifest 0.23.0.
