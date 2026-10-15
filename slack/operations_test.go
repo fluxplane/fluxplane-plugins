@@ -1011,6 +1011,16 @@ func TestServiceUploadFileAcceptsBase64ContentBytes(t *testing.T) {
 	}
 }
 
+func TestServiceUploadFilePassesSnippetType(t *testing.T) {
+	factory := &capturingFactory{clients: map[string]*fakeClient{"bot_token": {}}}
+	plugin := testPlugin(factory)
+
+	plugintest.RunOK[FileUploadResult](t, plugin, OperationFileUpload, map[string]any{"channel": "C1", "filename": "notes.txt", "content_bytes": "IyB0aXRsZQ==", "snippet_type": " markdown "})
+	if got := factory.clients["bot_token"].lastUpload.SnippetType; got != "markdown" {
+		t.Fatalf("upload request snippet type = %q, want %q", got, "markdown")
+	}
+}
+
 func TestServiceUploadFileRequiresExactlyOneContentSource(t *testing.T) {
 	plugin := testPlugin(&capturingFactory{clients: map[string]*fakeClient{"bot_token": {}}})
 

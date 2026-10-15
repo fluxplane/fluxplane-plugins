@@ -566,6 +566,22 @@ func (c liveClient) unreadChannels(ctx context.Context, channelFilter string) ([
 	return out, nil
 }
 
+// uploadSnippetType is the snippet_type sent to files.getUploadURLExternal:
+// the caller's explicit value, else html for a .html/.htm filename. The bytes
+// go up as application/octet-stream (multipart CreateFormFile), so without
+// it Slack guesses and HTML has landed as both html and binary. Other
+// extensions are left to Slack's own inference.
+func uploadSnippetType(request FileUploadRequest) string {
+	if snippetType := strings.TrimSpace(request.SnippetType); snippetType != "" {
+		return snippetType
+	}
+	name := strings.ToLower(strings.TrimSpace(request.Filename))
+	if strings.HasSuffix(name, ".html") || strings.HasSuffix(name, ".htm") {
+		return "html"
+	}
+	return ""
+}
+
 func (c liveClient) UploadFile(ctx context.Context, request FileUploadRequest) (FileUploadResult, error) {
 	summary, err := c.client.UploadFileContext(ctx, slackapi.UploadFileParameters{
 		FileSize:        len(request.Content),
@@ -576,6 +592,7 @@ func (c liveClient) UploadFile(ctx context.Context, request FileUploadRequest) (
 		Channel:         request.Channel,
 		ThreadTimestamp: request.ThreadTS,
 		AltTxt:          request.AltText,
+		SnippetType:     uploadSnippetType(request),
 	})
 	if err != nil {
 		return FileUploadResult{}, err

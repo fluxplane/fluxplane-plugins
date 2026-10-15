@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.24.0
+
+Manifest 0.24.0.
+
+### Added
+- `slack.file.upload` takes an optional `snippet_type` (e.g. `html`,
+  `markdown`, `csv`), passed to `files.getUploadURLExternal`. The bytes go up
+  as `application/octet-stream`, so without it Slack guesses, and some HTML
+  files landed as `binary`.
+
+### Changed
+- A `.html`/`.htm` filename defaults `snippet_type` to `html` when the caller
+  sets none. Other extensions are still left to Slack.
+
 ## v0.23.0
 
 Addresses the slack section of the #12 field report. Manifest 0.23.0.

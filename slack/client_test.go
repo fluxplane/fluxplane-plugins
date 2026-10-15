@@ -72,3 +72,27 @@ func TestLiveClientUploadFileSendsSnippetTypeForHTMLFilename(t *testing.T) {
 		t.Fatalf("files.getUploadURLExternal snippet_type = %q, want %q (form %v)", got, "html", form)
 	}
 }
+
+func TestLiveClientUploadFileSnippetType(t *testing.T) {
+	cases := []struct {
+		name     string
+		request  FileUploadRequest
+		want     string
+		wantSent bool
+	}{
+		{"explicit wins over extension", FileUploadRequest{Filename: "report.html", SnippetType: "text"}, "text", true},
+		{"explicit without extension", FileUploadRequest{Filename: "notes", SnippetType: "markdown"}, "markdown", true},
+		{"htm upper case", FileUploadRequest{Filename: "REPORT.HTM"}, "html", true},
+		{"other extension left to Slack", FileUploadRequest{Filename: "chart.png"}, "", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			tc.request.Channel = "C1"
+			tc.request.Content = []byte("bytes")
+			form := uploadThroughLiveClient(t, tc.request)
+			if _, sent := form["snippet_type"]; sent != tc.wantSent || form.Get("snippet_type") != tc.want {
+				t.Fatalf("snippet_type = %q (sent %v), want %q (sent %v)", form.Get("snippet_type"), sent, tc.want, tc.wantSent)
+			}
+		})
+	}
+}

@@ -182,6 +182,7 @@ type FileUploadInput struct {
 	Filename       string `json:"filename,omitempty" jsonschema:"description=Filename shown in Slack. Defaults to host blob filename when using blob_ref."`
 	InitialComment string `json:"initial_comment,omitempty" jsonschema:"description=Optional message text posted with the file."`
 	AltText        string `json:"alt_text,omitempty" jsonschema:"description=Alt text for image uploads."`
+	SnippetType    string `json:"snippet_type,omitempty" jsonschema:"description=Slack file type sent as snippet_type (e.g. html\\, markdown\\, csv\\, json\\, text). Defaults to html for .html/.htm filenames; otherwise Slack infers the type."`
 }
 
 type FileListInput struct {
@@ -462,6 +463,7 @@ type FileUploadRequest struct {
 	Filename       string
 	InitialComment string
 	AltText        string
+	SnippetType    string
 }
 
 type FileUploadResult struct {
@@ -2277,6 +2279,7 @@ func fileUploadRequest(ctx pluginbinding.Context, input FileUploadInput) (FileUp
 		Filename:       filename,
 		InitialComment: strings.TrimSpace(input.InitialComment),
 		AltText:        strings.TrimSpace(input.AltText),
+		SnippetType:    strings.TrimSpace(input.SnippetType),
 	}, nil
 }
 
