@@ -506,6 +506,10 @@ type SearchMessage struct {
 	Text      string   `json:"text,omitempty"`
 	Permalink string   `json:"permalink,omitempty"`
 	Tickets   []string `json:"tickets,omitempty"`
+	// Attachments carries shared or forwarded messages and link unfurls.
+	Attachments []MessageAttachment `json:"attachments,omitempty"`
+	// Links lists every URL in the message's rich_text blocks.
+	Links []string `json:"links,omitempty"`
 }
 
 type TicketMention struct {
@@ -624,10 +628,17 @@ type ThreadMessage struct {
 	TextMrkdwn string      `json:"text_mrkdwn,omitempty"`
 	Files      []SlackFile `json:"files,omitempty"`
 	Reactions  []Reaction  `json:"reactions,omitempty"`
+	// Attachments carries shared or forwarded messages and link unfurls; their
+	// text follows text_format like Text.
+	Attachments []MessageAttachment `json:"attachments,omitempty"`
+	// Links lists every URL in the message's rich_text blocks.
+	Links []string `json:"links,omitempty"`
 }
 
-// renderText applies the requested text format to a message's mrkdwn text.
+// renderText applies the requested text format to a message's mrkdwn text
+// and to the text of its attachments.
 func (m *ThreadMessage) renderText(format textFormat) {
+	renderAttachmentText(m.Attachments, format)
 	raw := m.Text
 	switch format {
 	case textFormatMrkdwn:

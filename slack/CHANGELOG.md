@@ -1,5 +1,22 @@
 # Changelog
 
+## v0.24.0
+
+Manifest 0.24.0.
+
+### Added
+- **Shared and forwarded messages are no longer lost**: `slack.thread`,
+  `slack.message.list` and `slack.search` return a message's `attachments`.
+  A shared message (`kind: shared_message`) carries its `from_url`
+  permalink, source `channel`, `ts` and `thread_ts`, author (`user`,
+  `author_name`, `author_link`) and its `text`, rendered by `text_format`
+  like the message text (`text_mrkdwn` with `both`). Link unfurls come as
+  `kind: attachment` with `title`, `title_link` and `service_name`.
+  Previously a message that shared another one read as its caption only
+  (for example "fyi").
+- `links` on the same messages: every URL in the message's (and its
+  attachments') rich_text blocks, de-duplicated in order.
+
 ## v0.23.0
 
 Addresses the slack section of the #12 field report. Manifest 0.23.0.
