@@ -610,13 +610,16 @@ func (c liveClient) SearchMessages(ctx context.Context, query string, limit int)
 	}
 	out := make([]SearchMessage, 0, len(messages.Matches))
 	for _, message := range messages.Matches {
+		attachments, links := sharedContentFromAPI(message.Attachments, message.Blocks)
 		out = append(out, SearchMessage{
-			Channel:   message.Channel.ID,
-			TS:        message.Timestamp,
-			ThreadTS:  extractSlackThreadTS(message.Permalink),
-			User:      firstNonEmpty(message.User, message.Username),
-			Text:      strings.TrimSpace(message.Text),
-			Permalink: strings.TrimSpace(message.Permalink),
+			Channel:     message.Channel.ID,
+			TS:          message.Timestamp,
+			ThreadTS:    extractSlackThreadTS(message.Permalink),
+			User:        firstNonEmpty(message.User, message.Username),
+			Text:        strings.TrimSpace(message.Text),
+			Permalink:   strings.TrimSpace(message.Permalink),
+			Attachments: attachments,
+			Links:       links,
 		})
 	}
 	return out, messages.Total, nil
@@ -644,12 +647,15 @@ func (c liveClient) GetThread(ctx context.Context, channel, ts string, limit, ma
 		if err != nil {
 			return nil, err
 		}
+		attachments, links := sharedContentFromAPI(reply.Attachments, reply.Blocks)
 		out = append(out, ThreadMessage{
-			TS:        reply.Timestamp,
-			User:      reply.User,
-			Text:      strings.TrimSpace(reply.Text),
-			Files:     files,
-			Reactions: reactionsFromAPI(reply.Reactions),
+			TS:          reply.Timestamp,
+			User:        reply.User,
+			Text:        strings.TrimSpace(reply.Text),
+			Files:       files,
+			Reactions:   reactionsFromAPI(reply.Reactions),
+			Attachments: attachments,
+			Links:       links,
 		})
 	}
 	return limitThreadMessages(out, limit), nil
@@ -676,12 +682,15 @@ func (c liveClient) ListMessages(ctx context.Context, request MessageHistoryRequ
 	}
 	out := make([]ThreadMessage, 0, len(resp.Messages))
 	for _, message := range resp.Messages {
+		attachments, links := sharedContentFromAPI(message.Attachments, message.Blocks)
 		out = append(out, ThreadMessage{
-			TS:        message.Timestamp,
-			User:      firstNonEmpty(message.User, message.BotID),
-			Text:      strings.TrimSpace(message.Text),
-			ThreadTS:  message.ThreadTimestamp,
-			Reactions: reactionsFromAPI(message.Reactions),
+			TS:          message.Timestamp,
+			User:        firstNonEmpty(message.User, message.BotID),
+			Text:        strings.TrimSpace(message.Text),
+			ThreadTS:    message.ThreadTimestamp,
+			Reactions:   reactionsFromAPI(message.Reactions),
+			Attachments: attachments,
+			Links:       links,
 		})
 	}
 	return MessageHistory{Messages: out, NextCursor: resp.ResponseMetaData.NextCursor, HasMore: resp.HasMore}, nil
